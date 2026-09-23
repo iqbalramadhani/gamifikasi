@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>The Lost Kingdom - 3D Adventure</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="wrap">
+    <!-- Navbar (HUD) -->
+    <div id="hud">
+      <div class="title-nav">⚔️ The Lost Kingdom 3D</div>
+      <div class="badge">❤️ HP: <span id="hp">100/100</span></div>
+      <div class="badge" style="background: rgba(0, 50, 150, 0.6); border-color: #3498db;">⭐ Lv <span id="player-level">1</span> (EXP: <span id="exp">0</span>/<span id="max-exp">20</span>)</div>
+      <div class="badge">💰 Gold: <span id="gold">0</span></div>
+      <div class="badge">💎 Crystal: <span id="crystal">0</span>/10</div>
+      <div class="badge">🗡️ Quest: Cari 10 Crystal</div>
+      
+      <button onclick="saveGame()" style="margin-left: 15px; padding: 5px 15px; background-color: #27ae60; color: white; border: 2px solid #2ecc71; border-radius: 5px; font-weight: bold; cursor: pointer; text-shadow: 1px 1px 2px black; box-shadow: 0px 0px 10px rgba(46,204,113,0.5);">💾 Save Game</button>
+      <span id="save-status" style="margin-left: 10px; color: #f1c40f; font-weight: bold; text-shadow: 1px 1px 2px black;"></span>
+      
+      <canvas id="minimap" width="150" height="150"></canvas>
+    </div>
+    
+    <div id="message">Panah: Gerak | Z: Dash | X: Spin | Spasi: Tembak | Shift: Tahan</div>
+    
+    <!-- Layar Game (Canvas) -->
+    <div id="game">
+      <canvas id="canvas"></canvas>
+    </div>
+    
+    <!-- Tombol Kontrol Layar (Mobile/Touch) -->
+    <div id="controls">
+      <div style="display: grid; grid-template-columns: repeat(3, 50px); gap: 4px;">
+        <button onpointerdown="keys['arrowup']=true; keys['arrowleft']=true" onpointerup="keys['arrowup']=false; keys['arrowleft']=false" onpointercancel="keys['arrowup']=false; keys['arrowleft']=false" onpointerleave="keys['arrowup']=false; keys['arrowleft']=false">↖️</button>
+        <button onpointerdown="keys['arrowup']=true" onpointerup="keys['arrowup']=false" onpointercancel="keys['arrowup']=false" onpointerleave="keys['arrowup']=false">⬆️</button>
+        <button onpointerdown="keys['arrowup']=true; keys['arrowright']=true" onpointerup="keys['arrowup']=false; keys['arrowright']=false" onpointercancel="keys['arrowup']=false; keys['arrowright']=false" onpointerleave="keys['arrowup']=false; keys['arrowright']=false">↗️</button>
+        
+        <button onpointerdown="keys['arrowleft']=true" onpointerup="keys['arrowleft']=false" onpointercancel="keys['arrowleft']=false" onpointerleave="keys['arrowleft']=false">⬅️</button>
+        <button style="visibility:hidden;"></button>
+        <button onpointerdown="keys['arrowright']=true" onpointerup="keys['arrowright']=false" onpointercancel="keys['arrowright']=false" onpointerleave="keys['arrowright']=false">➡️</button>
+
+        <button onpointerdown="keys['arrowdown']=true; keys['arrowleft']=true" onpointerup="keys['arrowdown']=false; keys['arrowleft']=false" onpointercancel="keys['arrowdown']=false; keys['arrowleft']=false" onpointerleave="keys['arrowdown']=false; keys['arrowleft']=false">↙️</button>
+        <button onpointerdown="keys['arrowdown']=true" onpointerup="keys['arrowdown']=false" onpointercancel="keys['arrowdown']=false" onpointerleave="keys['arrowdown']=false">⬇️</button>
+        <button onpointerdown="keys['arrowdown']=true; keys['arrowright']=true" onpointerup="keys['arrowdown']=false; keys['arrowright']=false" onpointercancel="keys['arrowdown']=false; keys['arrowright']=false" onpointerleave="keys['arrowdown']=false; keys['arrowright']=false">↘️</button>
+      </div>
+      <div style="display: flex; gap: 8px; align-items: flex-end;">
+        <button id="btn-potion" class="action-btn" onpointerdown="keys['c']=true" onpointerup="keys['c']=false" onpointercancel="keys['c']=false" onpointerleave="keys['c']=false" style="background: #c0392b;">🧪 Heal (C) [0]</button>
+        <button id="btn-dash" class="action-btn" onpointerdown="keys['z']=true" onpointerup="keys['z']=false" onpointercancel="keys['z']=false" onpointerleave="keys['z']=false" style="background: #8e44ad;">⚡ Dash (Z)</button>
+        <button id="btn-spin" class="action-btn" onpointerdown="keys['x']=true" onpointerup="keys['x']=false" onpointercancel="keys['x']=false" onpointerleave="keys['x']=false" style="background: #e67e22;">🌀 Spin (X)</button>
+        <button class="action-btn" onpointerdown="keys[' ']=true" onpointerup="keys[' ']=false" onpointercancel="keys[' ']=false" onpointerleave="keys[' ']=false">🔥 Tembak</button>
+        <button class="action-btn" onpointerdown="keys['shift']=true" onpointerup="keys['shift']=false" onpointercancel="keys['shift']=false" onpointerleave="keys['shift']=false">🛡️ Tahan</button>
+      </div>
+    </div>
+
+    <!-- UI Overlays -->
+    <div id="main-menu" style="display: flex;">
+      <div class="box" style="background: rgba(10, 20, 10, 0.9); border: 2px solid #f1c40f;">
+        <h1 style="color: #f1c40f; font-size: 36px; margin-bottom: 10px;">⚔️ THE LOST KINGDOM 3D</h1>
+        <p style="color: #bbb; margin-bottom: 20px;">Berpetualang, Kumpulkan Crystal, dan Kalahkan The Golden Golem!</p>
+        <button class="ui-btn" onclick="startGame()" style="font-size: 24px; padding: 15px 40px; background: #27ae60;">MULAI PETUALANGAN</button>
+      </div>
+    </div>
+    <div id="pause-menu">
+      <div class="box">
+        <h2>⏸️ GAME DIJEDA</h2>
+        <p>Tekan ESC untuk melanjutkan</p>
+        <button class="ui-btn" onclick="togglePause()">Lanjutkan</button>
+      </div>
+    </div>
+    <div id="level-up-modal">
+      <div class="box" style="border-color: #3498db; animation: pulse 1s infinite alternate;">
+        <h2 style="color: #3498db;">🌟 LEVEL UP!</h2>
+        <p>Kekuatan Anda meningkat pesat!</p>
+      </div>
+    </div>
+    
+    <div id="blacksmith" class="modal" style="display:none; background: rgba(30,30,30,0.95); border: 2px solid #555;">
+      <div class="modal-content" style="color: #ddd;">
+        <h2 style="color:#aaa;">⚒️ BENGKEL PANDAI BESI</h2>
+        <p>Tingkatkan perlengkapanmu! Gold: <span id="blacksmith-gold" style="color:gold;">0</span></p>
+        <div class="shop-grid">
+          <div class="shop-item" style="border-color:#555; background:#222;">
+            <h3 style="color:#aaa;">🗡️ Beli Senjata</h3>
+            <p id="weapon-desc">Iron Sword (DMG +2)</p>
+            <p>Harga: <span id="weapon-cost" style="color:gold;">100</span> G</p>
+            <button onclick="buyWeapon()" id="btn-buy-weapon" style="background:#555;">Tempa Senjata</button>
+          </div>
+          <div class="shop-item" style="border-color:#555; background:#222;">
+            <h3 style="color:#aaa;">🛡️ Beli Armor</h3>
+            <p id="armor-desc">Knight Armor (HP +50)</p>
+            <p>Harga: <span id="armor-cost" style="color:gold;">150</span> G</p>
+            <button onclick="buyArmor()" id="btn-buy-armor" style="background:#555;">Tempa Armor</button>
+          </div>
+        </div>
+        <button onclick="closeBlacksmith()" style="margin-top: 15px; background: #c0392b;">Tutup</button>
+      </div>
+    </div>
+    
+    <div id="win">
+      <div class="box">
+        <h2>🏆 Kerajaan Diselamatkan!</h2>
+        <p>Kamu berhasil mengumpulkan 10 Crystal.</p><button class="ui-btn" onclick="location.reload()">Main Lagi</button>
+      </div>
+    </div>
+    <div id="lose">
+      <div class="box">
+        <h2>💀 Kamu Telah Gugur</h2>
+        <p>HP kamu habis diserang monster.</p><button class="ui-btn" onclick="location.reload()">Coba Lagi</button>
+      </div>
+    </div>
+    
+    <!-- Altar Shop UI -->
+    <div id="shop">
+      <div class="shop-box">
+        <h2>🛒 Altar Upgrade</h2>
+        <p>Koin Anda: <span id="shop-gold" style="color:#f1c40f; font-weight:bold; font-size:24px;">0</span></p>
+        <div class="shop-item">
+          <span>❤️ Max HP (+20)<br><small id="shop-hp-level">Lv 1</small></span>
+          <button onclick="buyUpgrade('hp')">Beli (15 🪙)</button>
+        </div>
+        <div class="shop-item">
+          <span>⚔️ Attack Power (+1)<br><small id="shop-atk-level">Lv 1</small></span>
+          <button onclick="buyUpgrade('atk')">Beli (20 🪙)</button>
+        </div>
+        <div class="shop-item">
+          <span>👟 Speed (+1)<br><small id="shop-spd-level">Lv 1</small></span>
+          <button onclick="buyUpgrade('spd')">Beli (15 🪙)</button>
+        </div>
+        <button style="margin-top:20px; padding:10px 20px; background:#e74c3c; color:white; border:none; border-radius:5px; font-size:18px; cursor:pointer;" onclick="closeShop()">Tutup Altar (Lanjut)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Memuat Script Game secara modular -->
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
