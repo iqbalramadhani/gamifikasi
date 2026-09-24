@@ -19,6 +19,7 @@
       
       <button onclick="saveGame()" style="margin-left: 15px; padding: 5px 15px; background-color: #27ae60; color: white; border: 2px solid #2ecc71; border-radius: 5px; font-weight: bold; cursor: pointer; text-shadow: 1px 1px 2px black; box-shadow: 0px 0px 10px rgba(46,204,113,0.5);">💾 Save Game</button>
       <span id="save-status" style="margin-left: 10px; color: #f1c40f; font-weight: bold; text-shadow: 1px 1px 2px black;"></span>
+      <button onclick="openSettings()" style="margin-left: 15px; padding: 5px 15px; background-color: #34495e; color: white; border: 2px solid #2c3e50; border-radius: 5px; font-weight: bold; cursor: pointer; text-shadow: 1px 1px 2px black; box-shadow: 0px 0px 10px rgba(44,62,80,0.5);">⚙️ Settings</button>
       
       <canvas id="minimap" width="150" height="150"></canvas>
     </div>
@@ -60,6 +61,24 @@
         <h1 style="color: #f1c40f; font-size: 36px; margin-bottom: 10px;">⚔️ THE LOST KINGDOM 3D</h1>
         <p style="color: #bbb; margin-bottom: 20px;">Berpetualang, Kumpulkan Crystal, dan Kalahkan The Golden Golem!</p>
         <button class="ui-btn" onclick="startGame()" style="font-size: 24px; padding: 15px 40px; background: #27ae60;">MULAI PETUALANGAN</button>
+      </div>
+    </div>
+    <div id="settings-menu" style="display: none; position: fixed; top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:999;align-items:center;justify-content:center;">
+      <div class="box" style="background:#222; border:2px solid #555; padding:20px; color:white; width: 300px;">
+        <h2 style="color: #f1c40f; margin-bottom: 20px;">⚙️ Camera Settings</h2>
+        <div style="margin-bottom: 15px;">
+          <label>Height (Y): <span id="val-cam-y">150</span></label><br>
+          <input type="range" id="cam-y" min="50" max="400" value="150" oninput="updateCameraSettings()" style="width: 100%;">
+        </div>
+        <div style="margin-bottom: 15px;">
+          <label>Distance (Z): <span id="val-cam-z">200</span></label><br>
+          <input type="range" id="cam-z" min="50" max="500" value="200" oninput="updateCameraSettings()" style="width: 100%;">
+        </div>
+        <div style="margin-bottom: 15px;">
+          <label>Look Angle (Y): <span id="val-cam-look">10</span></label><br>
+          <input type="range" id="cam-look" min="-50" max="100" value="10" oninput="updateCameraSettings()" style="width: 100%;">
+        </div>
+        <button class="ui-btn" onclick="closeSettings()" style="margin-top:15px; width: 100%; padding: 10px; background: #e74c3c;">Tutup</button>
       </div>
     </div>
     <div id="pause-menu">

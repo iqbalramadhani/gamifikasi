@@ -30,7 +30,16 @@ window.loadAllModels = async function() {
     { key: 'rocks_low', url: '/models/rocks-low.glb' },
     { key: 'stones', url: '/models/stones.glb' },
     { key: 'target', url: '/models/target.glb' },
-    { key: 'patch_dirt', url: '/models/patch-dirt.glb' }
+    { key: 'patch_dirt', url: '/models/patch-dirt.glb' },
+    { key: 'char_b', url: '/kenney_blocky-characters_20/Models/GLB format/character-b.glb' },
+    { key: 'char_c', url: '/kenney_blocky-characters_20/Models/GLB format/character-c.glb' },
+    { key: 'char_d', url: '/kenney_blocky-characters_20/Models/GLB format/character-d.glb' },
+    { key: 'char_e', url: '/kenney_blocky-characters_20/Models/GLB format/character-e.glb' },
+    { key: 'char_f', url: '/kenney_blocky-characters_20/Models/GLB format/character-f.glb' },
+    { key: 'char_g', url: '/kenney_blocky-characters_20/Models/GLB format/character-g.glb' },
+    { key: 'char_h', url: '/kenney_blocky-characters_20/Models/GLB format/character-h.glb' },
+    { key: 'char_i', url: '/kenney_blocky-characters_20/Models/GLB format/character-i.glb' },
+    { key: 'char_j', url: '/kenney_blocky-characters_20/Models/GLB format/character-j.glb' }
   ];
 
   console.log("Mencari file 3D (.glb) di folder public/models/...");
@@ -173,6 +182,7 @@ const expOrbs = [];
 const potionItems = [];
 const enemies = [];
 const keys = {};
+window.keys = keys;
 const particles = [];
 
 let petActive = true;
@@ -614,25 +624,11 @@ for(let i=0; i<40; i++) {
   coinItems.push({ x: pos.x, y: pos.y, taken: false, mesh: mesh });
 }
 
-const spikeGeo = new THREE.IcosahedronGeometry(15, 0); 
-const spikeMat = new THREE.MeshLambertMaterial({ color: 0x991212 });
-
-const slimeGeo = new THREE.BoxGeometry(16, 16, 16);
-const slimeMat = new THREE.MeshLambertMaterial({ color: 0x22cc44, transparent: true, opacity: 0.8 });
-
-const golemGeo = new THREE.BoxGeometry(28, 28, 28);
-const golemMat = new THREE.MeshLambertMaterial({ color: 0x666666 });
+// Primitive geometries for enemies have been replaced with enemy.glb
 
 const hpBgMat = new THREE.MeshBasicMaterial({ color: 0x222222 });
 const hpFgMat = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
 const hpGeo = new THREE.PlaneGeometry(24, 4);
-
-const archerGeo = new THREE.CylinderGeometry(6, 6, 20, 8);
-const archerMat = new THREE.MeshLambertMaterial({ color: 0xdddddd }); 
-const kamikazeGeo = new THREE.SphereGeometry(12, 16, 16);
-const kamikazeMat = new THREE.MeshLambertMaterial({ color: 0xff4400 }); 
-const ghostGeo = new THREE.ConeGeometry(10, 25, 16);
-const ghostMat = new THREE.MeshLambertMaterial({ color: 0x8800ff, transparent: true, opacity: 0.6 });
 
 window.spawnEnemy = function(ex, ey) {
     if (!ex || !ey) {
@@ -646,23 +642,39 @@ window.spawnEnemy = function(ex, ey) {
     let mesh, eHp, eSpeed, eR, eY, eTypeStr;
     
     if (type === 0) {
-       mesh = new THREE.Mesh(spikeGeo, spikeMat);
-       eHp = 3; eSpeed = 1.6; eR = 15; eY = 15; eTypeStr = 'spike';
+       eHp = 3; eSpeed = 1.6; eR = 15; eTypeStr = 'spike';
     } else if (type === 1) {
-       mesh = new THREE.Mesh(slimeGeo, slimeMat);
-       eHp = 1.5; eSpeed = 3.0; eR = 12; eY = 8; eTypeStr = 'slime';
+       eHp = 1.5; eSpeed = 3.0; eR = 12; eTypeStr = 'slime';
     } else if (type === 2) {
-       mesh = new THREE.Mesh(golemGeo, golemMat);
-       eHp = 8; eSpeed = 0.8; eR = 20; eY = 14; eTypeStr = 'golem';
+       eHp = 8; eSpeed = 0.8; eR = 20; eTypeStr = 'golem';
     } else if (type === 3) {
-       mesh = new THREE.Mesh(archerGeo, archerMat);
-       eHp = 4; eSpeed = 1.2; eR = 12; eY = 10; eTypeStr = 'archer';
+       eHp = 4; eSpeed = 1.2; eR = 12; eTypeStr = 'archer';
     } else if (type === 4) {
-       mesh = new THREE.Mesh(kamikazeGeo, kamikazeMat);
-       eHp = 2; eSpeed = 3.5; eR = 12; eY = 12; eTypeStr = 'kamikaze';
+       eHp = 2; eSpeed = 3.5; eR = 12; eTypeStr = 'kamikaze';
     } else {
-       mesh = new THREE.Mesh(ghostGeo, ghostMat);
-       eHp = 5; eSpeed = 1.0; eR = 10; eY = 15; eTypeStr = 'ghost';
+       eHp = 5; eSpeed = 1.0; eR = 10; eTypeStr = 'ghost';
+    }
+
+    let charKey = 'char_e';
+    if (type === 1) charKey = 'char_f';
+    else if (type === 2) charKey = 'char_g';
+    else if (type === 3) charKey = 'char_h';
+    else if (type === 4) charKey = 'char_i';
+    else if (type === 5) charKey = 'char_j';
+
+    if (window.loadedModels && window.loadedModels[charKey]) {
+       let gltfEnemy = SkeletonUtils.clone(window.loadedModels[charKey]);
+       gltfEnemy.scale.set(30, 30, 30);
+       gltfEnemy.position.y = -25; // Adjusted to stop floating
+       
+       mesh = new THREE.Group();
+       mesh.add(gltfEnemy);
+       eY = 15;
+    } else {
+       const boxGeo = new THREE.BoxGeometry(20, 20, 20);
+       const boxMat = new THREE.MeshLambertMaterial({ color: 0xff0000 });
+       mesh = new THREE.Mesh(boxGeo, boxMat);
+       eY = 10;
     }
     
     let levelMulti = 1 + (player.level * 0.1);
@@ -716,9 +728,18 @@ if (window.loadedModels && window.loadedModels.player) {
     // Asumsikan senjata sudah menyatu, namun jika ingin modular:
     if (window.loadedModels.sword) {
        const gltfSword = SkeletonUtils.clone(window.loadedModels.sword);
-       gltfSword.scale.set(15, 15, 15);
-       gltfSword.position.set(10, 0, 15);
-       playerMesh.add(gltfSword);
+       if (window.playerArmR) {
+           gltfSword.scale.set(0.5, 0.5, 0.5);
+           // Adjust these values to bring the sword closer to the hand. 
+           // The arm origin is likely at the shoulder, so Y goes down the arm.
+           gltfSword.position.set(0, -0.3, 0.1); 
+           gltfSword.rotation.x = Math.PI / 2; 
+           window.playerArmR.add(gltfSword);
+       } else {
+           gltfSword.scale.set(15, 15, 15);
+           gltfSword.position.set(10, 0, 15);
+           playerMesh.add(gltfSword);
+       }
     }
 } else {
     // Fallback: Kotak-kotak klasik
@@ -835,11 +856,11 @@ window.spawnBoss = function() {
   scene.remove(altarCrystal);
 };
 
-window.hometownPortal = null;
-window.shopNPC = null;
-window.healerNPC = null;
-window.blacksmithNPC = null;
-window.wildsPortal = null;
+let hometownPortal = null;
+let shopNPC = null;
+let healerNPC = null;
+let blacksmithNPC = null;
+let wildsPortal = null;
 
 window.initNPCs = function() {
     let hx = 10000;
@@ -851,22 +872,49 @@ window.initNPCs = function() {
     hometownPortal.position.set(hx, 30, hy + 200);
     scene.add(hometownPortal);
 
-    const shopGeo = new THREE.CylinderGeometry(8, 8, 25, 8);
-    const shopMat = new THREE.MeshLambertMaterial({ color: 0xffd700 });
-    shopNPC = new THREE.Mesh(shopGeo, shopMat);
-    shopNPC.position.set(hx - 100, 12.5, hy - 100);
+    if (window.loadedModels && window.loadedModels.char_b) {
+        shopNPC = new THREE.Group();
+        let shopMesh = SkeletonUtils.clone(window.loadedModels.char_b);
+        shopMesh.scale.set(30, 30, 30);
+        shopMesh.position.y = -25;
+        shopNPC.add(shopMesh);
+        shopNPC.position.set(hx - 100, 15, hy - 100);
+    } else {
+        const shopGeo = new THREE.CylinderGeometry(8, 8, 25, 8);
+        const shopMat = new THREE.MeshLambertMaterial({ color: 0xffd700 });
+        shopNPC = new THREE.Mesh(shopGeo, shopMat);
+        shopNPC.position.set(hx - 100, 12.5, hy - 100);
+    }
     scene.add(shopNPC);
 
-    const healerGeo = new THREE.CylinderGeometry(8, 8, 25, 8);
-    const healerMat = new THREE.MeshLambertMaterial({ color: 0xff66cc });
-    healerNPC = new THREE.Mesh(healerGeo, healerMat);
-    healerNPC.position.set(hx + 100, 12.5, hy - 100);
+    if (window.loadedModels && window.loadedModels.char_c) {
+        healerNPC = new THREE.Group();
+        let healerMesh = SkeletonUtils.clone(window.loadedModels.char_c);
+        healerMesh.scale.set(30, 30, 30);
+        healerMesh.position.y = -25;
+        healerNPC.add(healerMesh);
+        healerNPC.position.set(hx + 100, 15, hy - 100);
+    } else {
+        const healerGeo = new THREE.CylinderGeometry(8, 8, 25, 8);
+        const healerMat = new THREE.MeshLambertMaterial({ color: 0xff66cc });
+        healerNPC = new THREE.Mesh(healerGeo, healerMat);
+        healerNPC.position.set(hx + 100, 12.5, hy - 100);
+    }
     scene.add(healerNPC);
     
-    const bsGeo = new THREE.CylinderGeometry(9, 9, 25, 8);
-    const bsMat = new THREE.MeshLambertMaterial({ color: 0x333333 });
-    blacksmithNPC = new THREE.Mesh(bsGeo, bsMat);
-    blacksmithNPC.position.set(hx - 100, 12.5, hy + 100);
+    if (window.loadedModels && window.loadedModels.char_d) {
+        blacksmithNPC = new THREE.Group();
+        let bsMesh = SkeletonUtils.clone(window.loadedModels.char_d);
+        bsMesh.scale.set(30, 30, 30);
+        bsMesh.position.y = -25;
+        blacksmithNPC.add(bsMesh);
+        blacksmithNPC.position.set(hx - 100, 15, hy + 100);
+    } else {
+        const bsGeo = new THREE.CylinderGeometry(9, 9, 25, 8);
+        const bsMat = new THREE.MeshLambertMaterial({ color: 0x333333 });
+        blacksmithNPC = new THREE.Mesh(bsGeo, bsMat);
+        blacksmithNPC.position.set(hx - 100, 12.5, hy + 100);
+    }
     scene.add(blacksmithNPC);
     
     // NPC collision
@@ -1355,7 +1403,14 @@ function move() {
        if (window.playerLegL) window.playerLegL.rotation.x = swing;
        if (window.playerLegR) window.playerLegR.rotation.x = -swing;
        if (window.playerArmL) window.playerArmL.rotation.x = -swing; // Tangan berlawanan arah kaki
-       if (window.playerArmR) window.playerArmR.rotation.x = swing;
+       if (window.playerArmR) {
+           if (player.attackCooldown > 0) {
+               let attackAnim = (30 - player.attackCooldown) / 30; // 0 to 1
+               window.playerArmR.rotation.x = Math.PI * (1 - attackAnim) - Math.PI / 4;
+           } else {
+               window.playerArmR.rotation.x = swing;
+           }
+       }
     }
   } else {
     // Berdiri tegak jika tidak berjalan
@@ -1372,7 +1427,14 @@ function move() {
        if (window.playerLegL) window.playerLegL.rotation.x = 0;
        if (window.playerLegR) window.playerLegR.rotation.x = 0;
        if (window.playerArmL) window.playerArmL.rotation.x = 0;
-       if (window.playerArmR) window.playerArmR.rotation.x = 0;
+       if (window.playerArmR) {
+           if (player.attackCooldown > 0) {
+               let attackAnim = (30 - player.attackCooldown) / 30;
+               window.playerArmR.rotation.x = Math.PI * (1 - attackAnim) - Math.PI / 4;
+           } else {
+               window.playerArmR.rotation.x = 0;
+           }
+       }
     }
   }
   updateUI();
@@ -1591,13 +1653,28 @@ function updateEnemies() {
     
     enemy.mesh.position.set(enemy.x, enemy.meshY, enemy.y);
     
-    if (enemy.baseSpeed < 1.0) {
-       enemy.mesh.rotation.y += 0.02;
+    let speedScalar = Math.hypot(enemy.dx, enemy.dy);
+    if (speedScalar > 0.1) {
+        enemy.mesh.rotation.y = Math.atan2(enemy.dx, enemy.dy);
+        if (enemy.walkCycle === undefined) enemy.walkCycle = Math.random() * Math.PI * 2;
+        enemy.walkCycle += speedScalar * 0.08;
+        enemy.mesh.position.y = enemy.meshY + Math.abs(Math.sin(enemy.walkCycle * 2)) * 1.5;
+        
+        // Simple leg swing animation if bones are available
+        enemy.mesh.traverse((child) => {
+            if (child.name === 'leg-left') child.rotation.x = Math.sin(enemy.walkCycle) * 0.8;
+            if (child.name === 'leg-right') child.rotation.x = Math.sin(enemy.walkCycle + Math.PI) * 0.8;
+            if (child.name === 'arm-left') child.rotation.x = Math.sin(enemy.walkCycle + Math.PI) * 0.8;
+            if (child.name === 'arm-right') child.rotation.x = Math.sin(enemy.walkCycle) * 0.8;
+        });
     } else {
-       enemy.mesh.rotation.x += 0.05;
-       enemy.mesh.rotation.y += 0.05;
+        enemy.mesh.position.y = enemy.meshY;
+        enemy.mesh.traverse((child) => {
+            if (child.name === 'leg-left' || child.name === 'leg-right' || child.name === 'arm-left' || child.name === 'arm-right') {
+                child.rotation.x = 0;
+            }
+        });
     }
-
     enemy.hpGroup.position.set(enemy.x, enemy.meshY + 23, enemy.y);
     enemy.hpGroup.lookAt(camera.position);
     
@@ -1752,9 +1829,9 @@ function gameLoop() {
 
   // Kamera sekarang mengikuti pemain (Lebih dekat!)
   camera.position.x = player.x;
-  camera.position.y = 150;
-  camera.position.z = player.y + 200;
-  camera.lookAt(player.x, 10, player.y);
+  camera.position.y = window.cameraOffsetY;
+  camera.position.z = player.y + window.cameraOffsetZ;
+  camera.lookAt(player.x, window.cameraLookAtY, player.y);
   
   if (player.defending) {
     shieldMesh.rotation.y += 0.05;
@@ -1938,6 +2015,28 @@ window.togglePause = () => {
     }
 };
 
+window.cameraOffsetY = 150;
+window.cameraOffsetZ = 200;
+window.cameraLookAtY = 10;
+
+window.openSettings = function() {
+    document.getElementById("settings-menu").style.display = "flex";
+};
+
+window.closeSettings = function() {
+    document.getElementById("settings-menu").style.display = "none";
+};
+
+window.updateCameraSettings = function() {
+    window.cameraOffsetY = parseInt(document.getElementById("cam-y").value);
+    window.cameraOffsetZ = parseInt(document.getElementById("cam-z").value);
+    window.cameraLookAtY = parseInt(document.getElementById("cam-look").value);
+    
+    document.getElementById("val-cam-y").innerText = window.cameraOffsetY;
+    document.getElementById("val-cam-z").innerText = window.cameraOffsetZ;
+    document.getElementById("val-cam-look").innerText = window.cameraLookAtY;
+};
+
 // --- SISTEM SAVE / LOAD (BACKEND SQLITE) ---
 window.saveGame = function() {
   const statusEl = document.getElementById('save-status');
@@ -1958,7 +2057,10 @@ window.saveGame = function() {
     currentArmor: currentArmor,
     level: player.level,
     exp: player.exp,
-    nextExp: player.nextExp
+    nextExp: player.nextExp,
+    camera_y: window.cameraOffsetY,
+    camera_z: window.cameraOffsetZ,
+    camera_look_y: window.cameraLookAtY
   };
 
   fetch('http://localhost:3001/api/save', {
@@ -1993,11 +2095,32 @@ window.loadGame = function() {
       player.level = d.level;
       player.exp = d.exp;
       player.nextExp = d.nextExp;
-      window.gold = d.gold;
-      window.potions = d.potions;
-      window.crystalCount = d.crystalCount;
-      window.currentWeapon = d.currentWeapon;
-      window.currentArmor = d.currentArmor;
+      gold = d.gold;
+      potions = d.potions;
+      crystalCount = d.crystalCount;
+      currentWeapon = d.currentWeapon;
+      currentArmor = d.currentArmor;
+
+      if (player.x > 9000) {
+          currentScene = 'hometown';
+      } else {
+          currentScene = 'wilds';
+      }
+
+      if (d.camera_y !== null && d.camera_y !== undefined) {
+          window.cameraOffsetY = d.camera_y;
+          window.cameraOffsetZ = d.camera_z;
+          window.cameraLookAtY = d.camera_look_y;
+          
+          if (document.getElementById('cam-y')) {
+              document.getElementById('cam-y').value = window.cameraOffsetY;
+              document.getElementById('val-cam-y').innerText = window.cameraOffsetY;
+              document.getElementById('cam-z').value = window.cameraOffsetZ;
+              document.getElementById('val-cam-z').innerText = window.cameraOffsetZ;
+              document.getElementById('cam-look').value = window.cameraLookAtY;
+              document.getElementById('val-cam-look').innerText = window.cameraLookAtY;
+          }
+      }
 
       // Update warna equipment jika load berhasil dan mesh tersedia
       if (typeof playerBladeMat !== 'undefined' && weaponList[currentWeapon]) {
