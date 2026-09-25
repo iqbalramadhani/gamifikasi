@@ -146,11 +146,7 @@ export function checkInteractions() {
       const distBS = Math.hypot(s.player.x - s.blacksmithNPC.position.x, s.player.y - s.blacksmithNPC.position.z);
       if (distBS < 50) {
         interactText = 'Tekan [F] Beli Equipment';
-        console.log('[interact] blacksmith nearby, dist=' + distBS.toFixed(1), 'keys.f=', s.keys.f, 'blacksmithOpen=', s.blacksmithOpen, 'shopCooldown=', s.shopCooldown);
-        if (s.keys.f && !s.blacksmithOpen && s.shopCooldown === 0) {
-          console.log('[interact] opening blacksmith');
-          openBlacksmith();
-        }
+        if (s.keys.f && !s.blacksmithOpen && s.shopCooldown === 0) openBlacksmith();
       }
     }
   } else {
@@ -267,7 +263,6 @@ export function updateBlacksmithUI() {
 export function buyWeapon() {
   const s = state;
   const wNext = weaponList[s.currentWeapon + 1];
-  console.log('[buyWeapon] currentWeapon=', s.currentWeapon, 'next=', wNext ? wNext.name : 'null', 'gold=', s.gold, 'cost=', wNext ? wNext.cost : 'n/a');
   if (wNext && s.gold >= wNext.cost) {
     s.gold -= wNext.cost;
     s.currentWeapon++;
@@ -277,16 +272,12 @@ export function buyWeapon() {
     playSound('coin');
     updateBlacksmithUI();
     updateUI();
-    console.log('[buyWeapon] SUCCESS gold=' + s.gold + ' weapon=' + s.currentWeapon + ' dmg=' + s.player.attackDamage);
-  } else {
-    console.log('[buyWeapon] BLOCKED: wNext=' + JSON.stringify(wNext) + ' gold=' + s.gold + ' cost=' + (wNext ? wNext.cost : 'N/A'));
   }
 }
 
 export function buyArmor() {
   const s = state;
   const aNext = armorList[s.currentArmor + 1];
-  console.log('[buyArmor] currentArmor=', s.currentArmor, 'next=', aNext ? aNext.name : 'null', 'gold=', s.gold, 'cost=', aNext ? aNext.cost : 'n/a');
   if (aNext && s.gold >= aNext.cost) {
     s.gold -= aNext.cost;
     s.currentArmor++;
@@ -298,9 +289,6 @@ export function buyArmor() {
     playSound('coin');
     updateBlacksmithUI();
     updateUI();
-    console.log('[buyArmor] SUCCESS gold=' + s.gold + ' armor=' + s.currentArmor + ' maxHp=' + s.player.maxHp);
-  } else {
-    console.log('[buyArmor] BLOCKED: aNext=' + JSON.stringify(aNext) + ' gold=' + s.gold + ' cost=' + (aNext ? aNext.cost : 'N/A'));
   }
 }
 

@@ -320,44 +320,86 @@ export function initHometown() {
   s.scene.add(pillar);
   s.obstacles.push({ x: hx, y: hy, r: 35 });
 
-  // Houses
-  const houseBaseGeo = new THREE.BoxGeometry(60, 40, 60);
-  const houseBaseMat = new THREE.MeshLambertMaterial({ color: 0xddd3c6 });
-  const roofGeo = new THREE.ConeGeometry(45, 30, 4);
-  const roofMat = new THREE.MeshLambertMaterial({ color: 0x8b2e2e });
+  // Debug: log model loading status
+  console.log('[Hometown] Model status:', {
+    house: !!loadedModels.house,
+    building_platform: !!loadedModels.building_platform,
+    building_struct: !!loadedModels.building_struct,
+    building_roof: !!loadedModels.building_roof,
+  });
 
+  // Daftar bangunan — tiap posisi menggunakan model spesifik dari public/models
   const housePositions = [
-    { x: -150, z: -150, r: 0 },
-    { x: 150,  z: 150,  r: Math.PI },
-    { x: -150, z: 150,  r: Math.PI / 2 },
-    { x: 200,  z: -50,  r: -Math.PI / 2 },
+    { x: -150, z: -150, r: 0,            model: 'house' },
+    { x: 150,  z: 150,  r: Math.PI,      model: 'building_platform' },
+    { x: -150, z: 150,  r: Math.PI / 2,  model: 'struct_roof' },
+    { x: 200,  z: -50,  r: -Math.PI / 2, model: 'house' },
+    { x: -200, z: 50,   r: Math.PI / 3,  model: 'building_platform' },
+    { x: 130,  z: -160, r: -Math.PI / 4, model: 'struct_roof' },
   ];
 
-  housePositions.forEach(p => {
-    let hGroup;
-    if (loadedModels.building_struct) {
-      hGroup = new THREE.Group();
+  /**
+   * Buat satu bangunan dari GLB model.
+   * Scale tetap per tipe — nilai ini sudah disesuaikan dengan ukuran
+   * native GLB Kenney agar bangunan terlihat proporsional di dunia game.
+   */
+  function makeBuilding(modelKey) {
+    // --- struct + roof ---
+    if (modelKey === 'struct_roof' && loadedModels.building_struct && loadedModels.building_roof) {
+      const grp = new THREE.Group();
       const bs = SkeletonUtils.clone(loadedModels.building_struct);
       const br = SkeletonUtils.clone(loadedModels.building_roof);
-      hGroup.add(bs, br);
-      hGroup.scale.set(45, 45, 45);
-    } else if (loadedModels.house) {
-      hGroup = SkeletonUtils.clone(loadedModels.house);
-      hGroup.scale.set(20, 20, 20);
-    } else {
-      hGroup = new THREE.Group();
-      const base = new THREE.Mesh(houseBaseGeo, houseBaseMat);
-      base.position.y = 20;
-      const roof = new THREE.Mesh(roofGeo, roofMat);
-      roof.position.y = 55;
-      roof.rotation.y = Math.PI / 4;
-      hGroup.add(base, roof);
+      grp.add(bs, br);
+      grp.scale.set(45, 45, 45);
+      return grp;
     }
+    // --- building platform ---
+    if ((modelKey === 'building_platform' || modelKey === 'struct_roof') && loadedModels.building_platform) {
+      const grp = SkeletonUtils.clone(loadedModels.building_platform);
+      grp.scale.set(30, 30, 30);
+      return grp;
+    }
+    // --- house (default & fallback) ---
+    if (loadedModels.house) {
+      const grp = SkeletonUtils.clone(loadedModels.house);
+      grp.scale.set(25, 25, 25);
+      return grp;
+    }
+    // --- last resort: struct alone ---
+    if (loadedModels.building_struct) {
+      const grp = new THREE.Group();
+      const bs = SkeletonUtils.clone(loadedModels.building_struct);
+      if (loadedModels.building_roof) grp.add(SkeletonUtils.clone(loadedModels.building_roof));
+      grp.add(bs);
+      grp.scale.set(45, 45, 45);
+      return grp;
+    }
+    // --- prosedural geometry jika SEMUA model gagal ---
+    console.warn('[makeBuilding] Semua model gagal dimuat, pakai prosedural geometry');
+    const grp = new THREE.Group();
+    const base = new THREE.Mesh(
+      new THREE.BoxGeometry(60, 40, 60),
+      new THREE.MeshLambertMaterial({ color: 0xddd3c6 })
+    );
+    base.position.y = 20;
+    const roof = new THREE.Mesh(
+      new THREE.ConeGeometry(45, 30, 4),
+      new THREE.MeshLambertMaterial({ color: 0x8b2e2e })
+    );
+    roof.position.y = 55;
+    roof.rotation.y = Math.PI / 4;
+    grp.add(base, roof);
+    return grp;
+  }
+
+  housePositions.forEach(p => {
+    const hGroup = makeBuilding(p.model);
     hGroup.position.set(hx + p.x, 0, hy + p.z);
     hGroup.rotation.y = p.r;
     s.scene.add(hGroup);
-    s.obstacles.push({ x: hx + p.x, y: hy + p.z, r: 40 });
+    s.obstacles.push({ x: hx + p.x, y: hy + p.z, r: 45 });
   });
+
 
   // Target dummy
   if (loadedModels.target) {
@@ -370,74 +412,95 @@ export function initHometown() {
   }
 
   // Shop stall
-  const stallGroup = new THREE.Group();
-  const poleMat = new THREE.MeshLambertMaterial({ color: 0x5c4033 });
-  const stallPoleGeo = new THREE.CylinderGeometry(2, 2, 40, 4);
-  [[-20, 20, -20], [20, 20, -20], [-20, 20, 20], [20, 20, 20]].forEach(([px, py, pz]) => {
-    const p = new THREE.Mesh(stallPoleGeo, poleMat);
-    p.position.set(px, py, pz);
-    stallGroup.add(p);
-  });
-  const awning = new THREE.Mesh(
-    new THREE.PlaneGeometry(50, 50),
-    new THREE.MeshLambertMaterial({ color: 0xffaa00, side: THREE.DoubleSide })
-  );
-  awning.rotation.x = -Math.PI / 2 + 0.2;
-  awning.position.y = 42;
-  stallGroup.add(awning);
-  const table = new THREE.Mesh(
-    new THREE.BoxGeometry(30, 15, 15),
-    new THREE.MeshLambertMaterial({ color: 0x6e4a2b })
-  );
-  table.position.set(0, 7.5, 10);
-  stallGroup.add(table);
+  let stallGroup;
+  if (loadedModels.tent) {
+    stallGroup = SkeletonUtils.clone(loadedModels.tent);
+    stallGroup.scale.set(30, 30, 30);
+  } else {
+    stallGroup = new THREE.Group();
+    const poleMat = new THREE.MeshLambertMaterial({ color: 0x5c4033 });
+    const stallPoleGeo = new THREE.CylinderGeometry(2, 2, 40, 4);
+    [[-20, 20, -20], [20, 20, -20], [-20, 20, 20], [20, 20, 20]].forEach(([px, py, pz]) => {
+      const p = new THREE.Mesh(stallPoleGeo, poleMat);
+      p.position.set(px, py, pz);
+      stallGroup.add(p);
+    });
+    const awning = new THREE.Mesh(
+      new THREE.PlaneGeometry(50, 50),
+      new THREE.MeshLambertMaterial({ color: 0xffaa00, side: THREE.DoubleSide })
+    );
+    awning.rotation.x = -Math.PI / 2 + 0.2;
+    awning.position.y = 42;
+    stallGroup.add(awning);
+    const table = new THREE.Mesh(
+      new THREE.BoxGeometry(30, 15, 15),
+      new THREE.MeshLambertMaterial({ color: 0x6e4a2b })
+    );
+    table.position.set(0, 7.5, 10);
+    stallGroup.add(table);
+  }
   stallGroup.position.set(hx - 100, 0, hy - 100);
   s.scene.add(stallGroup);
 
   // Healer shrine
-  const shrineGroup = new THREE.Group();
-  const sBaseMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
-  const sBase = new THREE.Mesh(
-    new THREE.CylinderGeometry(25, 25, 5, 8), sBaseMat
-  );
-  sBase.position.y = 2.5;
-  shrineGroup.add(sBase);
-  for (let i = 0; i < 4; i++) {
-    const sp = new THREE.Mesh(stallPoleGeo, sBaseMat);
-    const ang = (i / 4) * Math.PI * 2 + Math.PI / 4;
-    sp.position.set(Math.cos(ang) * 20, 20, Math.sin(ang) * 20);
-    shrineGroup.add(sp);
+  let shrineGroup;
+  if (loadedModels.building_platform) {
+    shrineGroup = SkeletonUtils.clone(loadedModels.building_platform);
+    shrineGroup.scale.set(35, 35, 35);
+  } else {
+    shrineGroup = new THREE.Group();
+    const sBaseMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+    const sBase = new THREE.Mesh(
+      new THREE.CylinderGeometry(25, 25, 5, 8), sBaseMat
+    );
+    sBase.position.y = 2.5;
+    shrineGroup.add(sBase);
+    const stallPoleGeo = new THREE.CylinderGeometry(2, 2, 40, 4);
+    for (let i = 0; i < 4; i++) {
+      const sp = new THREE.Mesh(stallPoleGeo, sBaseMat);
+      const ang = (i / 4) * Math.PI * 2 + Math.PI / 4;
+      sp.position.set(Math.cos(ang) * 20, 20, Math.sin(ang) * 20);
+      shrineGroup.add(sp);
+    }
+    const sRoof = new THREE.Mesh(
+      new THREE.ConeGeometry(30, 20, 4),
+      new THREE.MeshLambertMaterial({ color: 0x00aaff })
+    );
+    sRoof.position.y = 50;
+    sRoof.rotation.y = Math.PI / 4;
+    shrineGroup.add(sRoof);
   }
-  const sRoof = new THREE.Mesh(
-    new THREE.ConeGeometry(30, 20, 4),
-    new THREE.MeshLambertMaterial({ color: 0x00aaff })
-  );
-  sRoof.position.y = 50;
-  sRoof.rotation.y = Math.PI / 4;
-  shrineGroup.add(sRoof);
   shrineGroup.position.set(hx + 100, 0, hy - 100);
   s.scene.add(shrineGroup);
 
   // Blacksmith
-  const bsGroup = new THREE.Group();
-  const anvil = new THREE.Mesh(
-    new THREE.BoxGeometry(15, 10, 10),
-    new THREE.MeshLambertMaterial({ color: 0x222222 })
-  );
-  anvil.position.set(0, 5, 10);
-  bsGroup.add(anvil);
-  const furnace = new THREE.Mesh(
-    new THREE.BoxGeometry(20, 30, 20),
-    new THREE.MeshLambertMaterial({ color: 0x552222 })
-  );
-  furnace.position.set(0, 15, -15);
-  bsGroup.add(furnace);
-  const fire = new THREE.Mesh(
-    new THREE.SphereGeometry(6, 8, 8),
-    new THREE.MeshLambertMaterial({ color: 0xffaa00, emissive: 0xff5500 })
-  );
-  fire.position.set(0, 10, -5);
-  bsGroup.add(fire);
+  let bsGroup;
+  if (loadedModels.building_struct && loadedModels.building_roof) {
+    bsGroup = new THREE.Group();
+    bsGroup.add(SkeletonUtils.clone(loadedModels.building_struct));
+    bsGroup.add(SkeletonUtils.clone(loadedModels.building_roof));
+    bsGroup.scale.set(45, 45, 45);
+  } else {
+    bsGroup = new THREE.Group();
+    const anvil = new THREE.Mesh(
+      new THREE.BoxGeometry(15, 10, 10),
+      new THREE.MeshLambertMaterial({ color: 0x222222 })
+    );
+    anvil.position.set(0, 5, 10);
+    bsGroup.add(anvil);
+    const furnace = new THREE.Mesh(
+      new THREE.BoxGeometry(20, 30, 20),
+      new THREE.MeshLambertMaterial({ color: 0x552222 })
+    );
+    furnace.position.set(0, 15, -15);
+    bsGroup.add(furnace);
+    const fire = new THREE.Mesh(
+      new THREE.SphereGeometry(6, 8, 8),
+      new THREE.MeshLambertMaterial({ color: 0xffaa00, emissive: 0xff5500 })
+    );
+    fire.position.set(0, 10, -5);
+    bsGroup.add(fire);
+  }
   bsGroup.position.set(hx - 100, 0, hy + 100);
   s.scene.add(bsGroup);
 }
@@ -602,9 +665,28 @@ export function spawnAtFreePos() {
 
 // ─── NPC placement ─────────────────────────────────────────────────────────────
 
+/**
+ * Auto-scale a cloned GLB mesh so its world-space height = targetHeight,
+ * then shift it down so its bottom sits exactly at y=0.
+ */
+function scaleNPCToHeight(mesh, targetHeight) {
+  const box = new THREE.Box3().setFromObject(mesh);
+  const nativeHeight = box.max.y - box.min.y;
+  if (nativeHeight <= 0) return;
+  const sc = targetHeight / nativeHeight;
+  mesh.scale.set(sc, sc, sc);
+  // After scaling, re-measure and align feet to y=0
+  const box2 = new THREE.Box3().setFromObject(mesh);
+  mesh.position.y -= box2.min.y;
+}
+
 export function initNPCs() {
   const s = state;
   const hx = 10000, hy = 10000;
+
+  // Target NPC height (world units) — dibuat sama dengan tinggi karakter utama.
+  // Player GLB di scale=35, tinggi native ~0.86 → world height ≈ 30 unit.
+  const NPC_HEIGHT = 30;
 
   // Portal to Wilds
   const portalGeo = new THREE.OctahedronGeometry(20, 0);
@@ -613,12 +695,11 @@ export function initNPCs() {
   s.hometownPortal.position.set(hx, 30, hy + 200);
   s.scene.add(s.hometownPortal);
 
-  // Shop NPC
+  // Shop NPC — di-scale otomatis agar setinggi karakter utama
   if (loadedModels.char_b) {
-    s.shopNPC = new THREE.Group();
     const shopMesh = SkeletonUtils.clone(loadedModels.char_b);
-    shopMesh.scale.set(30, 30, 30);
-    shopMesh.position.y = -25;
+    scaleNPCToHeight(shopMesh, NPC_HEIGHT);
+    s.shopNPC = new THREE.Group();
     s.shopNPC.add(shopMesh);
   } else {
     s.shopNPC = new THREE.Mesh(
@@ -626,15 +707,14 @@ export function initNPCs() {
       new THREE.MeshLambertMaterial({ color: 0xffd700 })
     );
   }
-  s.shopNPC.position.set(hx - 100, 15, hy - 100);
+  s.shopNPC.position.set(hx - 100, 0, hy - 100);
   s.scene.add(s.shopNPC);
 
-  // Healer NPC
+  // Healer NPC — di-scale otomatis agar setinggi karakter utama
   if (loadedModels.char_c) {
-    s.healerNPC = new THREE.Group();
     const healerMesh = SkeletonUtils.clone(loadedModels.char_c);
-    healerMesh.scale.set(30, 30, 30);
-    healerMesh.position.y = -25;
+    scaleNPCToHeight(healerMesh, NPC_HEIGHT);
+    s.healerNPC = new THREE.Group();
     s.healerNPC.add(healerMesh);
   } else {
     s.healerNPC = new THREE.Mesh(
@@ -642,15 +722,14 @@ export function initNPCs() {
       new THREE.MeshLambertMaterial({ color: 0xff66cc })
     );
   }
-  s.healerNPC.position.set(hx + 100, 15, hy - 100);
+  s.healerNPC.position.set(hx + 100, 0, hy - 100);
   s.scene.add(s.healerNPC);
 
-  // Blacksmith NPC
+  // Blacksmith NPC — di-scale otomatis agar setinggi karakter utama
   if (loadedModels.char_d) {
-    s.blacksmithNPC = new THREE.Group();
     const bsMesh = SkeletonUtils.clone(loadedModels.char_d);
-    bsMesh.scale.set(30, 30, 30);
-    bsMesh.position.y = -25;
+    scaleNPCToHeight(bsMesh, NPC_HEIGHT);
+    s.blacksmithNPC = new THREE.Group();
     s.blacksmithNPC.add(bsMesh);
   } else {
     s.blacksmithNPC = new THREE.Mesh(
@@ -658,7 +737,7 @@ export function initNPCs() {
       new THREE.MeshLambertMaterial({ color: 0x333333 })
     );
   }
-  s.blacksmithNPC.position.set(hx - 100, 15, hy + 100);
+  s.blacksmithNPC.position.set(hx - 100, 0, hy + 100);
   s.scene.add(s.blacksmithNPC);
 
   // Collision for NPCs

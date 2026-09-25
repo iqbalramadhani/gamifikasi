@@ -80,6 +80,11 @@ button.ui-btn:hover { background: #2980b9; }
   background: rgba(0, 0, 0, 0.85); display: none; align-items: center; justify-content: center;
   flex-direction: column; color: white; text-align: center; z-index: 30;
 }
+#blacksmith {
+  position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
+  background: rgba(0, 0, 0, 0.9); display: none; align-items: center; justify-content: center;
+  flex-direction: column; z-index: 30;
+}
 .shop-box {
   background: #2b2b2b; padding: 30px; border-radius: 15px; border: 3px solid #f1c40f;
   box-shadow: 0 0 20px #f1c40f; min-width: 320px;

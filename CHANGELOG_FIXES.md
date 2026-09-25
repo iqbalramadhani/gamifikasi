@@ -26,7 +26,11 @@ Tanggal · File · Masalah · Akar · Fix · Verifikasi · Pelajaran · Log Keyw
 Tanggal · File · Masalah · Akar · Fix · Verifikasi · Pelajaran · Log Keyword · Deploy
 2026-09-25 · `src/main.js` · `levelUp()` tidak ter-trigger saat collect exp orb di game · `window.levelUp` tidak di-expose di main.js, sehingga check `typeof window.levelUp === 'function'` di helpers.js selalu false · Tambah `window.levelUp = levelUp` · ✅ LIVE — build vite sukses · **Setiap fungsi yang dipanggil via onclick/window harus di-expose** · `window.levelUp` · belum deploy
 
-### Fix #8 — Tombol beli equipment stuck (disabled tidak update + material referensi salah)
+### Fix #10 — Modal blacksmith tidak terlihat di layar (stuck)
+Tanggal · File · Masalah · Akar · Fix · Verifikasi · Pelajaran · Log Keyword · Deploy
+2026-09-25 · `style.css` · Modal `#blacksmith` terbuka tapi tidak terlihat — tidak ada CSS overlay seperti `#shop` · Tidak ada rule CSS untuk `#blacksmith`, hanya inline `style="display:none"` tanpa position/z-index/fullscreen · Tambah CSS block `#blacksmith` dengan position:absolute, full viewport, background overlay, z-index:30 · ✅ LIVE — build vite sukses · **Setiap modal fullscreen harus punya CSS rule lengkap, jangan rely hanya pada inline style** · `modal #blacksmith display flex` · belum deploy
+
+### Fix #9 — Tombol beli装备 stuck (disabled tidak update + material referensi salah)
 Tanggal · File · Masalah · Akar · Fix · Verifikasi · Pelajaran · Log Keyword · Deploy
 2026-09-25 · `src/ui.js` · Tombol beli senjata/armor selalu enabled meski gold 0, klik tidak ada feedback · `updateBlacksmithUI()` set `.disabled = false` untuk semua item yang belum max level, tanpa cek `s.gold >= cost` · Tambah kondisi `disabled = s.gold < wNext.cost` dan `s.gold < aNext.cost` · ✅ LIVE — build vite sukses · **Selalu validasi affordance di UI, jangan asumsi user punya资源 cukup** · `disabled btn-buy-weapon btn-buy-armor` · belum deploy
 2026-09-25 · `src/scenes.js` · Fallback player crash/merah saat load model · `createFallbackPlayer()` mengakses `window.playerBodyMat` / `window.playerBladeMat` yang belum di-set (hanya di `state`) · Tambah `window.playerBodyMat = s.playerBodyMat; window.playerBladeMat = s.playerBladeMat;` setelah create material, sebelum panggil `createFallbackPlayer()` · ✅ LIVE — build vite sukses · **Variable yang diakses via window harus di-expose sebelum dipakai** · `window.playerBladeMat window.playerBodyMat` · belum deploy

@@ -6,7 +6,7 @@ import { state } from './state.js';
 export const loadedModels = {
   player: null, sword: null, enemy: null, tree: null, house: null,
   tree_high: null, plant: null, fence: null,
-  building_struct: null, building_roof: null,
+  building_struct: null, building_roof: null, building_platform: null,
   rocks_high: null, rocks_low: null, stones: null,
   target: null, patch_dirt: null, tent: null,
   char_b: null, char_c: null, char_d: null,
@@ -23,8 +23,9 @@ const modelsToLoad = [
   { key: 'plant',      url: '/models/plant.glb' },
   { key: 'house',      url: '/models/house.glb' },
   { key: 'fence',      url: '/models/fence.glb' },
-  { key: 'building_struct', url: '/models/building-structure.glb' },
-  { key: 'building_roof',     url: '/models/building-roof.glb' },
+  { key: 'building_struct',    url: '/models/building-structure.glb' },
+  { key: 'building_roof',      url: '/models/building-roof.glb' },
+  { key: 'building_platform',  url: '/models/building-platform.glb' },
   { key: 'rocks_high', url: '/models/rocks-high.glb' },
   { key: 'rocks_low',  url: '/models/rocks-low.glb' },
   { key: 'stones',     url: '/models/stones.glb' },
@@ -49,7 +50,6 @@ const modelsToLoad = [
 export async function loadAllModels() {
   const loader = new GLTFLoader();
 
-  console.log('Mencari file 3D (.glb) di folder public/models/...');
 
   const promises = modelsToLoad.map(item =>
     new Promise(resolve => {
@@ -57,12 +57,10 @@ export async function loadAllModels() {
         item.url,
         gltf => {
           loadedModels[item.key] = gltf.scene;
-          console.log(`✅ Model ${item.key} berhasil dimuat.`);
           resolve(true);
         },
         undefined,
         () => {
-          console.log(`⚠️ Model ${item.key} tidak ditemukan, menggunakan grafis klasik.`);
           resolve(false);
         }
       );
@@ -70,5 +68,4 @@ export async function loadAllModels() {
   );
 
   await Promise.all(promises);
-  console.log('Semua proses pencarian model selesai.');
 }
