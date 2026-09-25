@@ -32,6 +32,7 @@ export const state = {
   cameraLookAtY: 10,
   cameraAngle: 0,
   cameraShake: 0,
+  zoomLevel: 200,
 
   // --- Game logic state ---
   currentScene: 'hometown',

@@ -624,10 +624,31 @@ export function sellAllLoot() {
 
 // ─── Input handling ────────────────────────────────────────────────────────────
 
+const ZOOM_MIN = 50, ZOOM_MAX = 500, ZOOM_STEP = 20;
+
+window.zoomCamera = function(dir) {
+  const newVal = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, state.cameraOffsetZ + dir * ZOOM_STEP));
+  if (newVal === state.cameraOffsetZ) return;
+  state.cameraOffsetZ = newVal;
+  state.zoomLevel = newVal;
+  const hud = document.getElementById('val-cam-z-hud');
+  if (hud) hud.textContent = newVal;
+  const settings = document.getElementById('cam-z');
+  if (settings) settings.value = newVal;
+  const val = document.getElementById('val-cam-z');
+  if (val) val.textContent = newVal;
+  const badge = document.getElementById('zoom-badge');
+  if (badge) {
+    badge.style.transition = 'transform 0.08s';
+    badge.style.transform = 'scale(1.15)';
+    setTimeout(() => { badge.style.transform = 'scale(1)'; }, 80);
+  }
+};
+
 window.addEventListener('keydown', e => {
   const key = e.key.toLowerCase();
   state.keys[key] = true;
-  if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'shift', 'z', 'x', 'c', 'v', 'tab', 'f', 'i'].includes(key)) {
+  if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'shift', 'z', 'x', 'c', 'v', 'tab', 'f', 'i', '=', '-'].includes(key)) {
     e.preventDefault();
   }
   if (key === 'escape' && typeof window.togglePause === 'function') window.togglePause();
@@ -635,6 +656,14 @@ window.addEventListener('keydown', e => {
     const invEl = document.getElementById('inventory-menu');
     if (invEl && invEl.style.display === 'flex') closeInventory();
     else openInventory();
+  }
+  // Zoom: + = zoom in, - = zoom out
+  if (key === '=' || key === '+') {
+    e.preventDefault();
+    window.zoomCamera(-1);
+  } else if (key === '-' || key === '_') {
+    e.preventDefault();
+    window.zoomCamera(1);
   }
 });
 
