@@ -137,14 +137,14 @@ function gameLoop(timestamp) {
   state.playerMesh.position.z += (state.player.y - state.playerMesh.position.z) * Math.min(dt * 10, 1);
   state.playerIdleBreath += 0.03 * dt;
 
-  // Smooth rotation toward facing direction
-  if (state.player.isSpinning <= 0 && isMoving) {
-    const targetRot = -Math.atan2(state.player.facingY, state.player.facingX);
-    let curRot = state.playerMesh.rotation.y;
-    let diff = targetRot - curRot;
-    while (diff > Math.PI) diff -= Math.PI * 2;
-    while (diff < -Math.PI) diff += Math.PI * 2;
-    state.playerMesh.rotation.y = curRot + diff * Math.min(dt * 12, 1);
+  // Character always faces forward
+  state.playerMesh.rotation.y = -Math.PI / 2;
+
+  // Flip left/right using scale.z (local Z = world X after -π/2 Y rotation)
+  if (state.player.facingX < 0) {
+    state.playerMesh.scale.z = -1; // facing left
+  } else if (state.player.facingX > 0) {
+    state.playerMesh.scale.z = -1;  // facing right
   }
 
   // Keep last facing when still
