@@ -350,16 +350,8 @@ function killEnemy(index) {
   s.scene.add(expMesh);
   s.expOrbs.push({ x: e.x, y: e.y, mesh: expMesh, taken: false });
 
-  // Potion drop
-  if (Math.random() < 0.15) {
-    const potGeo = new THREE.CylinderGeometry(3, 3, 8, 8);
-    const potMat = new THREE.MeshLambertMaterial({ color: 0xff0000 });
-    const potMesh = new THREE.Mesh(potGeo, potMat);
-    potMesh.position.set(e.x + 10, 10, e.y + 10);
-    s.scene.add(potMesh);
-    s.potionItems.push({ x: e.x + 10, y: e.y + 10, mesh: potMesh, taken: false });
-  }
 }
+
 
 // ─── Enemy AI update ──────────────────────────────────────────────────────────
 

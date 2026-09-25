@@ -44,19 +44,29 @@ export function checkItems() {
 
   s.lootDrops.forEach(drop => {
     if (!drop.taken) {
+      // Float + spin animation
       drop.mesh.rotation.y += 0.05;
-      if (Math.hypot(s.player.x - drop.x, s.player.y - drop.y) < 30) {
+      drop.mesh.position.y = 5 + Math.sin(Date.now() / 400 + drop.x) * 2;
+
+      if (Math.hypot(s.player.x - drop.x, s.player.y - drop.y) < 40) {
         drop.taken = true;
         s.scene.remove(drop.mesh);
         playSound('coin');
+
         if (drop.type === 'potion') {
           s.potions++;
-          spawnDamageText(drop.x, 30, drop.y, "+1 Potion", "#ff0000");
+          const btn = document.getElementById('btn-potion');
+          if (btn) btn.textContent = `🧪 Heal (C) [${s.potions}]`;
+          const msgEl = document.getElementById('message');
+          if (msgEl) msgEl.textContent = `🧪 Potion didapat! (${s.potions} tersisa)`;
+          spawnDamageText(drop.x, 30, drop.y, '+1 Potion', '#ff4444');
         } else {
           if (!s.inventory) s.inventory = {};
           if (!s.inventory[drop.item.id]) s.inventory[drop.item.id] = 0;
           s.inventory[drop.item.id]++;
-          spawnDamageText(drop.x, 30, drop.y, `+1 ${drop.item.name}`, "#ffff00");
+          const msgEl = document.getElementById('message');
+          if (msgEl) msgEl.textContent = `📦 ${drop.item.name} didapat! (x${s.inventory[drop.item.id]})`;
+          spawnDamageText(drop.x, 30, drop.y, `+1 ${drop.item.name}`, '#ffff00');
         }
         if (typeof window.updateUI === 'function') window.updateUI();
       }
