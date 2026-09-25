@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "ci": "^2.3.0",
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "jsdom": "^29.1.1",
