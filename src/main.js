@@ -40,6 +40,16 @@ window.spawnEnemy = spawnEnemy;
 window.spawnParticles = spawnParticles;
 window.spawnBoss = spawnBoss;
 window.usePotion = usePotion;
+window.levelUp = levelUp;
+window.openShop = openShop;
+window.closeShop = closeShop;
+window.buyUpgrade = buyUpgrade;
+window.openBlacksmith = openBlacksmith;
+window.closeBlacksmith = closeBlacksmith;
+window.buyWeapon = buyWeapon;
+window.buyArmor = buyArmor;
+window.playerBodyMat = null;
+window.playerBladeMat = null;
 
 // ─── Game lifecycle ────────────────────────────────────────────────────────────
 
@@ -113,7 +123,9 @@ function gameLoop(timestamp) {
 
     if (state.player.isSpinning > 0) {
       state.player.isSpinning -= dt;
-      state.playerMesh.rotation.y += 0.5 * dt;
+      state.player.spinAngle += 0.5 * dt;
+    } else {
+      state.player.spinAngle = 0;
     }
 
     updateProjectiles(dt);
@@ -137,8 +149,8 @@ function gameLoop(timestamp) {
   state.playerMesh.position.z += (state.player.y - state.playerMesh.position.z) * Math.min(dt * 10, 1);
   state.playerIdleBreath += 0.03 * dt;
 
-  // Character always faces forward
-  state.playerMesh.rotation.y = -Math.PI / 2;
+  // Character always faces forward, plus any accumulated spin
+  state.playerMesh.rotation.y = -Math.PI / 2 + state.player.spinAngle;
 
   // Flip left/right using scale.z (local Z = world X after -π/2 Y rotation)
   if (state.player.facingX < 0) {

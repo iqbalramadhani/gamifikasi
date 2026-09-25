@@ -474,6 +474,8 @@ export function initEntities() {
   // Player mesh
   s.playerBodyMat = new THREE.MeshLambertMaterial({ color: 0xaaaaaa });
   s.playerBladeMat = new THREE.MeshLambertMaterial({ color: 0xeeeeee });
+  window.playerBodyMat = s.playerBodyMat;
+  window.playerBladeMat = s.playerBladeMat;
   s.playerMesh = new THREE.Group();
 
   if (loadedModels.player) {

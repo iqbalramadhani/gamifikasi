@@ -1,4 +1,6 @@
 import { state } from './state.js';
+import { updateUI, levelUp } from './ui.js';
+import { weaponList, armorList } from './constants.js';
 
 /** POST current player progress to the SQLite backend. */
 export function saveGame() {
@@ -62,11 +64,11 @@ export function loadGame() {
       s.player.level = d.level ?? s.player.level;
       s.player.exp = d.exp ?? s.player.exp;
       s.player.nextExp = d.nextExp ?? s.player.nextExp;
-      s.gold = d.gold;
-      s.potions = d.potions;
-      s.crystalCount = d.crystalCount;
-      s.currentWeapon = d.currentWeapon;
-      s.currentArmor = d.currentArmor;
+      s.gold = d.gold ?? 0;
+      s.potions = d.potions ?? 0;
+      s.crystalCount = d.crystalCount ?? 0;
+      s.currentWeapon = d.currentWeapon ?? 0;
+      s.currentArmor = d.currentArmor ?? 0;
 
       if (s.player.x > 9000) s.currentScene = 'hometown';
       else s.currentScene = 'wilds';
@@ -87,11 +89,18 @@ export function loadGame() {
       }
 
       // Restore equipment colors on loaded meshes
-      if (typeof s.playerBladeMat !== 'undefined' && weaponList[s.currentWeapon]) {
+      if (s.playerBladeMat && weaponList[s.currentWeapon]) {
         s.playerBladeMat.color.setHex(weaponList[s.currentWeapon].color);
       }
-      if (typeof s.playerBodyMat !== 'undefined' && armorList[s.currentArmor]) {
+      if (s.playerBodyMat && armorList[s.currentArmor]) {
         s.playerBodyMat.color.setHex(armorList[s.currentArmor].color);
+      }
+
+      // Process any pending level-ups from accumulated EXP
+      let pendingLevels = 0;
+      while (s.player.exp >= s.player.nextExp && pendingLevels < 100) {
+        levelUp();
+        pendingLevels++;
       }
 
       console.log('✅ Progres termuat dari Database!', d);

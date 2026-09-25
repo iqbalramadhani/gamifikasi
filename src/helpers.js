@@ -80,6 +80,7 @@ export function checkItems() {
 
 export function spawnParticles(x, y, color, count, type) {
   const s = state;
+  if (!s.scene) return;
   for (let i = 0; i < count; i++) {
     const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1 });
     const size = type === 'dust' ? 4 : 3;

@@ -45,7 +45,7 @@ export const state = {
     facingX: 1, facingY: 0,
     attackCooldown: 0, defending: false,
     walkCycle: 0, dashCooldown: 0, spinCooldown: 0,
-    isDashing: 0, isSpinning: 0,
+    isDashing: 0, isSpinning: 0, spinAngle: 0,
     level: 1, exp: 0, nextExp: 20,
   },
 

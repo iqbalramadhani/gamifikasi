@@ -146,7 +146,11 @@ export function checkInteractions() {
       const distBS = Math.hypot(s.player.x - s.blacksmithNPC.position.x, s.player.y - s.blacksmithNPC.position.z);
       if (distBS < 50) {
         interactText = 'Tekan [F] Beli Equipment';
-        if (s.keys.f && !s.blacksmithOpen && s.shopCooldown === 0) openBlacksmith();
+        console.log('[interact] blacksmith nearby, dist=' + distBS.toFixed(1), 'keys.f=', s.keys.f, 'blacksmithOpen=', s.blacksmithOpen, 'shopCooldown=', s.shopCooldown);
+        if (s.keys.f && !s.blacksmithOpen && s.shopCooldown === 0) {
+          console.log('[interact] opening blacksmith');
+          openBlacksmith();
+        }
       }
     }
   } else {
@@ -237,7 +241,7 @@ export function updateBlacksmithUI() {
   if (wNext) {
     document.getElementById('weapon-desc').textContent = `${wNext.name} (DMG +${wNext.damage})`;
     document.getElementById('weapon-cost').textContent = wNext.cost;
-    document.getElementById('btn-buy-weapon').disabled = false;
+    document.getElementById('btn-buy-weapon').disabled = s.gold < wNext.cost;
     document.getElementById('btn-buy-weapon').textContent = 'Tempa Senjata';
   } else {
     document.getElementById('weapon-desc').textContent = 'Max Level';
@@ -250,7 +254,7 @@ export function updateBlacksmithUI() {
   if (aNext) {
     document.getElementById('armor-desc').textContent = `${aNext.name} (HP +${aNext.hp})`;
     document.getElementById('armor-cost').textContent = aNext.cost;
-    document.getElementById('btn-buy-armor').disabled = false;
+    document.getElementById('btn-buy-armor').disabled = s.gold < aNext.cost;
     document.getElementById('btn-buy-armor').textContent = 'Tempa Armor';
   } else {
     document.getElementById('armor-desc').textContent = 'Max Level';
@@ -263,30 +267,40 @@ export function updateBlacksmithUI() {
 export function buyWeapon() {
   const s = state;
   const wNext = weaponList[s.currentWeapon + 1];
+  console.log('[buyWeapon] currentWeapon=', s.currentWeapon, 'next=', wNext ? wNext.name : 'null', 'gold=', s.gold, 'cost=', wNext ? wNext.cost : 'n/a');
   if (wNext && s.gold >= wNext.cost) {
     s.gold -= wNext.cost;
     s.currentWeapon++;
-    s.player.attackDamage += wNext.damage - weaponList[s.currentWeapon - 1].damage;
+    const prevDmg = s.currentWeapon > 0 ? weaponList[s.currentWeapon - 1]?.damage ?? 0 : 0;
+    s.player.attackDamage += wNext.damage - prevDmg;
     if (typeof s.playerBladeMat !== 'undefined') s.playerBladeMat.color.setHex(wNext.color);
     playSound('coin');
     updateBlacksmithUI();
     updateUI();
+    console.log('[buyWeapon] SUCCESS gold=' + s.gold + ' weapon=' + s.currentWeapon + ' dmg=' + s.player.attackDamage);
+  } else {
+    console.log('[buyWeapon] BLOCKED: wNext=' + JSON.stringify(wNext) + ' gold=' + s.gold + ' cost=' + (wNext ? wNext.cost : 'N/A'));
   }
 }
 
 export function buyArmor() {
   const s = state;
   const aNext = armorList[s.currentArmor + 1];
+  console.log('[buyArmor] currentArmor=', s.currentArmor, 'next=', aNext ? aNext.name : 'null', 'gold=', s.gold, 'cost=', aNext ? aNext.cost : 'n/a');
   if (aNext && s.gold >= aNext.cost) {
     s.gold -= aNext.cost;
     s.currentArmor++;
-    const hpDiff = aNext.hp - armorList[s.currentArmor - 1].hp;
+    const prevHp = s.currentArmor > 0 ? armorList[s.currentArmor - 1]?.hp ?? 0 : 0;
+    const hpDiff = aNext.hp - prevHp;
     s.player.maxHp += hpDiff;
     s.player.hp += hpDiff;
     if (typeof s.playerBodyMat !== 'undefined') s.playerBodyMat.color.setHex(aNext.color);
     playSound('coin');
     updateBlacksmithUI();
     updateUI();
+    console.log('[buyArmor] SUCCESS gold=' + s.gold + ' armor=' + s.currentArmor + ' maxHp=' + s.player.maxHp);
+  } else {
+    console.log('[buyArmor] BLOCKED: aNext=' + JSON.stringify(aNext) + ' gold=' + s.gold + ' cost=' + (aNext ? aNext.cost : 'N/A'));
   }
 }
 
