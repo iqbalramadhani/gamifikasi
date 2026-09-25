@@ -99,17 +99,29 @@ export function checkItems() {
   });
 }
 
-// ─── Particles ────────────────────────────────────────────────────────────────
+// ─── Particles (optimized with shared geometry pool) ────────────────────────────
+
+// Pre-created shared geometries to avoid per-frame allocations
+const _particleGeometries = {
+  small: new THREE.BoxGeometry(3, 3, 3),
+  medium: new THREE.BoxGeometry(4, 4, 4),
+  large: new THREE.BoxGeometry(6, 6, 6),
+};
 
 export function spawnParticles(x, y, color, count, type) {
   const s = state;
   if (!s.scene) return;
-  for (let i = 0; i < count; i++) {
+  // Cap particle count to prevent performance spikes
+  const cappedCount = Math.min(count, 8);
+  const sizeKey = type === 'dust' ? 'medium' : (type === 'trail' ? 'large' : 'small');
+  const geo = _particleGeometries[sizeKey];
+  const py = type === 'dust' ? 2 : (type === 'trail' ? 15 : 15);
+  const decay = type === 'dust' ? 0.05 : (type === 'trail' ? 0.15 : 0.03);
+
+  for (let i = 0; i < cappedCount; i++) {
     const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1 });
-    const size = type === 'dust' ? 4 : (type === 'trail' ? 6 : 3);
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), mat);
-    const py = type === 'dust' ? 2 : (type === 'trail' ? 15 : 15);
-    mesh.position.set(x, py, y);
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x + (Math.random() - 0.5) * 4, py, y + (Math.random() - 0.5) * 4);
     s.scene.add(mesh);
     s.particles.push({
       mesh,
@@ -117,7 +129,7 @@ export function spawnParticles(x, y, color, count, type) {
       dy: type === 'trail' ? 0 : (Math.random() - 0.5) * 6,
       dz: type === 'trail' ? 0 : ((Math.random() - 0.5) * 6 + (type === 'heal' ? 3 : 0)),
       life: 1.0,
-      decay: type === 'dust' ? 0.05 : (type === 'trail' ? 0.15 : 0.03),
+      decay,
     });
   }
 }

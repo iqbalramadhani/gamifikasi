@@ -27,7 +27,7 @@ export function initSetup() {
   s.renderer.toneMapping = THREE.ACESFilmicToneMapping;
   s.renderer.toneMappingExposure = 1.0;
   s.renderer.shadowMap.enabled = true;
-  s.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  s.renderer.shadowMap.type = THREE.PCFShadowMap;
 
   s.composer = new EffectComposer(s.renderer);
   s.composer.addPass(new RenderPass(s.scene, s.camera));
@@ -66,8 +66,8 @@ export function initSetup() {
   s.dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
   s.dirLight.position.set(mapSize / 2 + 500, 800, mapSize / 2 - 200);
   s.dirLight.castShadow = true;
-  s.dirLight.shadow.mapSize.width = 2048;
-  s.dirLight.shadow.mapSize.height = 2048;
+  s.dirLight.shadow.mapSize.width = 1024;
+  s.dirLight.shadow.mapSize.height = 1024;
   s.dirLight.shadow.camera.near = 10;
   s.dirLight.shadow.camera.far = 1500;
   s.dirLight.shadow.camera.left = -500;

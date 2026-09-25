@@ -53,12 +53,20 @@ export function spawnEnemy(ex, ey) {
 
   const dx = (Math.random() - 0.5) * 2;
   const dy = (Math.random() - 0.5) * 2;
+  // Cache limb references to avoid per-frame traverse()
+  const limbs = { 'leg-left': null, 'leg-right': null, 'arm-left': null, 'arm-right': null };
+  mesh.traverse(child => {
+    if (child.name && limbs.hasOwnProperty(child.name)) {
+      limbs[child.name] = child;
+    }
+  });
   s.enemies.push({
     x: ex, y: ey, r: eR, meshY: eY, dx, dy,
     hp, maxHp: hp, baseSpeed,
     mesh, hpGroup, hpFg,
     stunTimer: 0, slowTimer: 0, type: typeStr,
     attackTimer: 0, walkCycle: Math.random() * Math.PI * 2,
+    limbs,
   });
 }
 
@@ -450,16 +458,17 @@ export function updateEnemies(dt) {
       if (e.walkCycle === undefined) e.walkCycle = Math.random() * Math.PI * 2;
       e.walkCycle += speedScalar * 0.08 * dt;
       meshYTarget += Math.abs(Math.sin(e.walkCycle * 2)) * 1.5;
-      e.mesh.traverse(child => {
-        if (child.name === 'leg-left') child.rotation.x = Math.sin(e.walkCycle) * 0.8;
-        if (child.name === 'leg-right') child.rotation.x = Math.sin(e.walkCycle + Math.PI) * 0.8;
-        if (child.name === 'arm-left') child.rotation.x = Math.sin(e.walkCycle + Math.PI) * 0.8;
-        if (child.name === 'arm-right') child.rotation.x = Math.sin(e.walkCycle) * 0.8;
-      });
+      const l = e.limbs;
+      if (l['leg-left']) l['leg-left'].rotation.x = Math.sin(e.walkCycle) * 0.8;
+      if (l['leg-right']) l['leg-right'].rotation.x = Math.sin(e.walkCycle + Math.PI) * 0.8;
+      if (l['arm-left']) l['arm-left'].rotation.x = Math.sin(e.walkCycle + Math.PI) * 0.8;
+      if (l['arm-right']) l['arm-right'].rotation.x = Math.sin(e.walkCycle) * 0.8;
     } else {
-      e.mesh.traverse(child => {
-        if (/^(leg|arm)-(left|right)$/.test(child.name)) child.rotation.x = 0;
-      });
+      const l = e.limbs;
+      if (l['leg-left']) l['leg-left'].rotation.x = 0;
+      if (l['leg-right']) l['leg-right'].rotation.x = 0;
+      if (l['arm-left']) l['arm-left'].rotation.x = 0;
+      if (l['arm-right']) l['arm-right'].rotation.x = 0;
     }
     e.mesh.position.y += (meshYTarget - e.mesh.position.y) * Math.min(dt * 8, 1);
     e.hpGroup.position.set(e.x, e.meshY + 23, e.y);
