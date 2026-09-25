@@ -23,11 +23,15 @@ export const state = {
   playerArmR: null,
   playerBodyMat: null,
   playerBladeMat: null,
+  playerSwordMesh: null,
+  playerAuraLight: null,
 
   // Camera presets (read-write from settings UI)
   cameraOffsetY: 150,
   cameraOffsetZ: 200,
   cameraLookAtY: 10,
+  cameraAngle: 0,
+  cameraShake: 0,
 
   // --- Game logic state ---
   currentScene: 'hometown',
@@ -41,13 +45,18 @@ export const state = {
   // Player
   player: {
     x: 10000, y: 10080, r: 16, speed: 4.5,
-    hp: 100, maxHp: 100, attackDamage: 1,
+    hp: 100, maxHp: 100, stamina: 100, maxStamina: 100, attackDamage: 1,
     facingX: 1, facingY: 0,
     attackCooldown: 0, defending: false,
     walkCycle: 0, dashCooldown: 0, spinCooldown: 0,
     isDashing: 0, isSpinning: 0, spinAngle: 0,
-    level: 1, exp: 0, nextExp: 20,
+    level: 1, exp: 0, nextExp: 20, statPoints: 0,
+    stats: { str: 1, agi: 1, vit: 1 },
+    height: 0, heightVelocity: 0, lastFootstep: 0,
   },
+
+  lockedEnemy: null,
+  tabCooldown: 0,
 
   upgrades: { hpLevel: 1, atkLevel: 1, spdLevel: 1 },
   currentWeapon: 0,
@@ -57,6 +66,8 @@ export const state = {
   potions: 0,
   crystalCount: 0,
   crystalGoal: 10,
+  bountyQuest: null,
+  bountyQuestProgress: 0,
 
   // Collections (populated at runtime)
   obstacles: [],
@@ -67,6 +78,9 @@ export const state = {
   enemies: [],
   projectiles: [],
   particles: [],
+  lootDrops: [],
+  
+  inventory: {},
 
   keys: {},
 

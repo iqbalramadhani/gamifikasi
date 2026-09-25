@@ -40,6 +40,7 @@ const db = new sqlite3.Database(dbPath, (err) => {
                 db.run(`ALTER TABLE player_data ADD COLUMN camera_y INTEGER`, () => {});
                 db.run(`ALTER TABLE player_data ADD COLUMN camera_z INTEGER`, () => {});
                 db.run(`ALTER TABLE player_data ADD COLUMN camera_look_y INTEGER`, () => {});
+                db.run(`ALTER TABLE player_data ADD COLUMN inventory TEXT`, () => {});
             }
         });
     }
@@ -58,11 +59,11 @@ app.post('/api/save', (req, res) => {
             const sql = `UPDATE player_data SET 
                 player_x = ?, player_y = ?, hp = ?, maxHp = ?, attackDamage = ?,
                 gold = ?, potions = ?, crystalCount = ?, currentWeapon = ?, currentArmor = ?,
-                level = ?, exp = ?, nextExp = ?, camera_y = ?, camera_z = ?, camera_look_y = ? WHERE id = 1`;
+                level = ?, exp = ?, nextExp = ?, camera_y = ?, camera_z = ?, camera_look_y = ?, inventory = ? WHERE id = 1`;
             const params = [
                 data.x, data.y, data.hp, data.maxHp, data.attackDamage,
                 data.gold, data.potions, data.crystalCount, data.currentWeapon, data.currentArmor,
-                data.level, data.exp, data.nextExp, data.camera_y, data.camera_z, data.camera_look_y
+                data.level, data.exp, data.nextExp, data.camera_y, data.camera_z, data.camera_look_y, data.inventory
             ];
             db.run(sql, params, function(err) {
                 if (err) return res.status(500).json({ error: err.message });
@@ -72,12 +73,12 @@ app.post('/api/save', (req, res) => {
             // Insert jika belum ada
             const sql = `INSERT INTO player_data (
                 id, player_x, player_y, hp, maxHp, attackDamage, 
-                gold, potions, crystalCount, currentWeapon, currentArmor, level, exp, nextExp, camera_y, camera_z, camera_look_y
-            ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+                gold, potions, crystalCount, currentWeapon, currentArmor, level, exp, nextExp, camera_y, camera_z, camera_look_y, inventory
+            ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
             const params = [
                 data.x, data.y, data.hp, data.maxHp, data.attackDamage,
                 data.gold, data.potions, data.crystalCount, data.currentWeapon, data.currentArmor,
-                data.level, data.exp, data.nextExp, data.camera_y, data.camera_z, data.camera_look_y
+                data.level, data.exp, data.nextExp, data.camera_y, data.camera_z, data.camera_look_y, data.inventory
             ];
             db.run(sql, params, function(err) {
                 if (err) return res.status(500).json({ error: err.message });

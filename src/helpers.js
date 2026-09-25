@@ -38,15 +38,28 @@ export function checkItems() {
       document.getElementById('message').textContent =
         `💎 Crystal ditemukan! ${s.crystalCount}/${s.crystalGoal}`;
       if (s.crystalCount === s.crystalGoal) spawnBoss();
+      if (typeof window.saveGame === 'function') window.saveGame(true);
     }
   });
 
-  s.coinItems.forEach(item => {
-    if (!item.taken && Math.hypot(s.player.x - item.x, s.player.y - item.y) < 25) {
-      item.taken = true;
-      item.mesh.visible = false;
-      s.gold++;
-      playSound('coin');
+  s.lootDrops.forEach(drop => {
+    if (!drop.taken) {
+      drop.mesh.rotation.y += 0.05;
+      if (Math.hypot(s.player.x - drop.x, s.player.y - drop.y) < 30) {
+        drop.taken = true;
+        s.scene.remove(drop.mesh);
+        playSound('coin');
+        if (drop.type === 'potion') {
+          s.potions++;
+          spawnDamageText(drop.x, 30, drop.y, "+1 Potion", "#ff0000");
+        } else {
+          if (!s.inventory) s.inventory = {};
+          if (!s.inventory[drop.item.id]) s.inventory[drop.item.id] = 0;
+          s.inventory[drop.item.id]++;
+          spawnDamageText(drop.x, 30, drop.y, `+1 ${drop.item.name}`, "#ffff00");
+        }
+        if (typeof window.updateUI === 'function') window.updateUI();
+      }
     }
   });
 
@@ -83,20 +96,56 @@ export function spawnParticles(x, y, color, count, type) {
   if (!s.scene) return;
   for (let i = 0; i < count; i++) {
     const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1 });
-    const size = type === 'dust' ? 4 : 3;
+    const size = type === 'dust' ? 4 : (type === 'trail' ? 6 : 3);
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), mat);
-    const py = type === 'dust' ? 2 : 15;
+    const py = type === 'dust' ? 2 : (type === 'trail' ? 15 : 15);
     mesh.position.set(x, py, y);
     s.scene.add(mesh);
     s.particles.push({
       mesh,
-      dx: (Math.random() - 0.5) * 6,
-      dy: (Math.random() - 0.5) * 6,
-      dz: (Math.random() - 0.5) * 6 + (type === 'heal' ? 3 : 0),
+      dx: type === 'trail' ? 0 : (Math.random() - 0.5) * 6,
+      dy: type === 'trail' ? 0 : (Math.random() - 0.5) * 6,
+      dz: type === 'trail' ? 0 : ((Math.random() - 0.5) * 6 + (type === 'heal' ? 3 : 0)),
       life: 1.0,
-      decay: type === 'dust' ? 0.05 : 0.03,
+      decay: type === 'dust' ? 0.05 : (type === 'trail' ? 0.15 : 0.03),
     });
   }
+}
+
+export function spawnDamageText(x, y, z, text, color = '#ff0000') {
+  const s = state;
+  if (!s.camera) return;
+  const pos = new THREE.Vector3(x, y, z);
+  pos.project(s.camera);
+
+  // Convert to screen coordinates
+  const sx = (pos.x * 0.5 + 0.5) * window.innerWidth;
+  const sy = (-(pos.y * 0.5) + 0.5) * window.innerHeight;
+
+  const el = document.createElement('div');
+  el.textContent = text;
+  el.style.position = 'absolute';
+  el.style.left = sx + 'px';
+  el.style.top = sy + 'px';
+  el.style.color = color;
+  el.style.fontWeight = 'bold';
+  el.style.fontSize = '24px';
+  el.style.textShadow = '2px 2px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000';
+  el.style.pointerEvents = 'none';
+  el.style.transition = 'all 1s ease-out';
+  el.style.transform = 'translate(-50%, -50%)';
+  el.style.zIndex = '1000';
+  document.body.appendChild(el);
+
+  // Trigger animation
+  setTimeout(() => {
+    el.style.top = (sy - 100) + 'px';
+    el.style.opacity = '0';
+  }, 50);
+
+  setTimeout(() => {
+    el.remove();
+  }, 1050);
 }
 
 // ─── Boss ─────────────────────────────────────────────────────────────────────

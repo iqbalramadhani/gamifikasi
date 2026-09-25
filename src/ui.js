@@ -1,7 +1,9 @@
+import * as THREE from 'three';
 import { state } from './state.js';
-import { mapSize, weaponList, armorList } from './constants.js';
+import { mapSize, weaponList, armorList, lootTable } from './constants.js';
 import { playSound } from './audio.js';
 import { blocked, spawnParticles, checkItems } from './helpers.js';
+
 
 // ─── UI throttled update ──────────────────────────────────────────────────────
 
@@ -20,6 +22,13 @@ export function updateUI() {
     document.getElementById('hp').textContent = `${curHp}/${s.player.maxHp}`;
     lastHp = curHp;
   }
+  
+  const curStamina = Math.floor(s.player.stamina);
+  const staminaTextEl = document.getElementById('stamina-text');
+  const staminaBarEl = document.getElementById('stamina-bar');
+  if (staminaTextEl) staminaTextEl.textContent = `${curStamina}/${s.player.maxStamina}`;
+  if (staminaBarEl) staminaBarEl.style.width = `${Math.max(0, (curStamina / s.player.maxStamina) * 100)}%`;
+
   if (lastGold !== s.gold) {
     document.getElementById('gold').textContent = s.gold;
     lastGold = s.gold;
@@ -100,9 +109,62 @@ export function drawMinimap() {
 
 // ─── Interaction check ────────────────────────────────────────────────────────
 
+let currentDialogue = null;
+let isTyping = false;
+let typeInterval = null;
+let dialogueCallback = null;
+
+export function startDialogue(speaker, text, onComplete) {
+  const ui = document.getElementById('dialogue-ui');
+  const nameEl = document.getElementById('dialogue-name');
+  const textEl = document.getElementById('dialogue-text');
+  if (!ui) return;
+  ui.style.display = 'block';
+  nameEl.textContent = speaker;
+  textEl.textContent = '';
+  currentDialogue = text;
+  dialogueCallback = onComplete;
+  isTyping = true;
+  let index = 0;
+  if (typeInterval) clearInterval(typeInterval);
+  typeInterval = setInterval(() => {
+    textEl.textContent += text.charAt(index);
+    index++;
+    if (index >= text.length) {
+      clearInterval(typeInterval);
+      isTyping = false;
+    }
+  }, 30);
+}
+
+export function advanceDialogue() {
+  if (!currentDialogue) return false;
+  const textEl = document.getElementById('dialogue-text');
+  if (isTyping) {
+    clearInterval(typeInterval);
+    textEl.textContent = currentDialogue;
+    isTyping = false;
+  } else {
+    document.getElementById('dialogue-ui').style.display = 'none';
+    currentDialogue = null;
+    if (dialogueCallback) dialogueCallback();
+    dialogueCallback = null;
+  }
+  return true;
+}
+
 export function checkInteractions() {
   const s = state;
   if (s.shopCooldown > 0) s.shopCooldown--;
+
+  if (s.keys.f && currentDialogue) {
+    s.keys.f = false;
+    if (s.shopCooldown === 0) {
+      s.shopCooldown = 15;
+      advanceDialogue();
+    }
+    return;
+  }
 
   if (s.hometownPortal) s.hometownPortal.rotation.y += 0.05;
   if (s.wildsPortal) s.wildsPortal.rotation.y += 0.05;
@@ -112,21 +174,31 @@ export function checkInteractions() {
   if (s.currentScene === 'hometown') {
     const distShop = Math.hypot(s.player.x - s.shopNPC.position.x, s.player.y - s.shopNPC.position.z);
     if (distShop < 50) {
-      interactText = 'Tekan [F] untuk Upgrade';
-      if (s.keys.f && !s.shopOpen && s.shopCooldown === 0) openShop();
+      interactText = 'Tekan [F] untuk Bicara';
+      if (s.keys.f && !s.shopOpen && s.shopCooldown === 0) {
+        s.shopCooldown = 30;
+        s.keys.f = false;
+        startDialogue('Altar Shop', 'Halo pahlawan! Aku dapat memberikanmu berkah kekuatan untuk membantumu mengalahkan monster di Wilds.', openShop);
+      }
     }
 
     const distHeal = Math.hypot(s.player.x - s.healerNPC.position.x, s.player.y - s.healerNPC.position.z);
     if (distHeal < 50) {
-      interactText = 'Tekan [F] memulihkan HP (10 Gold)';
+      interactText = 'Tekan [F] untuk Bicara';
       if (s.keys.f && s.shopCooldown === 0) {
         s.shopCooldown = 30;
-        if (s.gold >= 10 && s.player.hp < s.player.maxHp) {
-          s.gold -= 10;
-          s.player.hp = s.player.maxHp;
-          playSound('coin');
-          updateUI();
-        }
+        s.keys.f = false;
+        startDialogue('Anna The Healer', 'Kamu terlihat sangat kelelahan... Biarkan aku menyembuhkan semua lukamu seharga 10 Gold.', () => {
+          if (s.gold >= 10 && s.player.hp < s.player.maxHp) {
+            s.gold -= 10;
+            s.player.hp = s.player.maxHp;
+            playSound('coin');
+            updateUI();
+          } else if (s.gold < 10) {
+            const msgEl = document.getElementById('message');
+            if (msgEl) msgEl.textContent = 'Gold tidak cukup!';
+          }
+        });
       }
     }
 
@@ -145,8 +217,24 @@ export function checkInteractions() {
     if (s.blacksmithNPC) {
       const distBS = Math.hypot(s.player.x - s.blacksmithNPC.position.x, s.player.y - s.blacksmithNPC.position.z);
       if (distBS < 50) {
-        interactText = 'Tekan [F] Beli Equipment';
-        if (s.keys.f && !s.blacksmithOpen && s.shopCooldown === 0) openBlacksmith();
+        interactText = 'Tekan [F] untuk Bicara';
+        if (s.keys.f && !s.blacksmithOpen && s.shopCooldown === 0) {
+          s.shopCooldown = 30;
+          s.keys.f = false;
+          startDialogue('Brutus The Blacksmith', 'Hahaha! Perlengkapanmu sudah kusam! Bawa koin emasmu, dan aku akan tempa peralatan terbaik untukmu!', openBlacksmith);
+        }
+      }
+    }
+
+    if (s.questBoardPos) {
+      const distQB = Math.hypot(s.player.x - s.questBoardPos.x, s.player.y - s.questBoardPos.z);
+      if (distQB < 50) {
+        interactText = 'Tekan [F] Papan Misi';
+        if (s.keys.f && s.shopCooldown === 0) {
+          s.shopCooldown = 30;
+          s.keys.f = false;
+          openQuestBoard();
+        }
       }
     }
   } else {
@@ -209,6 +297,7 @@ export function buyUpgrade(type) {
   }
   document.getElementById('shop-gold').textContent = s.gold;
   updateUI();
+  if (typeof window.saveGame === 'function') window.saveGame(true);
 }
 
 // ─── Blacksmith ───────────────────────────────────────────────────────────────
@@ -268,10 +357,27 @@ export function buyWeapon() {
     s.currentWeapon++;
     const prevDmg = s.currentWeapon > 0 ? weaponList[s.currentWeapon - 1]?.damage ?? 0 : 0;
     s.player.attackDamage += wNext.damage - prevDmg;
-    if (typeof s.playerBladeMat !== 'undefined') s.playerBladeMat.color.setHex(wNext.color);
-    playSound('coin');
+    if (typeof s.playerBladeMat !== 'undefined' && s.playerBladeMat) s.playerBladeMat.color.setHex(wNext.color);
+    
+    if (s.playerSwordMesh) {
+      const baseScale = s.gltfPlayerRef ? 0.5 : 15;
+      const newScale = baseScale + s.currentWeapon * (baseScale * 0.3);
+      s.playerSwordMesh.scale.set(newScale, newScale, newScale);
+      
+      s.playerSwordMesh.traverse(child => {
+        if (child.isMesh && child.material) {
+          child.material = child.material.clone();
+          child.material.color.setHex(wNext.color);
+          child.material.emissive.setHex(wNext.color);
+          child.material.emissiveIntensity = s.currentWeapon * 0.3;
+        }
+      });
+    }
+
+    playSound('boss_spawn');
     updateBlacksmithUI();
     updateUI();
+    if (typeof window.saveGame === 'function') window.saveGame(true);
   }
 }
 
@@ -285,10 +391,31 @@ export function buyArmor() {
     const hpDiff = aNext.hp - prevHp;
     s.player.maxHp += hpDiff;
     s.player.hp += hpDiff;
-    if (typeof s.playerBodyMat !== 'undefined') s.playerBodyMat.color.setHex(aNext.color);
-    playSound('coin');
+    if (typeof s.playerBodyMat !== 'undefined' && s.playerBodyMat) s.playerBodyMat.color.setHex(aNext.color);
+    
+    if (s.gltfPlayerRef) {
+      s.gltfPlayerRef.traverse(child => {
+        if (child.isMesh && child.material) {
+          child.material = child.material.clone();
+          child.material.color.setHex(aNext.color);
+        }
+      });
+    }
+
+    if (!s.playerAuraLight && s.playerMesh) {
+      s.playerAuraLight = new THREE.PointLight(aNext.color, 1 + s.currentArmor * 0.5, 100 + s.currentArmor * 20);
+      s.playerAuraLight.position.y = 15;
+      s.playerMesh.add(s.playerAuraLight);
+    } else if (s.playerAuraLight) {
+      s.playerAuraLight.color.setHex(aNext.color);
+      s.playerAuraLight.intensity = 1 + s.currentArmor * 0.5;
+      s.playerAuraLight.distance = 100 + s.currentArmor * 20;
+    }
+
+    playSound('boss_spawn');
     updateBlacksmithUI();
     updateUI();
+    if (typeof window.saveGame === 'function') window.saveGame(true);
   }
 }
 
@@ -299,18 +426,199 @@ export function levelUp() {
   s.player.level++;
   s.player.exp -= s.player.nextExp;
   s.player.nextExp = Math.floor(s.player.nextExp * 1.5);
-  s.player.maxHp += 20;
-  s.player.hp = s.player.maxHp;
-  s.player.attackDamage += 0.5;
+  s.player.statPoints += 1;
 
   playSound('boss_spawn');
   spawnParticles(s.player.x, s.player.y, 0xffff00, 50, 'levelup');
 
   const modal = document.getElementById('level-up-modal');
   if (modal) {
-    modal.querySelector('p').textContent = `Level ${s.player.level}! Max HP & Attack Meningkat!`;
+    modal.querySelector('p').textContent = `Kekuatan Anda meningkat pesat! (+1 Stat Point)`;
     modal.style.display = 'flex';
     setTimeout(() => modal.style.display = 'none', 3000);
+  }
+  updateStatsUI();
+  if (typeof window.saveGame === 'function') window.saveGame(true);
+}
+
+export function openStats() {
+  const el = document.getElementById('stats-menu');
+  if (!el) return;
+  el.style.display = 'flex';
+  updateStatsUI();
+}
+
+export function closeStats() {
+  document.getElementById('stats-menu').style.display = 'none';
+}
+
+export function addStat(type) {
+  const s = state;
+  if (s.player.statPoints > 0) {
+    s.player.statPoints--;
+    s.player.stats[type]++;
+    
+    if (type === 'str') {
+      s.player.attackDamage += 1;
+    } else if (type === 'agi') {
+      s.player.speed += 0.3;
+      s.player.maxStamina += 20;
+      s.player.stamina += 20;
+    } else if (type === 'vit') {
+      s.player.maxHp += 30;
+      s.player.hp += 30;
+    }
+    
+    updateStatsUI();
+    updateUI();
+  }
+}
+
+export function updateStatsUI() {
+  const s = state;
+  const statPointsEl = document.getElementById('stat-points');
+  if (!statPointsEl) return;
+  statPointsEl.textContent = s.player.statPoints;
+  document.getElementById('stat-str').textContent = s.player.stats.str;
+  document.getElementById('stat-agi').textContent = s.player.stats.agi;
+  document.getElementById('stat-vit').textContent = s.player.stats.vit;
+  
+  const notifEl = document.getElementById('stat-notif');
+  if (notifEl) {
+    notifEl.style.display = s.player.statPoints > 0 ? 'inline-block' : 'none';
+  }
+}
+
+export function openQuestBoard() {
+  document.getElementById('quest-board').style.display = 'flex';
+  const s = state;
+  if (!s.bountyQuest) {
+    s.bountyQuest = { count: 5 + Math.floor(Math.random() * 10), reward: 50 + Math.floor(Math.random() * 100) };
+    s.bountyQuestProgress = 0;
+  }
+  document.getElementById('quest-title').textContent = `Basmi ${s.bountyQuest.count} Monster`;
+  document.getElementById('quest-reward').textContent = `${s.bountyQuest.reward} G`;
+  
+  const btn = document.getElementById('btn-quest-action');
+  if (s.bountyQuestProgress >= s.bountyQuest.count) {
+    btn.textContent = 'Klaim Hadiah';
+    btn.onclick = window.claimQuest;
+  } else if (s.bountyQuestProgress > 0 || document.getElementById('side-quest-badge').style.display !== 'none') {
+    btn.textContent = 'Misi Sedang Dikerjakan';
+    btn.onclick = null;
+  } else {
+    btn.textContent = 'Terima Misi';
+    btn.onclick = window.acceptQuest;
+  }
+}
+
+export function acceptQuest() {
+  playSound('coin'); 
+  document.getElementById('side-quest-badge').style.display = 'inline-flex';
+  updateQuestUI();
+  closeQuestBoard();
+}
+
+export function claimQuest() {
+  const s = state;
+  if (s.bountyQuest && s.bountyQuestProgress >= s.bountyQuest.count) {
+    s.gold += s.bountyQuest.reward;
+    s.player.exp += s.bountyQuest.reward;
+    playSound('coin');
+    spawnParticles(s.player.x, s.player.y, 0xffff00, 30, 'heal');
+    s.bountyQuest = null;
+    s.bountyQuestProgress = 0;
+    document.getElementById('side-quest-badge').style.display = 'none';
+    closeQuestBoard();
+    updateUI();
+    if (s.player.exp >= s.player.nextExp) levelUp();
+  }
+}
+
+export function closeQuestBoard() {
+  document.getElementById('quest-board').style.display = 'none';
+}
+
+export function updateQuestUI() {
+  const s = state;
+  if (s.bountyQuest) {
+    document.getElementById('side-quest-text').textContent = `${s.bountyQuestProgress} / ${s.bountyQuest.count}`;
+  }
+}
+
+export function openInventory() {
+  const el = document.getElementById('inventory-menu');
+  if (!el) return;
+  el.style.display = 'flex';
+  updateInventoryUI();
+}
+
+export function closeInventory() {
+  document.getElementById('inventory-menu').style.display = 'none';
+}
+
+export function updateInventoryUI() {
+  const s = state;
+  const listEl = document.getElementById('inventory-list');
+  if (!listEl) return;
+  listEl.innerHTML = '';
+  let hasItems = false;
+  
+  if (!s.inventory) s.inventory = {};
+  
+  for (const [id, count] of Object.entries(s.inventory)) {
+    if (count > 0) {
+      hasItems = true;
+      const lootDef = Object.values(lootTable).find(l => l.id === id);
+      const name = lootDef ? lootDef.name : id;
+      
+      const div = document.createElement('div');
+      div.style.display = 'flex';
+      div.style.justifyContent = 'space-between';
+      div.style.padding = '5px 0';
+      div.style.borderBottom = '1px solid #444';
+      
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = name;
+      
+      const countSpan = document.createElement('span');
+      countSpan.textContent = `x${count}`;
+      countSpan.style.color = '#f1c40f';
+      
+      div.appendChild(nameSpan);
+      div.appendChild(countSpan);
+      listEl.appendChild(div);
+    }
+  }
+  
+  if (!hasItems) {
+    listEl.innerHTML = '<p style="text-align:center; color:#888;">Tas kosong...</p>';
+  }
+}
+
+export function sellAllLoot() {
+  const s = state;
+  let totalEarned = 0;
+  for (const [id, count] of Object.entries(s.inventory)) {
+    if (count > 0) {
+      const lootDef = Object.values(lootTable).find(l => l.id === id);
+      if (lootDef) {
+        totalEarned += lootDef.value * count;
+      }
+      s.inventory[id] = 0;
+    }
+  }
+  
+  if (totalEarned > 0) {
+    s.gold += totalEarned;
+    playSound('coin');
+    const msgEl = document.getElementById('message');
+    if (msgEl) msgEl.textContent = `Terjual semua loot seharga ${totalEarned} Gold!`;
+    document.getElementById('shop-gold').textContent = s.gold;
+    updateUI();
+  } else {
+    const msgEl = document.getElementById('message');
+    if (msgEl) msgEl.textContent = `Tas kamu kosong!`;
   }
 }
 
@@ -319,10 +627,15 @@ export function levelUp() {
 window.addEventListener('keydown', e => {
   const key = e.key.toLowerCase();
   state.keys[key] = true;
-  if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'shift', 'z', 'x', 'c'].includes(key)) {
+  if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'shift', 'z', 'x', 'c', 'v', 'tab', 'f', 'i'].includes(key)) {
     e.preventDefault();
   }
   if (key === 'escape' && typeof window.togglePause === 'function') window.togglePause();
+  if (key === 'i') {
+    const invEl = document.getElementById('inventory-menu');
+    if (invEl && invEl.style.display === 'flex') closeInventory();
+    else openInventory();
+  }
 });
 
 window.addEventListener('keyup', e => {

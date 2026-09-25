@@ -9,7 +9,7 @@ import * as THREE from 'three';
 import { state } from './state.js';
 import { loadAllModels, loadedModels } from './model-loader.js';
 import { initSetup, initMap, initHometown, initEntities, initNPCs } from './scenes.js';
-import { spawnBoss, spawnParticles } from './helpers.js';
+import { spawnBoss, spawnParticles, checkItems } from './helpers.js';
 import { spawnEnemy, usePotion } from './combat.js';
 import {
   move, shoot, updateProjectiles, updateEnemies, updateBoss,
@@ -18,11 +18,16 @@ import {
   updateUI, checkInteractions,
   openShop, closeShop, buyUpgrade,
   openBlacksmith, closeBlacksmith, updateBlacksmithUI, buyWeapon, buyArmor,
-  levelUp,
+  levelUp, openStats, closeStats, addStat,
+  openQuestBoard, acceptQuest, claimQuest, closeQuestBoard, updateQuestUI,
+  openInventory, closeInventory, sellAllLoot
 } from './ui.js';
 import { updateWeather, updateParticles, updatePet, teleportTo } from './environment.js';
 window.teleportTo = teleportTo;
 import { saveGame, loadGame } from './persistence.js';
+
+let autoSaveTimer = 0;
+const AUTO_SAVE_INTERVAL = 1800;
 
 // Re-export loadedModels and THREE on window so inline handlers / fallback code
 // can still reference them (backward-compat with the old monolithic file).
@@ -48,8 +53,21 @@ window.openBlacksmith = openBlacksmith;
 window.closeBlacksmith = closeBlacksmith;
 window.buyWeapon = buyWeapon;
 window.buyArmor = buyArmor;
+window.openStats = openStats;
+window.closeStats = closeStats;
+window.addStat = addStat;
+window.openQuestBoard = openQuestBoard;
+window.acceptQuest = acceptQuest;
+window.claimQuest = claimQuest;
+window.closeQuestBoard = closeQuestBoard;
+window.updateQuestUI = updateQuestUI;
+window.openInventory = openInventory;
+window.closeInventory = closeInventory;
+window.sellAllLoot = sellAllLoot;
+window.updateUI = updateUI;
 window.playerBodyMat = null;
 window.playerBladeMat = null;
+
 
 // ─── Game lifecycle ────────────────────────────────────────────────────────────
 
@@ -111,8 +129,64 @@ function gameLoop(timestamp) {
       return;
     }
 
-    state.player.defending = !!state.keys['shift'];
+    state.player.defending = !!state.keys['shift'] && state.player.stamina > 0;
+    if (state.player.defending) {
+      state.player.stamina -= 0.5 * dt;
+    } else {
+      state.player.stamina = Math.min(state.player.maxStamina, state.player.stamina + 0.3 * dt);
+    }
     if (state.shieldMesh) state.shieldMesh.visible = state.player.defending;
+
+    if (state.keys['q']) state.cameraAngle += 0.04 * dt;
+    if (state.keys['e']) state.cameraAngle -= 0.04 * dt;
+
+    if (state.tabCooldown > 0) state.tabCooldown -= dt;
+    if (state.keys['tab'] && state.tabCooldown <= 0) {
+      state.tabCooldown = 30;
+      if (state.lockedEnemy) {
+        state.lockedEnemy = null;
+      } else {
+        let closest = null;
+        let minDist = 800;
+        for (let e of state.enemies) {
+          const d = Math.hypot(e.x - state.player.x, e.y - state.player.y);
+          if (d < minDist) { minDist = d; closest = e; }
+        }
+        if (state.bossActive) {
+          const d = Math.hypot(state.bossX - state.player.x, state.bossY - state.player.y);
+          if (d < minDist) { closest = { isBoss: true, x: state.bossX, y: state.bossY }; }
+        }
+        state.lockedEnemy = closest;
+      }
+    }
+
+    if (state.lockedEnemy) {
+      if (!state.lockedEnemy.isBoss && !state.enemies.includes(state.lockedEnemy)) {
+        state.lockedEnemy = null;
+      } else if (state.lockedEnemy.isBoss && !state.bossActive) {
+        state.lockedEnemy = null;
+      } else {
+        if (state.lockedEnemy.isBoss) {
+          state.lockedEnemy.x = state.bossX;
+          state.lockedEnemy.y = state.bossY;
+        }
+        state.cameraAngle = Math.atan2(state.lockedEnemy.x - state.player.x, state.lockedEnemy.y - state.player.y);
+      }
+    }
+
+    if (state.keys['v'] && state.player.height === 0 && state.player.stamina >= 15) {
+      state.player.stamina -= 15;
+      state.player.heightVelocity = 9;
+    }
+    if (state.player.height > 0 || state.player.heightVelocity !== 0) {
+      state.player.height += state.player.heightVelocity * dt;
+      state.player.heightVelocity -= 1.2 * dt;
+      if (state.player.height <= 0) {
+        state.player.height = 0;
+        if (state.player.heightVelocity < -5) state.cameraShake = Math.max(state.cameraShake, 6);
+        state.player.heightVelocity = 0;
+      }
+    }
 
     move(dt);
     if (state.keys[' ']) shoot();
@@ -135,16 +209,23 @@ function gameLoop(timestamp) {
     updateWeather(dt);
     updateParticles(dt);
     updatePet(dt);
+    checkItems();
     updateUI();
+    autoSaveTimer += dt;
+    if (autoSaveTimer >= AUTO_SAVE_INTERVAL) {
+      autoSaveTimer = 0;
+      saveGame(true);
+    }
   }
 
   // ── Smooth player mesh follow ──────────────────────────────────────────────
   const breathOffset = Math.sin(state.playerIdleBreath) * 0.8;
   const isMoving = state.player.facingX !== 0 || state.player.facingY !== 0;
+  const basePlayerY = 15 + state.player.height;
   const targetPlayerY = isMoving
-    ? 15 + Math.abs(Math.sin(state.player.walkCycle * 2)) * 1.5
-    : 15 + breathOffset;
-  state.playerMesh.position.y += (targetPlayerY - state.playerMesh.position.y) * Math.min(dt * 8, 1);
+    ? basePlayerY + Math.abs(Math.sin(state.player.walkCycle * 2)) * 1.5
+    : basePlayerY + breathOffset;
+  state.playerMesh.position.y += (targetPlayerY - state.playerMesh.position.y) * Math.min(dt * 12, 1);
   state.playerMesh.position.x += (state.player.x - state.playerMesh.position.x) * Math.min(dt * 10, 1);
   state.playerMesh.position.z += (state.player.y - state.playerMesh.position.z) * Math.min(dt * 10, 1);
   state.playerIdleBreath += 0.03 * dt;
@@ -170,14 +251,29 @@ function gameLoop(timestamp) {
 
 // ── Chase camera — simple follow behind player ───────────────────────
 // Camera stays behind the player (negative Z direction) and looks at the player.
-const idealX = state.player.x;
-const idealZ = state.player.y - state.cameraOffsetZ; // offset behind
+const idealX = state.player.x - Math.sin(state.cameraAngle) * state.cameraOffsetZ;
+const idealZ = state.player.y - Math.cos(state.cameraAngle) * state.cameraOffsetZ; // offset behind
 const idealY = state.cameraOffsetY;
 const smooth = Math.min(dt * 6, 1);
 state.camera.position.x += (idealX - state.camera.position.x) * smooth;
 state.camera.position.y += (idealY - state.camera.position.y) * smooth;
 state.camera.position.z += (idealZ - state.camera.position.z) * smooth;
 state.camera.lookAt(state.player.x, state.cameraLookAtY, state.player.y);
+
+if (state.cameraShake > 0) {
+  state.camera.position.x += (Math.random() - 0.5) * state.cameraShake;
+  state.camera.position.y += (Math.random() - 0.5) * state.cameraShake;
+  state.camera.position.z += (Math.random() - 0.5) * state.cameraShake;
+  state.cameraShake -= dt * 1.5;
+  if (state.cameraShake < 0) state.cameraShake = 0;
+}
+
+if (state.dirLight) {
+  state.dirLight.position.x = state.player.x + 300;
+  state.dirLight.position.z = state.player.y - 200;
+  state.dirLight.target.position.set(state.player.x, 0, state.player.y);
+  state.dirLight.target.updateMatrixWorld();
+}
 
 
 

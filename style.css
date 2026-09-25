@@ -99,3 +99,17 @@ button.ui-btn:hover { background: #2980b9; }
   font-weight: bold; cursor: pointer; margin-left: 20px;
 }
 .shop-item button:hover { background: #d4ac0d; }
+
+/* Generic modal overlay — used by inventory, stats, quest board, etc. */
+.modal {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100vw; height: 100vh;
+  z-index: 50;
+  flex-direction: column;
+}
+.modal-content {
+  max-height: 80vh;
+  overflow-y: auto;
+}
+

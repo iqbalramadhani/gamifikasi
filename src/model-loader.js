@@ -56,6 +56,12 @@ export async function loadAllModels() {
       loader.load(
         item.url,
         gltf => {
+          gltf.scene.traverse(child => {
+            if (child.isMesh) {
+              child.castShadow = true;
+              child.receiveShadow = true;
+            }
+          });
           loadedModels[item.key] = gltf.scene;
           resolve(true);
         },

@@ -18,10 +18,19 @@ export const armorList = [
 
 /** Enemy template definitions — order matches the random type selector. */
 export const enemyTemplates = [
-  { hp: 3,   speed: 1.6, r: 11, typeStr: 'spike',    charKey: 'char_e' },
-  { hp: 1.5, speed: 3.0, r: 9,  typeStr: 'slime',    charKey: 'char_f' },
-  { hp: 8,   speed: 0.8, r: 15, typeStr: 'golem',    charKey: 'char_g' },
-  { hp: 4,   speed: 1.2, r: 9,  typeStr: 'archer',   charKey: 'char_h' },
-  { hp: 2,   speed: 3.5, r: 9,  typeStr: 'kamikaze', charKey: 'char_i' },
-  { hp: 5,   speed: 1.0, r: 8,  typeStr: 'ghost',    charKey: 'char_j' },
+  { hp: 3,   speed: 1.5, r: 11, typeStr: 'spike',    charKey: 'char_e' },
+  { hp: 1.5, speed: 1.5, r: 9,  typeStr: 'slime',    charKey: 'char_f' },
+  { hp: 8,   speed: 1.5, r: 15, typeStr: 'golem',    charKey: 'char_g' },
+  { hp: 4,   speed: 1.5, r: 9,  typeStr: 'archer',   charKey: 'char_h' },
+  { hp: 2,   speed: 1.5, r: 9,  typeStr: 'kamikaze', charKey: 'char_i' },
+  { hp: 5,   speed: 1.5, r: 8,  typeStr: 'ghost',    charKey: 'char_j' },
 ];
+
+export const lootTable = {
+  spike: { id: 'wood_scrap', name: 'Wood Scrap', value: 2, color: 0x8b5a2b },
+  slime: { id: 'slime_gel', name: 'Slime Gel', value: 5, color: 0x00ff00 },
+  golem: { id: 'golem_core', name: 'Golem Core', value: 25, color: 0x888888 },
+  archer: { id: 'broken_arrow', name: 'Broken Arrow', value: 4, color: 0xddddaa },
+  kamikaze: { id: 'gunpowder', name: 'Gunpowder', value: 8, color: 0x333333 },
+  ghost: { id: 'ectoplasm', name: 'Ectoplasm', value: 10, color: 0xaabbff },
+};

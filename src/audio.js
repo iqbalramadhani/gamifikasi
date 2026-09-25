@@ -64,6 +64,14 @@ export function playSound(type) {
     gainNode.gain.linearRampToValueAtTime(0.01, now + 3);
     osc.start(now);
     osc.stop(now + 3);
+  } else if (type === 'footstep') {
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(150, now);
+    osc.frequency.exponentialRampToValueAtTime(50, now + 0.05);
+    gainNode.gain.setValueAtTime(0.02, now);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+    osc.start(now);
+    osc.stop(now + 0.05);
   } else if (type === 'bgm') {
     osc.type = 'sine';
     osc.frequency.setValueAtTime(60, now);

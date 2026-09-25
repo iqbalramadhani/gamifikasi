@@ -10,7 +10,7 @@ export function updateWeather(dt) {
   if (s.bossActive) {
     s.dayTime = 0.8; // Force storm
   } else {
-    s.dayTime += 0.0001 * dt;
+    s.dayTime += 0.0003 * dt;
     if (s.dayTime > 1) s.dayTime = 0;
   }
 
@@ -168,4 +168,5 @@ export function teleportTo(sceneName) {
   }
 
   playSound('coin');
+  if (typeof window.saveGame === 'function') window.saveGame(true);
 }

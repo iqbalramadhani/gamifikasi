@@ -12,13 +12,22 @@
     <div id="hud">
       <div class="title-nav">⚔️ The Lost Kingdom 3D</div>
       <div class="badge">❤️ HP: <span id="hp">100/100</span></div>
+      <div class="badge">
+        ⚡ SP: <span id="stamina-text">100/100</span>
+        <div style="width: 100px; height: 5px; background: #555; margin-top: 5px; border-radius: 2px; overflow: hidden;">
+          <div id="stamina-bar" style="width: 100%; height: 100%; background: #f1c40f; transition: width 0.1s;"></div>
+        </div>
+      </div>
       <div class="badge" style="background: rgba(0, 50, 150, 0.6); border-color: #3498db;">⭐ Lv <span id="player-level">1</span> (EXP: <span id="exp">0</span>/<span id="max-exp">20</span>)</div>
       <div class="badge">💰 Gold: <span id="gold">0</span></div>
       <div class="badge">💎 Crystal: <span id="crystal">0</span>/10</div>
-      <div class="badge">🗡️ Quest: Cari 10 Crystal</div>
+      <div class="badge">🗡️ Main: Cari 10 Crystal</div>
+      <div class="badge" id="side-quest-badge" style="display:none; background: #8e44ad; border-color: #9b59b6;">📜 Bounty: <span id="side-quest-text"></span></div>
       
       <button onclick="saveGame()" style="margin-left: 15px; padding: 5px 15px; background-color: #27ae60; color: white; border: 2px solid #2ecc71; border-radius: 5px; font-weight: bold; cursor: pointer; text-shadow: 1px 1px 2px black; box-shadow: 0px 0px 10px rgba(46,204,113,0.5);">💾 Save Game</button>
       <span id="save-status" style="margin-left: 10px; color: #f1c40f; font-weight: bold; text-shadow: 1px 1px 2px black;"></span>
+      <button onclick="openInventory()" style="margin-left: 15px; padding: 5px 15px; background-color: #e67e22; color: white; border: 2px solid #d35400; border-radius: 5px; font-weight: bold; cursor: pointer; text-shadow: 1px 1px 2px black; box-shadow: 0px 0px 10px rgba(230,126,34,0.5);">🎒 Tas</button>
+      <button onclick="openStats()" style="margin-left: 15px; padding: 5px 15px; background-color: #9b59b6; color: white; border: 2px solid #8e44ad; border-radius: 5px; font-weight: bold; cursor: pointer; text-shadow: 1px 1px 2px black; box-shadow: 0px 0px 10px rgba(155,89,182,0.5);">📊 Stats <span id="stat-notif" style="display:none; background:red; padding:2px 5px; border-radius:50%; font-size:12px;">!</span></button>
       <button onclick="openSettings()" style="margin-left: 15px; padding: 5px 15px; background-color: #34495e; color: white; border: 2px solid #2c3e50; border-radius: 5px; font-weight: bold; cursor: pointer; text-shadow: 1px 1px 2px black; box-shadow: 0px 0px 10px rgba(44,62,80,0.5);">⚙️ Settings</button>
       
       <canvas id="minimap" width="150" height="150"></canvas>
@@ -53,6 +62,13 @@
         <button class="action-btn" onpointerdown="keys[' ']=true" onpointerup="keys[' ']=false" onpointercancel="keys[' ']=false" onpointerleave="keys[' ']=false">🔥 Tembak</button>
         <button class="action-btn" onpointerdown="keys['shift']=true" onpointerup="keys['shift']=false" onpointercancel="keys['shift']=false" onpointerleave="keys['shift']=false">🛡️ Tahan</button>
       </div>
+    </div>
+
+    <!-- Dialogue UI -->
+    <div id="dialogue-ui" style="display: none; position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); width: 700px; max-width: 90%; background: rgba(0,0,0,0.85); border: 2px solid #fff; border-radius: 10px; padding: 20px; color: #fff; font-size: 20px; z-index: 2000; box-shadow: 0 4px 15px rgba(0,0,0,0.8);">
+      <div id="dialogue-name" style="font-weight: bold; color: #ffd700; margin-bottom: 10px; font-size: 24px; border-bottom: 1px solid #555; padding-bottom: 5px;"></div>
+      <div id="dialogue-text" style="min-height: 60px; line-height: 1.5;"></div>
+      <div id="dialogue-hint" style="font-size: 14px; color: #aaa; text-align: right; margin-top: 10px; animation: blink 1.5s infinite;">Tekan [F] untuk lanjut</div>
     </div>
 
     <!-- UI Overlays -->
@@ -91,7 +107,27 @@
     <div id="level-up-modal">
       <div class="box" style="border-color: #3498db; animation: pulse 1s infinite alternate;">
         <h2 style="color: #3498db;">🌟 LEVEL UP!</h2>
-        <p>Kekuatan Anda meningkat pesat!</p>
+        <p>Kekuatan Anda meningkat pesat! (+1 Stat Point)</p>
+      </div>
+    </div>
+    
+    <div id="stats-menu" class="modal" style="display: none; background: rgba(20,20,20,0.95); border: 2px solid #8e44ad; align-items:center; justify-content:center;">
+      <div class="modal-content" style="color: #ddd; width: 400px; padding: 20px;">
+        <h2 style="color:#f1c40f; margin-bottom: 5px;">📊 KARAKTER STATUS</h2>
+        <p style="font-size: 18px; color: #aaa; margin-top: 0;">Stat Points: <span id="stat-points" style="color: #fff; font-weight: bold; font-size: 24px;">0</span></p>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; background: #333; padding: 10px; border-radius: 5px;">
+           <div style="text-align: left;"><h3 style="margin:0; color:#e74c3c;">💪 Strength (STR)</h3><small>Menambah Attack Damage</small></div>
+           <div><span id="stat-str" style="font-size:20px; font-weight:bold; margin-right: 15px;">1</span><button onclick="addStat('str')" style="background:#e74c3c; width: 40px; font-size: 20px;">+</button></div>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; background: #333; padding: 10px; border-radius: 5px;">
+           <div style="text-align: left;"><h3 style="margin:0; color:#2ecc71;">🏃 Agility (AGI)</h3><small>Menambah Speed & SP</small></div>
+           <div><span id="stat-agi" style="font-size:20px; font-weight:bold; margin-right: 15px;">1</span><button onclick="addStat('agi')" style="background:#2ecc71; width: 40px; font-size: 20px;">+</button></div>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; background: #333; padding: 10px; border-radius: 5px;">
+           <div style="text-align: left;"><h3 style="margin:0; color:#3498db;">🛡️ Vitality (VIT)</h3><small>Menambah Maksimal HP</small></div>
+           <div><span id="stat-vit" style="font-size:20px; font-weight:bold; margin-right: 15px;">1</span><button onclick="addStat('vit')" style="background:#3498db; width: 40px; font-size: 20px;">+</button></div>
+        </div>
+        <button class="ui-btn" onclick="closeStats()" style="margin-top: 15px; background: #555; width: 100%;">Tutup</button>
       </div>
     </div>
     
@@ -147,10 +183,38 @@
           <span>👟 Speed (+1)<br><small id="shop-spd-level">Lv 1</small></span>
           <button onclick="buyUpgrade('spd')">Beli (15 🪙)</button>
         </div>
+        <div class="shop-item" style="border-top: 2px solid #444; padding-top: 10px;">
+          <span>🎒 Jual Semua Loot<br><small>Menukar isi tas ke Gold</small></span>
+          <button onclick="sellAllLoot()" style="background: #27ae60;">Jual</button>
+        </div>
         <button style="margin-top:20px; padding:10px 20px; background:#e74c3c; color:white; border:none; border-radius:5px; font-size:18px; cursor:pointer;" onclick="closeShop()">Tutup Altar (Lanjut)</button>
       </div>
     </div>
+    <div id="inventory-menu" class="modal" style="display: none; background: rgba(20,30,40,0.95); border: 2px solid #3498db; align-items:center; justify-content:center;">
+      <div class="modal-content" style="color: #ddd; width: 400px; padding: 20px;">
+        <h2 style="color:#3498db; margin-bottom: 5px;">🎒 INVENTORY</h2>
+        <div id="inventory-list" style="background: rgba(0,0,0,0.5); padding: 15px; border-radius: 5px; min-height: 150px; margin-top: 15px; max-height: 300px; overflow-y: auto;">
+           <!-- Dynamic items -->
+        </div>
+        <button class="ui-btn" onclick="closeInventory()" style="margin-top: 15px; background: #555; width: 100%;">Tutup</button>
+      </div>
+    </div>
   </div>
+
+    <div id="quest-board" class="modal" style="display:none; background: rgba(50,30,10,0.95); border: 2px solid #8b5a2b; align-items:center; justify-content:center;">
+      <div class="modal-content" style="color: #eee; width: 400px; padding: 20px;">
+        <h2 style="color:#f1c40f; margin-bottom: 5px;">📜 Papan Misi (Bounty)</h2>
+        <div id="quest-content" style="background: rgba(0,0,0,0.5); padding: 15px; border-radius: 5px; min-height: 100px; margin-top: 15px;">
+           <p style="color: #ccc; margin-top:0;">Dibutuhkan Petualang Tangguh!</p>
+           <h3 id="quest-title" style="color: #e74c3c;">Basmi 5 Monster</h3>
+           <p>Hadiah: <span id="quest-reward" style="color: gold; font-weight: bold;">150 G</span> & <span style="color: #3498db; font-weight: bold;">EXP</span></p>
+           <button id="btn-quest-action" class="ui-btn" onclick="acceptQuest()" style="background: #27ae60; width: 100%; margin-top: 10px;">Terima Misi</button>
+        </div>
+        <button class="ui-btn" onclick="closeQuestBoard()" style="margin-top: 15px; background: #555; width: 100%;">Tutup</button>
+      </div>
+    </div>
+  </div>
+
 
   <!-- Memuat Script Game secara modular -->
   <script type="module" src="/src/main.js"></script>

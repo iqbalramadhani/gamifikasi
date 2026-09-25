@@ -1,14 +1,20 @@
 import { state } from './state.js';
-import { updateUI, levelUp } from './ui.js';
 import { weaponList, armorList } from './constants.js';
 
+/** Throttle timer — auto-save minimum 1s apart from manual save. */
+let lastSaveTime = 0;
+
 /** POST current player progress to the SQLite backend. */
-export function saveGame() {
+export function saveGame(isAuto = false) {
+  const now = Date.now();
+  if (now - lastSaveTime < 1000) return;
+  lastSaveTime = now;
+
   const s = state;
   const statusEl = document.getElementById('save-status');
   if (!statusEl) return;
-  statusEl.textContent = 'Menyimpan...';
-  statusEl.style.color = '#f39c12';
+  statusEl.textContent = isAuto ? 'Auto…' : 'Menyimpan...';
+  statusEl.style.color = isAuto ? '#3498db' : '#f39c12';
 
   const data = {
     x: s.player.x,
@@ -27,6 +33,7 @@ export function saveGame() {
     camera_y: s.cameraOffsetY,
     camera_z: s.cameraOffsetZ,
     camera_look_y: s.cameraLookAtY,
+    inventory: JSON.stringify(s.inventory),
   };
 
   fetch('http://localhost:3001/api/save', {
@@ -35,10 +42,10 @@ export function saveGame() {
     body: JSON.stringify(data),
   })
     .then(res => res.json())
-    .then(resData => {
-      statusEl.textContent = 'Tersimpan ✅';
+    .then(() => {
+      statusEl.textContent = isAuto ? 'Auto ✅' : 'Tersimpan ✅';
       statusEl.style.color = '#2ecc71';
-      setTimeout(() => { statusEl.textContent = ''; }, 3000);
+      setTimeout(() => { statusEl.textContent = ''; }, isAuto ? 1200 : 3000);
     })
     .catch(err => {
       statusEl.textContent = 'Gagal ❌';
@@ -70,6 +77,12 @@ export function loadGame() {
       s.currentWeapon = d.currentWeapon ?? 0;
       s.currentArmor = d.currentArmor ?? 0;
 
+      try {
+        if (d.inventory) s.inventory = JSON.parse(d.inventory);
+      } catch (e) {
+        s.inventory = {};
+      }
+
       if (s.player.x > 9000) s.currentScene = 'hometown';
       else s.currentScene = 'wilds';
 
@@ -99,12 +112,12 @@ export function loadGame() {
       // Process any pending level-ups from accumulated EXP
       let pendingLevels = 0;
       while (s.player.exp >= s.player.nextExp && pendingLevels < 100) {
-        levelUp();
+        if (typeof window.levelUp === 'function') window.levelUp();
         pendingLevels++;
       }
 
       console.log('✅ Progres termuat dari Database!', d);
-      updateUI();
+      if (typeof window.updateUI === 'function') window.updateUI();
     })
     .catch(err => console.log('Belum ada save data atau Server Backend mati:', err));
 }

@@ -26,6 +26,8 @@ export function initSetup() {
   s.renderer.setSize(window.innerWidth, window.innerHeight);
   s.renderer.toneMapping = THREE.ACESFilmicToneMapping;
   s.renderer.toneMappingExposure = 1.0;
+  s.renderer.shadowMap.enabled = true;
+  s.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
   s.composer = new EffectComposer(s.renderer);
   s.composer.addPass(new RenderPass(s.scene, s.camera));
@@ -62,7 +64,17 @@ export function initSetup() {
   s.scene.add(ambientLight);
 
   s.dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-  s.dirLight.position.set(mapSize / 2, 800, mapSize / 2);
+  s.dirLight.position.set(mapSize / 2 + 500, 800, mapSize / 2 - 200);
+  s.dirLight.castShadow = true;
+  s.dirLight.shadow.mapSize.width = 2048;
+  s.dirLight.shadow.mapSize.height = 2048;
+  s.dirLight.shadow.camera.near = 10;
+  s.dirLight.shadow.camera.far = 1500;
+  s.dirLight.shadow.camera.left = -500;
+  s.dirLight.shadow.camera.right = 500;
+  s.dirLight.shadow.camera.top = 500;
+  s.dirLight.shadow.camera.bottom = -500;
+  s.dirLight.shadow.bias = -0.0005;
   s.scene.add(s.dirLight);
 
   // Floor
@@ -71,6 +83,7 @@ export function initSetup() {
   const floor = new THREE.Mesh(floorGeo, floorMat);
   floor.rotation.x = -Math.PI / 2;
   floor.position.set(mapSize / 2, 0, mapSize / 2);
+  floor.receiveShadow = true;
   s.scene.add(floor);
 
   // Fog
@@ -261,7 +274,9 @@ export function initHometown() {
         if (Math.hypot(dx, dz) > 3.5) continue;
         const dirt = SkeletonUtils.clone(loadedModels.patch_dirt);
         dirt.scale.set(30, 30, 30);
-        dirt.position.set(hx + dx * 65, 0, hy + dz * 65);
+        const px = hx + dx * 65;
+        const pz = hy + dz * 65;
+        dirt.position.set(px, -3, pz);
         s.scene.add(dirt);
       }
     }
@@ -275,25 +290,34 @@ export function initHometown() {
     s.scene.add(plazaMesh);
   }
 
-  // Wooden palisade
-  const logGeo = new THREE.CylinderGeometry(6, 6, 40, 8);
-  const logMat = new THREE.MeshLambertMaterial({ color: 0x3d2314 });
-  for (let a = 0; a < Math.PI * 2; a += 0.2) {
-    const x = hx + Math.cos(a) * 300;
-    const y = hy + Math.sin(a) * 300;
-    let fence;
-    if (loadedModels.fence) {
-      fence = SkeletonUtils.clone(loadedModels.fence);
-      fence.scale.set(25, 25, 25);
-      fence.rotation.y = -a + Math.PI / 2;
-      fence.position.set(x, 0, y);
-    } else {
-      fence = new THREE.Mesh(logGeo, logMat);
-      fence.position.set(x, 20, y);
-      fence.scale.y = 0.8 + Math.random() * 0.4;
+  // Dirt paths connecting plaza to buildings
+  if (loadedModels.patch_dirt) {
+    function addPath(startX, startZ, endX, endZ) {
+      const steps = Math.round(Math.hypot(endX - startX, endZ - startZ) / 30);
+      for (let i = 1; i <= steps; i++) {
+        const t = i / steps;
+        const px = startX + (endX - startX) * t;
+        const pz = startZ + (endZ - startZ) * t;
+        const dirt = SkeletonUtils.clone(loadedModels.patch_dirt);
+        dirt.scale.set(30, 30, 30);
+        dirt.position.set(px, -3, pz);
+        dirt.rotation.y = Math.atan2(endX - startX, endZ - startZ);
+        s.scene.add(dirt);
+      }
     }
-    s.scene.add(fence);
-    s.obstacles.push({ x, y, r: 15 });
+  // From fountain to each building
+    addPath(hx, hy, hx - 150, hy - 150); // to house
+    addPath(hx, hy, hx + 150, hy + 150); // to platform
+    addPath(hx, hy, hx - 150, hy + 150); // to struct_roof
+    addPath(hx, hy, hx + 200, hy - 50);  // to house2
+    addPath(hx, hy, hx - 200, hy + 50);  // to platform2
+    addPath(hx, hy, hx + 130, hy - 160); // to struct_roof2
+    // To NPCs
+    addPath(hx, hy, hx - 100, hy - 100); // to shop
+    addPath(hx, hy, hx + 100, hy - 100); // to healer
+    addPath(hx, hy, hx - 100, hy + 100); // to blacksmith
+    // To target dummy
+    addPath(hx, hy, hx + 80, hy - 150);
   }
 
   // Fountain
@@ -400,6 +424,31 @@ export function initHometown() {
     s.obstacles.push({ x: hx + p.x, y: hy + p.z, r: 45 });
   });
 
+  // Pagar persegi di sekeliling tiap bangunan (2 sisi saja)
+  if (loadedModels.fence) {
+    function addBuildingFence(cx, cz, hw) {
+      const sides = [
+        { x: cx, z: cz - hw, ry: 0 },
+        { x: cx, z: cz + hw, ry: Math.PI },
+      ];
+      for (const side of sides) {
+        const fence = SkeletonUtils.clone(loadedModels.fence);
+        fence.scale.set(25, 25, 25);
+        fence.rotation.y = side.ry;
+        fence.position.set(side.x, 0, side.z);
+        s.scene.add(fence);
+      }
+    }
+    addBuildingFence(hx - 150, hy - 150, 60);
+    addBuildingFence(hx + 150, hy + 150, 60);
+    addBuildingFence(hx - 150, hy + 150, 60);
+    addBuildingFence(hx + 200, hy - 50, 60);
+    addBuildingFence(hx - 200, hy + 50, 60);
+    addBuildingFence(hx + 130, hy - 160, 60);
+    addBuildingFence(hx - 100, hy - 100, 45);
+    addBuildingFence(hx + 100, hy - 100, 45);
+    addBuildingFence(hx - 100, hy + 100, 45);
+  }
 
   // Target dummy
   if (loadedModels.target) {
@@ -503,6 +552,27 @@ export function initHometown() {
   }
   bsGroup.position.set(hx - 100, 0, hy + 100);
   s.scene.add(bsGroup);
+
+  // Quest Board
+  const qbGroup = new THREE.Group();
+  const board = new THREE.Mesh(
+    new THREE.BoxGeometry(20, 15, 2),
+    new THREE.MeshLambertMaterial({ color: 0x8b5a2b })
+  );
+  board.position.y = 10;
+  const postL = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 15), new THREE.MeshLambertMaterial({ color: 0x5c4033 }));
+  postL.position.set(-8, 7.5, 0);
+  const postR = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 15), new THREE.MeshLambertMaterial({ color: 0x5c4033 }));
+  postR.position.set(8, 7.5, 0);
+  const paper = new THREE.Mesh(new THREE.PlaneGeometry(6, 8), new THREE.MeshBasicMaterial({ color: 0xeeeeee }));
+  paper.position.set(0, 10, 1.1);
+  qbGroup.add(board, postL, postR, paper);
+  qbGroup.position.set(hx, 0, hy + 50);
+  qbGroup.scale.set(2, 2, 2);
+  qbGroup.rotation.y = Math.PI;
+  s.scene.add(qbGroup);
+  s.questBoardPos = { x: hx, z: hy + 50 };
+  s.obstacles.push({ x: hx, y: hy + 50, r: 15 });
 }
 
 // ─── Entity creation (enemies, player, items) ────────────────────────────────
@@ -522,17 +592,7 @@ export function initEntities() {
     s.crystalItems.push({ x: pos.x, y: pos.y, taken: false, mesh });
   }
 
-  // Coins
-  const coinGeo = new THREE.CylinderGeometry(6, 6, 2, 16);
-  const coinMat = new THREE.MeshLambertMaterial({ color: 0xffd700 });
-  for (let i = 0; i < 40; i++) {
-    const pos = spawnAtFreePos();
-    const mesh = new THREE.Mesh(coinGeo, coinMat);
-    mesh.rotation.x = Math.PI / 2;
-    mesh.position.set(pos.x, 10, pos.y);
-    s.scene.add(mesh);
-    s.coinItems.push({ x: pos.x, y: pos.y, taken: false, mesh });
-  }
+  // Coins removed for inventory system
 
   // Player mesh
   s.playerBodyMat = new THREE.MeshLambertMaterial({ color: 0xaaaaaa });
