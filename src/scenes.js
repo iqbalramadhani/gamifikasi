@@ -7,6 +7,15 @@ import { state } from './state.js';
 import { mapSize } from './constants.js';
 import { loadedModels } from './model-loader.js';
 
+export function getTerrainHeight(x, y) {
+  const distFromCenter = Math.hypot(x - mapSize / 2, y - mapSize / 2);
+  if (distFromCenter <= 300) return 0; // Area altar datar
+  const distanceFactor = Math.min(1, (distFromCenter - 300) / 200);
+  const wave = Math.sin(x * 0.008) * Math.cos(y * 0.008) * 20; 
+  const noise = Math.sin(x * 0.03) * Math.sin(y * 0.03) * 5;
+  return (wave + noise) * distanceFactor;
+}
+
 // ─── Initialization helpers ───────────────────────────────────────────────────
 
 /** Create the Three.js scene, camera, renderer, lights, fog, rain, bloom pass. */
@@ -14,7 +23,7 @@ export function initSetup() {
   const s = state;
 
   s.scene = new THREE.Scene();
-  s.scene.background = new THREE.Color(0x2d4f30);
+  s.scene.background = new THREE.Color(0x87CEEB); // Langit biru
 
   s.camera = new THREE.PerspectiveCamera(
     50, window.innerWidth / window.innerHeight, 0.1, 3000
@@ -27,7 +36,7 @@ export function initSetup() {
   s.renderer.toneMapping = THREE.ACESFilmicToneMapping;
   s.renderer.toneMappingExposure = 1.0;
   s.renderer.shadowMap.enabled = true;
-  s.renderer.shadowMap.type = THREE.PCFShadowMap;
+  s.renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Memperhalus bayangan
 
   s.composer = new EffectComposer(s.renderer);
   s.composer.addPass(new RenderPass(s.scene, s.camera));
@@ -59,35 +68,69 @@ export function initSetup() {
   );
   s.camera.lookAt(s.player.x, s.cameraLookAtY, s.player.y);
 
-  // Lighting
-  const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+  // Lighting (Pencahayaan Atmosferik)
+  const ambientLight = new THREE.AmbientLight(0xdcebf4, 0.5); // Cahaya ambien biru pucat
   s.scene.add(ambientLight);
 
-  s.dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-  s.dirLight.position.set(mapSize / 2 + 500, 800, mapSize / 2 - 200);
+  s.dirLight = new THREE.DirectionalLight(0xfff5e6, 1.2); // Matahari sedikit hangat
+  s.dirLight.position.set(mapSize / 2 + 800, 1000, mapSize / 2 - 400);
   s.dirLight.castShadow = true;
-  s.dirLight.shadow.mapSize.width = 1024;
-  s.dirLight.shadow.mapSize.height = 1024;
-  s.dirLight.shadow.camera.near = 10;
-  s.dirLight.shadow.camera.far = 1500;
-  s.dirLight.shadow.camera.left = -500;
-  s.dirLight.shadow.camera.right = 500;
-  s.dirLight.shadow.camera.top = 500;
-  s.dirLight.shadow.camera.bottom = -500;
-  s.dirLight.shadow.bias = -0.0005;
+  s.dirLight.shadow.mapSize.width = 2048; // Resolusi bayangan HD
+  s.dirLight.shadow.mapSize.height = 2048;
+  s.dirLight.shadow.camera.near = 50;
+  s.dirLight.shadow.camera.far = 2500;
+  s.dirLight.shadow.camera.left = -1000;
+  s.dirLight.shadow.camera.right = 1000;
+  s.dirLight.shadow.camera.top = 1000;
+  s.dirLight.shadow.camera.bottom = -1000;
+  s.dirLight.shadow.bias = -0.001; // Mencegah shadow acne
   s.scene.add(s.dirLight);
 
-  // Floor
-  const floorGeo = new THREE.PlaneGeometry(mapSize, mapSize);
-  const floorMat = new THREE.MeshLambertMaterial({ color: 0x1a3a1a });
+  // Generate Procedural Grass Texture
+  const texCanvas = document.createElement('canvas');
+  texCanvas.width = 512;
+  texCanvas.height = 512;
+  const ctx = texCanvas.getContext('2d');
+  ctx.fillStyle = '#2d4f30'; // Warna dasar hijau gelap
+  ctx.fillRect(0, 0, 512, 512);
+  for(let i=0; i<15000; i++) {
+    ctx.fillStyle = Math.random() > 0.5 ? '#3a663e' : '#1e3820'; // Titik rumput terang & gelap
+    ctx.globalAlpha = Math.random() * 0.8 + 0.2;
+    ctx.fillRect(Math.random() * 512, Math.random() * 512, 2 + Math.random()*2, 8 + Math.random()*8);
+  }
+  const grassTex = new THREE.CanvasTexture(texCanvas);
+  grassTex.wrapS = THREE.RepeatWrapping;
+  grassTex.wrapT = THREE.RepeatWrapping;
+  grassTex.repeat.set(mapSize / 150, mapSize / 150);
+
+  // Floor (Terrain Bergelombang)
+  const floorGeo = new THREE.PlaneGeometry(mapSize, mapSize, 64, 64);
+  const posAttribute = floorGeo.attributes.position;
+  
+  for (let i = 0; i < posAttribute.count; i++) {
+    const vx = posAttribute.getX(i);
+    const vy = posAttribute.getY(i);
+    const worldX = vx + (mapSize / 2); 
+    const worldY = vy + (mapSize / 2);
+    posAttribute.setZ(i, getTerrainHeight(worldX, worldY));
+  }
+  floorGeo.computeVertexNormals(); // Wajib agar pencahayaan benar setelah vertex diubah
+
+  // Material PBR (Physically Based Rendering)
+  const floorMat = new THREE.MeshStandardMaterial({ 
+    map: grassTex,
+    roughness: 0.9,
+    metalness: 0.05
+  });
+  
   const floor = new THREE.Mesh(floorGeo, floorMat);
   floor.rotation.x = -Math.PI / 2;
   floor.position.set(mapSize / 2, 0, mapSize / 2);
   floor.receiveShadow = true;
   s.scene.add(floor);
 
-  // Fog
-  s.scene.fog = new THREE.FogExp2(0x1a2a1a, 0.0008);
+  // Fog menyatu dengan langit
+  s.scene.fog = new THREE.FogExp2(0x87CEEB, 0.0006);
 
   // Rain (starts invisible)
   const rainCount = 1500;
@@ -170,7 +213,7 @@ export function initMap() {
           if (rockGroup) {
             const sc = 30 + Math.random() * 10;
             rockGroup.scale.set(sc, sc, sc);
-            rockGroup.position.set(x, 0, y);
+            rockGroup.position.set(x, getTerrainHeight(x, y), y);
             rockGroup.rotation.y = Math.random() * Math.PI;
             s.scene.add(rockGroup);
           } else {
@@ -178,7 +221,7 @@ export function initMap() {
               new THREE.DodecahedronGeometry(r, 0),
               new THREE.MeshLambertMaterial({ color: 0x777777 })
             );
-            rock.position.set(x, r, y);
+            rock.position.set(x, r + getTerrainHeight(x, y), y);
             rock.rotation.y = Math.random() * Math.PI;
             s.scene.add(rock);
           }
@@ -190,7 +233,7 @@ export function initMap() {
           );
           log.rotation.z = Math.PI / 2;
           log.rotation.y = Math.random() * Math.PI;
-          log.position.set(x, 7, y);
+          log.position.set(x, 7 + getTerrainHeight(x, y), y);
           s.scene.add(log);
           s.obstacles.push({ x, y, r: 25 });
         }
@@ -219,7 +262,7 @@ export function initMap() {
             leaves.position.y = 42;
             treeGroup.add(trunk, leaves);
           }
-          treeGroup.position.set(x, 0, y);
+          treeGroup.position.set(x, getTerrainHeight(x, y), y);
           s.scene.add(treeGroup);
           s.obstacles.push({ x, y, r: 12 });
         } else {
@@ -228,13 +271,13 @@ export function initMap() {
           if (loadedModels.plant) {
             plantMesh = SkeletonUtils.clone(loadedModels.plant);
             plantMesh.scale.set(20, 20, 20);
-            plantMesh.position.set(x, 0, y);
+            plantMesh.position.set(x, getTerrainHeight(x, y), y);
           } else {
             plantMesh = new THREE.Mesh(
               new THREE.SphereGeometry(r, 8, 8),
               new THREE.MeshLambertMaterial({ color: 0x1d5c22 })
             );
-            plantMesh.position.set(x, r - 2, y);
+            plantMesh.position.set(x, r - 2 + getTerrainHeight(x, y), y);
           }
           s.scene.add(plantMesh);
           s.obstacles.push({ x, y, r: r * 0.7 });
@@ -254,7 +297,7 @@ export function initMap() {
       const tent = SkeletonUtils.clone(loadedModels.tent);
       tent.scale.set(25, 25, 25);
       tent.rotation.y = Math.random() * Math.PI * 2;
-      tent.position.set(tx, 0, ty);
+      tent.position.set(tx, getTerrainHeight(tx, ty), ty);
       s.scene.add(tent);
       s.obstacles.push({ x: tx, y: ty, r: 25 });
     }
@@ -587,7 +630,7 @@ export function initEntities() {
   for (let i = 0; i < s.crystalGoal; i++) {
     const pos = spawnAtFreePos();
     const mesh = new THREE.Mesh(crystalGeo, crystalMat);
-    mesh.position.set(pos.x, 15, pos.y);
+    mesh.position.set(pos.x, 15 + getTerrainHeight(pos.x, pos.y), pos.y);
     s.scene.add(mesh);
     s.crystalItems.push({ x: pos.x, y: pos.y, taken: false, mesh });
   }

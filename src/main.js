@@ -8,7 +8,7 @@ import * as THREE from 'three';
 // Subsystem modules
 import { state } from './state.js';
 import { loadAllModels, loadedModels } from './model-loader.js';
-import { initSetup, initMap, initHometown, initEntities, initNPCs } from './scenes.js';
+import { initSetup, initMap, initHometown, initEntities, initNPCs, getTerrainHeight } from './scenes.js';
 import { spawnBoss, spawnParticles, checkItems } from './helpers.js';
 import { spawnEnemy, usePotion } from './combat.js';
 import {
@@ -221,7 +221,8 @@ function gameLoop(timestamp) {
   // ── Smooth player mesh follow ──────────────────────────────────────────────
   const breathOffset = Math.sin(state.playerIdleBreath) * 0.8;
   const isMoving = state.player.facingX !== 0 || state.player.facingY !== 0;
-  const basePlayerY = 15 + state.player.height;
+  const terrainY = getTerrainHeight(state.player.x, state.player.y);
+  const basePlayerY = 15 + state.player.height + terrainY;
   const targetPlayerY = isMoving
     ? basePlayerY + Math.abs(Math.sin(state.player.walkCycle * 2)) * 1.5
     : basePlayerY + breathOffset;

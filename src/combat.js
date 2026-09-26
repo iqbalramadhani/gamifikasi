@@ -4,7 +4,7 @@ import { state } from './state.js';
 import { mapSize, weaponList, armorList, enemyTemplates, lootTable } from './constants.js';
 import { loadedModels } from './model-loader.js';
 import { blocked, spawnParticles, spawnDamageText } from './helpers.js';
-import { spawnAtFreePos } from './scenes.js';
+import { spawnAtFreePos, getTerrainHeight } from './scenes.js';
 import { playSound } from './audio.js';
 
 // ─── Enemy spawner (called by initEntities + game loop) ──────────────────────
@@ -452,7 +452,7 @@ export function updateEnemies(dt) {
     e.mesh.position.z += (e.y - e.mesh.position.z) * Math.min(dt * 10, 1);
 
     const speedScalar = Math.hypot(e.dx, e.dy);
-    let meshYTarget = e.meshY;
+    let meshYTarget = e.meshY + getTerrainHeight(e.x, e.y);
     if (speedScalar > 0.1) {
       e.mesh.rotation.y = Math.atan2(e.dx, e.dy);
       if (e.walkCycle === undefined) e.walkCycle = Math.random() * Math.PI * 2;
@@ -527,7 +527,8 @@ export function updateBoss(dt) {
 
   s.bossMesh.position.x += (s.bossX - s.bossMesh.position.x) * Math.min(dt * 6, 1);
   s.bossMesh.position.z += (s.bossY - s.bossMesh.position.z) * Math.min(dt * 6, 1);
-  s.bossMesh.position.y += (30 - s.bossMesh.position.y) * Math.min(dt * 6, 1);
+  const bossTerrainY = getTerrainHeight(s.bossX, s.bossY);
+  s.bossMesh.position.y += (30 + bossTerrainY - s.bossMesh.position.y) * Math.min(dt * 6, 1);
   s.bossMesh.rotation.y += 0.02 * dt;
   s.bossMesh.rotation.x = Math.sin(Date.now() / 300) * 0.2;
 
