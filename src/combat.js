@@ -157,14 +157,38 @@ export function move(dt) {
 
 function animatePlayer(walking) {
   const s = state;
-  if (s.gltfPlayerRef) {
+  const isAttacking = s.player.attackCooldown > 0 || s.player.isSpinning > 0;
+
+  if (s.playerMixer) {
+    let targetAction = s.playerActions.idle;
+    if (isAttacking && s.playerActions.attack) {
+      targetAction = s.playerActions.attack;
+    } else if (walking && s.playerActions.run) {
+      targetAction = s.playerActions.run;
+    }
+    
+    if (s.activeAction !== targetAction && targetAction) {
+      if (s.activeAction) s.activeAction.fadeOut(0.2);
+      targetAction.reset().fadeIn(0.2).play();
+      s.activeAction = targetAction;
+    }
+    
+    const faceAngle = Math.atan2(s.player.facingX, s.player.facingY) + Math.PI / 2;
+    // Gunakan Lerp untuk putaran halus
+    let diff = faceAngle - s.gltfPlayerRef.rotation.y;
+    while(diff < -Math.PI) diff += Math.PI * 2;
+    while(diff > Math.PI) diff -= Math.PI * 2;
+    s.gltfPlayerRef.rotation.y += diff * 0.15;
+    
+    s.gltfPlayerRef.position.y = -15; // Set base offset for physics
+  } else if (s.gltfPlayerRef) {
     if (!s.playerLegL) {
       s.playerLegL = s.gltfPlayerRef.getObjectByName('leg-left');
       s.playerLegR = s.gltfPlayerRef.getObjectByName('leg-right');
       s.playerArmL = s.gltfPlayerRef.getObjectByName('arm-left');
       s.playerArmR = s.gltfPlayerRef.getObjectByName('arm-right');
     }
-    const faceAngle = -Math.atan2(s.player.facingX, s.player.facingY) + Math.PI / 2;
+    const faceAngle = Math.atan2(s.player.facingX, s.player.facingY) + Math.PI / 2;
     s.gltfPlayerRef.rotation.y = faceAngle;
     s.gltfPlayerRef.position.y = walking
       ? -15 + Math.abs(Math.sin(s.player.walkCycle * 2)) * 1.5

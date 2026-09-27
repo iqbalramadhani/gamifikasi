@@ -1,10 +1,12 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { state } from './state.js';
 
 export const loadedModels = {
   player: null, sword: null, enemy: null, tree: null, house: null,
+  player_model: null, idle_anim: null, run_anim: null, attack_anim: null,
   tree_high: null, plant: null, fence: null,
   building_struct: null, building_roof: null, building_platform: null,
   rocks_high: null, rocks_low: null, stones: null,
@@ -43,6 +45,13 @@ const modelsToLoad = [
   { key: 'tent',     url: '/models/tent.glb' },
 ];
 
+const fbxModelsToLoad = [
+  // { key: 'player_model', url: '/models/player_model.fbx' },
+  // { key: 'idle_anim', url: '/models/idle.fbx' },
+  // { key: 'run_anim', url: '/models/run.fbx' },
+  // { key: 'attack_anim', url: '/models/attack.fbx' },
+];
+
 /**
  * Load all GLTF models in parallel. On failure a model stays null and
  * callers fall back to procedural geometry.
@@ -50,6 +59,8 @@ const modelsToLoad = [
 export async function loadAllModels() {
   const loader = new GLTFLoader();
 
+
+  const fbxLoader = new FBXLoader();
 
   const promises = modelsToLoad.map(item =>
     new Promise(resolve => {
@@ -63,6 +74,9 @@ export async function loadAllModels() {
             }
           });
           loadedModels[item.key] = gltf.scene;
+          if (gltf.animations && gltf.animations.length > 0) {
+            loadedModels[item.key].animations = gltf.animations;
+          }
           resolve(true);
         },
         undefined,
@@ -73,5 +87,27 @@ export async function loadAllModels() {
     })
   );
 
-  await Promise.all(promises);
+  const fbxPromises = fbxModelsToLoad.map(item =>
+    new Promise(resolve => {
+      fbxLoader.load(
+        item.url,
+        fbx => {
+          fbx.traverse(child => {
+            if (child.isMesh) {
+              child.castShadow = true;
+              child.receiveShadow = true;
+            }
+          });
+          loadedModels[item.key] = fbx;
+          resolve(true);
+        },
+        undefined,
+        () => {
+          resolve(false);
+        }
+      );
+    })
+  );
+
+  await Promise.all([...promises, ...fbxPromises]);
 }

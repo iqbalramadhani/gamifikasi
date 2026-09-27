@@ -111,7 +111,7 @@ export function initSetup() {
     const vx = posAttribute.getX(i);
     const vy = posAttribute.getY(i);
     const worldX = vx + (mapSize / 2); 
-    const worldY = vy + (mapSize / 2);
+    const worldY = (mapSize / 2) - vy;
     posAttribute.setZ(i, getTerrainHeight(worldX, worldY));
   }
   floorGeo.computeVertexNormals(); // Wajib agar pencahayaan benar setelah vertex diubah
@@ -644,14 +644,95 @@ export function initEntities() {
   window.playerBladeMat = s.playerBladeMat;
   s.playerMesh = new THREE.Group();
 
-  if (loadedModels.player) {
+  if (loadedModels.player_model) {
+    const fbxModel = SkeletonUtils.clone(loadedModels.player_model);
+    fbxModel.scale.set(0.4, 0.4, 0.4); // Scale diperbesar agar karakter tidak terlalu kecil
+    fbxModel.position.y = -15; 
+    
+    // Setup Animasi
+    s.playerMixer = new THREE.AnimationMixer(fbxModel);
+    s.playerActions = {};
+    
+    if (loadedModels.idle_anim && loadedModels.idle_anim.animations.length > 0) {
+      s.playerActions.idle = s.playerMixer.clipAction(loadedModels.idle_anim.animations[0]);
+    } else if (fbxModel.animations.length > 0) {
+      s.playerActions.idle = s.playerMixer.clipAction(fbxModel.animations[0]);
+    }
+    
+    if (loadedModels.run_anim && loadedModels.run_anim.animations.length > 0) {
+      s.playerActions.run = s.playerMixer.clipAction(loadedModels.run_anim.animations[0]);
+    }
+    if (loadedModels.attack_anim && loadedModels.attack_anim.animations.length > 0) {
+      s.playerActions.attack = s.playerMixer.clipAction(loadedModels.attack_anim.animations[0]);
+      s.playerActions.attack.setLoop(THREE.LoopOnce);
+      s.playerActions.attack.clampWhenFinished = true;
+    }
+    
+    if (s.playerActions.idle) {
+      s.playerActions.idle.play();
+      s.activeAction = s.playerActions.idle;
+    }
+    
+    // Cari tulang tangan kanan (MixamoRig:RightHand) untuk menempelkan pedang
+    let rightHand = null;
+    fbxModel.traverse(child => {
+      if (child.name.toLowerCase().includes('righthand') && !rightHand) {
+        rightHand = child;
+      }
+    });
+    
+    if (loadedModels.sword) {
+      const gltfSword = SkeletonUtils.clone(loadedModels.sword);
+      if (rightHand) {
+        gltfSword.scale.set(4, 4, 4);
+        gltfSword.position.set(0, 15, 0); // Sesuaikan offset dengan bentuk tangan
+        gltfSword.rotation.x = Math.PI / 2;
+        rightHand.add(gltfSword);
+      } else {
+        gltfSword.scale.set(15, 15, 15);
+        gltfSword.position.set(10, 0, 15);
+        s.playerMesh.add(gltfSword);
+      }
+    }
+    
+    s.playerMesh.add(fbxModel);
+    s.gltfPlayerRef = fbxModel;
+  } else if (loadedModels.player) {
     s.gltfPlayerRef = SkeletonUtils.clone(loadedModels.player);
     s.gltfPlayerRef.scale.set(35, 35, 35);
     s.gltfPlayerRef.position.y = -15;
-    s.playerLegL = s.gltfPlayerRef.getObjectByName('leg-left');
-    s.playerLegR = s.gltfPlayerRef.getObjectByName('leg-right');
-    s.playerArmL = s.gltfPlayerRef.getObjectByName('arm-left');
-    s.playerArmR = s.gltfPlayerRef.getObjectByName('arm-right');
+    
+    if (loadedModels.player.animations && loadedModels.player.animations.length > 0) {
+      s.playerMixer = new THREE.AnimationMixer(s.gltfPlayerRef);
+      s.playerActions = {};
+      
+      loadedModels.player.animations.forEach((clip) => {
+        const name = clip.name.toLowerCase();
+        if (name.includes('idle')) s.playerActions.idle = s.playerMixer.clipAction(clip);
+        else if (name.includes('run') || name.includes('walk')) s.playerActions.run = s.playerMixer.clipAction(clip);
+        else if (name.includes('attack')) {
+          s.playerActions.attack = s.playerMixer.clipAction(clip);
+          s.playerActions.attack.setLoop(THREE.LoopOnce);
+          s.playerActions.attack.clampWhenFinished = true;
+        }
+      });
+      if (!s.playerActions.idle && loadedModels.player.animations[0]) s.playerActions.idle = s.playerMixer.clipAction(loadedModels.player.animations[0]);
+      if (!s.playerActions.run && loadedModels.player.animations[1]) s.playerActions.run = s.playerMixer.clipAction(loadedModels.player.animations[1]);
+      
+      if (s.playerActions.idle) {
+        s.playerActions.idle.play();
+        s.activeAction = s.playerActions.idle;
+      }
+      
+      // Still try to find arm-right for sword attachment
+      s.playerArmR = s.gltfPlayerRef.getObjectByName('arm-right') || null;
+    } else {
+      s.playerLegL = s.gltfPlayerRef.getObjectByName('leg-left');
+      s.playerLegR = s.gltfPlayerRef.getObjectByName('leg-right');
+      s.playerArmL = s.gltfPlayerRef.getObjectByName('arm-left');
+      s.playerArmR = s.gltfPlayerRef.getObjectByName('arm-right');
+    }
+    
     s.playerMesh.add(s.gltfPlayerRef);
 
     if (loadedModels.sword && s.playerArmR) {

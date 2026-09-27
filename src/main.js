@@ -218,12 +218,16 @@ function gameLoop(timestamp) {
     }
   }
 
+  if (state.playerMixer) {
+    state.playerMixer.update(dt * 0.016667);
+  }
+
   // ── Smooth player mesh follow ──────────────────────────────────────────────
-  const breathOffset = Math.sin(state.playerIdleBreath) * 0.8;
+  const breathOffset = state.playerMixer ? 0 : Math.sin(state.playerIdleBreath) * 0.8;
   const isMoving = state.player.facingX !== 0 || state.player.facingY !== 0;
   const terrainY = getTerrainHeight(state.player.x, state.player.y);
   const basePlayerY = 15 + state.player.height + terrainY;
-  const targetPlayerY = isMoving
+  const targetPlayerY = (isMoving && !state.playerMixer)
     ? basePlayerY + Math.abs(Math.sin(state.player.walkCycle * 2)) * 1.5
     : basePlayerY + breathOffset;
   state.playerMesh.position.y += (targetPlayerY - state.playerMesh.position.y) * Math.min(dt * 12, 1);
@@ -234,11 +238,16 @@ function gameLoop(timestamp) {
   // Character always faces forward, plus any accumulated spin
   state.playerMesh.rotation.y = -Math.PI / 2 + state.player.spinAngle;
 
-  // Flip left/right using scale.z (local Z = world X after -π/2 Y rotation)
-  if (state.player.facingX < 0) {
-    state.playerMesh.scale.z = -1; // facing left
-  } else if (state.player.facingX > 0) {
-    state.playerMesh.scale.z = -1;  // facing right
+  if (state.playerMixer) {
+    // Model 3D sungguhan, jangan dimirror (flip scale Z), cukup rotate Y
+    state.playerMesh.scale.z = 1; 
+  } else {
+    // Legacy 2.5D untuk model balok
+    if (state.player.facingX < 0) {
+      state.playerMesh.scale.z = -1; // facing left
+    } else if (state.player.facingX > 0) {
+      state.playerMesh.scale.z = -1;  // facing right
+    }
   }
 
   // Keep last facing when still
