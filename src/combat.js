@@ -394,12 +394,12 @@ export function updateEnemies(dt) {
   // Spawner
   if (s.isGameStarted && !s.bossActive) {
     s._spawnTimer = (s._spawnTimer ?? 0) + dt;
-    const spawnRate = Math.max(60, 180 - s.player.level * 10);
-    const maxEnemies = Math.min(60, 20 + s.player.level * 5);
+    const spawnRate = Math.max(90, 240 - s.player.level * 10);
+    const maxEnemies = Math.min(80, 30 + s.player.level * 5);
     if (s._spawnTimer > spawnRate && s.enemies.length < maxEnemies) {
       s._spawnTimer = 0;
-      const edgeX = s.player.x + (Math.random() < 0.5 ? 800 : -800);
-      const edgeY = s.player.y + (Math.random() < 0.5 ? 800 : -800);
+      const edgeX = s.player.x + (Math.random() < 0.5 ? 1500 : -1500);
+      const edgeY = s.player.y + (Math.random() < 0.5 ? 1500 : -1500);
       spawnEnemy(
         Math.max(50, Math.min(mapSize - 50, edgeX)),
         Math.max(50, Math.min(mapSize - 50, edgeY)),
@@ -417,10 +417,10 @@ export function updateEnemies(dt) {
       const speed = e.slowTimer > 0 ? e.baseSpeed * 0.4 : e.baseSpeed;
       if (e.slowTimer > 0) e.slowTimer -= dt;
 
-      if (distToPlayer < 400) {
+      if (distToPlayer < 800) {
         const angle = Math.atan2(s.player.y - e.y, s.player.x - e.x);
         if (e.type === 'archer') {
-          if (distToPlayer > 180) {
+          if (distToPlayer > 300) {
             e.dx = Math.cos(angle) * speed;
             e.dy = Math.sin(angle) * speed;
           } else {
@@ -428,7 +428,7 @@ export function updateEnemies(dt) {
           }
           if (e.attackTimer === undefined) e.attackTimer = 0;
           e.attackTimer += dt;
-          if (e.attackTimer > 120 && distToPlayer < 250) {
+          if (e.attackTimer > 120 && distToPlayer < 400) {
             e.attackTimer = 0;
             const m = new THREE.Mesh(
               new THREE.SphereGeometry(4, 4, 4),

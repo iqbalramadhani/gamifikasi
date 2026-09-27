@@ -63,8 +63,21 @@ export function loadGame() {
       const d = res.data;
       const s = state;
 
-      s.player.x = d.player_x ?? 10000;
-      s.player.y = d.player_y ?? 10080;
+      s.player.x = d.player_x ?? 500;
+      s.player.y = d.player_y ?? 800;
+      
+      // Jika player load di dekat area tengah kota (rawan nyangkut di air mancur / papan misi)
+      if (s.player.x > 400 && s.player.x < 600 && s.player.y > 450 && s.player.y < 650) {
+        s.player.x = 500;
+        s.player.y = 800;
+      }
+      
+      // Or old default
+      if (s.player.x === 10000 && s.player.y === 10080) {
+        s.player.x = 500;
+        s.player.y = 800;
+      }
+
       s.player.hp = d.hp ?? s.player.hp;
       s.player.maxHp = d.maxHp ?? s.player.maxHp;
       s.player.attackDamage = d.attackDamage ?? s.player.attackDamage;
@@ -83,7 +96,7 @@ export function loadGame() {
         s.inventory = {};
       }
 
-      if (s.player.x > 9000) s.currentScene = 'hometown';
+      if (s.player.x < 2000) s.currentScene = 'hometown';
       else s.currentScene = 'wilds';
 
       if (d.camera_y != null) {

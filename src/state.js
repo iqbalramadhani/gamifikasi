@@ -45,7 +45,7 @@ export const state = {
 
   // Player
   player: {
-    x: 10000, y: 10080, r: 16, speed: 4.5,
+    x: 500, y: 800, r: 16, speed: 4.5,
     hp: 100, maxHp: 100, stamina: 100, maxStamina: 100, attackDamage: 1,
     facingX: 1, facingY: 0,
     attackCooldown: 0, defending: false,
@@ -71,7 +71,11 @@ export const state = {
   bountyQuestProgress: 0,
 
   // Collections (populated at runtime)
-  obstacles: [],
+  obstaclesHometown: [],
+  obstaclesWilds: [],
+  wildsLoaded: false,
+  hometownGroup: null,
+  wildsGroup: null,
   crystalItems: [],
   coinItems: [],
   expOrbs: [],
@@ -92,8 +96,8 @@ export const state = {
   bossHpFg: null,
   bossHp: 200,
   bossMaxHp: 200,
-  bossX: 2000,
-  bossY: 2000,
+  bossX: 10000,
+  bossY: 10500,
   bossPhase: 1,
 
   // Weather / time

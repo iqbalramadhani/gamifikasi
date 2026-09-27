@@ -10,13 +10,17 @@ import { playSound } from './audio.js';
 /** Axis-aligned + obstacle circle collision check. */
 export function blocked(x, y, r = state.player.r) {
   const s = state;
-  if (s.currentScene === 'hometown') {
-    if (x - r < 9700 || x + r > 10300 || y - r < 9700 || y + r > 10300) return true;
+  const isHometown = s.currentScene === 'hometown';
+  
+  if (isHometown) {
+    if (x - r < -100 || x + r > 1100 || y - r < -100 || y + r > 1100) return true;
   } else {
     if (x - r < 0 || x + r > mapSize || y - r < 0 || y + r > mapSize) return true;
   }
-  for (let i = 0; i < s.obstacles.length; i++) {
-    const o = s.obstacles[i];
+  
+  const obs = isHometown ? s.obstaclesHometown : s.obstaclesWilds;
+  for (let i = 0; i < obs.length; i++) {
+    const o = obs[i];
     if (Math.abs(o.x - x) > o.r + r || Math.abs(o.y - y) > o.r + r) continue;
     const dx = o.x - x, dy = o.y - y;
     if (dx * dx + dy * dy < (o.r + r) * (o.r + r)) return true;

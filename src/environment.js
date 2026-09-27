@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { state } from './state.js';
 import { playSound } from './audio.js';
 import { spawnParticles } from './helpers.js';
+import { mapSize } from './constants.js';
+import { initMap, initWildsNPCs } from './scenes.js';
 
 // ─── Weather / day-night cycle ────────────────────────────────────────────────
 
@@ -124,8 +126,18 @@ export function teleportTo(sceneName) {
   s.currentScene = sceneName;
 
   if (sceneName === 'wilds') {
-    s.player.x = 2000;
-    s.player.y = 2100;
+    if (!s.wildsLoaded) {
+      console.log('Lazy loading The Wilds...');
+      initMap();
+      initWildsNPCs();
+      s.wildsLoaded = true;
+    }
+    
+    if (s.hometownGroup) s.hometownGroup.visible = false;
+    if (s.wildsGroup) s.wildsGroup.visible = true;
+    
+    s.player.x = Math.floor(mapSize / 2);
+    s.player.y = Math.floor(mapSize / 2) + 100;
 
     // Clear existing enemies
     s.enemies.forEach(e => {
@@ -142,8 +154,11 @@ export function teleportTo(sceneName) {
 
     document.getElementById('message').textContent = 'Merasuki The Wilds...';
   } else {
-    s.player.x = 10000;
-    s.player.y = 10080;
+    if (s.wildsGroup) s.wildsGroup.visible = false;
+    if (s.hometownGroup) s.hometownGroup.visible = true;
+    
+    s.player.x = 500;
+    s.player.y = 800;
     document.getElementById('message').textContent = 'Kembali ke Safe Haven.';
   }
 

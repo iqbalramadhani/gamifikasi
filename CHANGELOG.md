@@ -184,3 +184,14 @@ Flip     : scale.z = -1 saat bergerak kiri atau kanan
 Gerakan  : ↑=maju, ↓=mundur, ←=kiri di layar, →=kanan di layar
 Teleport : Cooldown + key reset mencegah loop
 ```
+
+## Update Animasi & Perbaikan Peta (Player.glb)
+
+### 🔄 Perubahan pada Model dan Animasi
+- **src/model-loader.js**: Menambahkan logika untuk mempertahankan `gltf.animations` ketika memuat file `.glb` sehingga animasi bawaan karakter tidak hilang.
+- **src/model-loader.js**: Menonaktifkan pemuatan `player_model.fbx` sehingga game memprioritaskan dan menggunakan `player.glb` sebagai karakter utama.
+- **src/scenes.js**: Menambahkan `THREE.AnimationMixer` khusus untuk `player.glb`. Kode sekarang akan otomatis menggunakan animasi **idle**, **run**, dan **attack** bawaan dari model `.glb` tersebut (termasuk menghubungkan senjata ke tangan yang tepat jika memungkinkan).
+- **src/combat.js**: Menyesuaikan perhitungan sudut rotasi karakter (`faceAngle`) menjadi `Math.atan2(..., ...) + Math.PI / 2`. Perbaikan ini memastikan orientasi kiri, kanan, depan, dan belakang karakter sudah benar dan tidak lagi kebalik.
+
+### 🌍 Perbaikan pada Bentuk Fisika Peta
+- **src/scenes.js**: Memperbaiki rotasi dan perhitungan koordinat Z/Y pada pembentukan mesh daratan. Sebelumnya, posisi gundukan tanah secara visual kebalik dibandingkan dengan perhitungan fisika, sehingga menyebabkan karakter terlihat tenggelam saat menaiki gundukan. Sekarang visual peta sudah tersinkronisasi penuh dengan fungsi fisika `getTerrainHeight`.

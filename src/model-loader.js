@@ -14,6 +14,9 @@ export const loadedModels = {
   char_b: null, char_c: null, char_d: null,
   char_e: null, char_f: null, char_g: null,
   char_h: null, char_i: null, char_j: null,
+  char_k: null, char_l: null, char_m: null,
+  char_n: null, char_o: null, char_p: null,
+  char_q: null, char_r: null,
 };
 
 const modelsToLoad = [
@@ -42,6 +45,14 @@ const modelsToLoad = [
   { key: 'char_h', url: '/kenney_blocky-characters_20/Models/GLB format/character-h.glb' },
   { key: 'char_i', url: '/kenney_blocky-characters_20/Models/GLB format/character-i.glb' },
   { key: 'char_j', url: '/kenney_blocky-characters_20/Models/GLB format/character-j.glb' },
+  { key: 'char_k', url: '/kenney_blocky-characters_20/Models/GLB format/character-k.glb' },
+  { key: 'char_l', url: '/kenney_blocky-characters_20/Models/GLB format/character-l.glb' },
+  { key: 'char_m', url: '/kenney_blocky-characters_20/Models/GLB format/character-m.glb' },
+  { key: 'char_n', url: '/kenney_blocky-characters_20/Models/GLB format/character-n.glb' },
+  { key: 'char_o', url: '/kenney_blocky-characters_20/Models/GLB format/character-o.glb' },
+  { key: 'char_p', url: '/kenney_blocky-characters_20/Models/GLB format/character-p.glb' },
+  { key: 'char_q', url: '/kenney_blocky-characters_20/Models/GLB format/character-q.glb' },
+  { key: 'char_r', url: '/kenney_blocky-characters_20/Models/GLB format/character-r.glb' },
   { key: 'tent',     url: '/models/tent.glb' },
 ];
 

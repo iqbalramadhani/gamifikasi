@@ -79,7 +79,6 @@ window.startGame = async () => {
 
   initSetup();
   initHometown();
-  initMap();
   initEntities();
   initNPCs();
 
@@ -147,7 +146,7 @@ function gameLoop(timestamp) {
         state.lockedEnemy = null;
       } else {
         let closest = null;
-        let minDist = 800;
+        let minDist = 1500;
         for (let e of state.enemies) {
           const d = Math.hypot(e.x - state.player.x, e.y - state.player.y);
           if (d < minDist) { minDist = d; closest = e; }
