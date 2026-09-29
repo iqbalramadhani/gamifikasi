@@ -9,7 +9,7 @@ import { playSound } from './audio.js';
 
 // ─── Enemy spawner (called by initEntities + game loop) ──────────────────────
 
-export function spawnEnemy(ex, ey) {
+export function spawnEnemy(ex, ey, scaleFactor = 1.0, isBossChild = false) {
   const s = state;
   if (!ex || !ey) {
     const pos = spawnAtFreePos();
@@ -24,13 +24,13 @@ export function spawnEnemy(ex, ey) {
 
   if (loadedModels[charKey]) {
     const gltfEnemy = SkeletonUtils.clone(loadedModels[charKey]);
-    gltfEnemy.scale.set(22, 22, 22);
+    gltfEnemy.scale.set(22 * scaleFactor, 22 * scaleFactor, 22 * scaleFactor);
     gltfEnemy.position.y = -12;
     mesh = new THREE.Group();
     mesh.add(gltfEnemy);
     eY = 15;
   } else {
-    const boxGeo = new THREE.BoxGeometry(20, 20, 20);
+    const boxGeo = new THREE.BoxGeometry(20 * scaleFactor, 20 * scaleFactor, 20 * scaleFactor);
     const boxMat = new THREE.MeshLambertMaterial({ color: 0xff0000 });
     mesh = new THREE.Mesh(boxGeo, boxMat);
     eY = 10;
@@ -67,6 +67,7 @@ export function spawnEnemy(ex, ey) {
     stunTimer: 0, slowTimer: 0, type: typeStr,
     attackTimer: 0, walkCycle: Math.random() * Math.PI * 2,
     limbs,
+    isBossChild,
   });
 }
 
@@ -115,9 +116,8 @@ export function move(dt) {
           e.hp -= s.player.attackDamage * 3;
           e.slowTimer = 90;
           e.stunTimer = 20;
-          const angle = Math.atan2(e.y - s.player.y, e.x - s.player.x);
-          e.dx = Math.cos(angle) * 12; e.dy = Math.sin(angle) * 12;
-          spawnDamageText(e.x, e.meshY + 20, e.y, `-${s.player.attackDamage * 3}`);
+          // knockback removed
+          spawnDamageText(e.x, e.mesh.position.y + 35, e.y, `-${s.player.attackDamage * 3}`);
           if (e.hp <= 0) killEnemy(i);
           else spawnParticles(e.x, e.y, 0xffaa00, 5, 'hit');
         }
@@ -306,14 +306,14 @@ export function updateProjectiles(dt) {
       for (let j = s.enemies.length - 1; j >= 0; j--) {
         const e = s.enemies[j];
         if (Math.hypot(p.x - e.x, p.y - e.y) < e.r + 6) {
-          e.hp -= s.player.attackDamage;
+          let dmg = p.isPet ? s.player.attackDamage * 0.1 : s.player.attackDamage;
+          e.hp -= dmg;
           e.slowTimer = 90;
           e.stunTimer = 15;
-          const angle = Math.atan2(e.y - p.y, e.x - p.x);
-          e.dx = Math.cos(angle) * 8; e.dy = Math.sin(angle) * 8;
+          // knockback removed
           hit = true;
           playSound('hit');
-          spawnDamageText(e.x, e.meshY + 20, e.y, `-${s.player.attackDamage}`);
+          spawnDamageText(e.x, e.mesh.position.y + 35, e.y, `-${dmg.toFixed(1)}`);
           if (e.hp <= 0) killEnemy(j);
           else spawnParticles(e.x, e.y, 0xffaa00, 5, 'hit');
           break;
@@ -321,10 +321,11 @@ export function updateProjectiles(dt) {
       }
       if (!hit && s.bossActive) {
         if (Math.hypot(p.x - s.bossX, p.y - s.bossY) < 30 + 6) {
-          s.bossHp -= s.player.attackDamage;
+          let dmg = p.isPet ? s.player.attackDamage * 0.1 : s.player.attackDamage;
+          s.bossHp -= dmg;
           hit = true;
           playSound('hit');
-          spawnDamageText(s.bossX, 50, s.bossY, `-${s.player.attackDamage}`);
+          spawnDamageText(s.bossX, 50, s.bossY, `-${dmg.toFixed(1)}`);
         }
       }
     }
@@ -392,7 +393,7 @@ export function updateEnemies(dt) {
   if (s.currentScene === 'hometown') return;
 
   // Spawner
-  if (s.isGameStarted && !s.bossActive) {
+  if (s.isGameStarted) {
     s._spawnTimer = (s._spawnTimer ?? 0) + dt;
     const spawnRate = Math.max(90, 240 - s.player.level * 10);
     const maxEnemies = Math.min(80, 30 + s.player.level * 5);
@@ -413,13 +414,50 @@ export function updateEnemies(dt) {
 
     if (e.stunTimer > 0) {
       e.stunTimer -= dt;
+    } else if (e.actionState === 'attack') {
+      e.attackAnimTimer -= dt;
+      e.dx = 0;
+      e.dy = 0;
+      
+      if (e.attackAnimTimer <= 15 && !e.hasDealtDamage) {
+        e.hasDealtDamage = true;
+        if (distToPlayer < s.player.r + e.r + 20) {
+          if (s.player.defending) {
+            const angle = Math.atan2(e.y - s.player.y, e.x - s.player.x);
+            e.dx = Math.cos(angle) * 5; e.dy = Math.sin(angle) * 5;
+            e.stunTimer = 15;
+            playSound('hit');
+          } else {
+            s.player.hp = Math.max(0, s.player.hp - 10);
+            s.cameraShake = Math.max(s.cameraShake || 0, 5);
+            playSound('hit');
+            spawnDamageText(s.player.x, 30, s.player.y, `-10`, '#ff8888');
+            if (s.player.hp <= 0) teleportToHometown('Anda pingsan! Terlempar kembali ke Kota.');
+          }
+        }
+      }
+      
+      if (e.attackAnimTimer <= 0) {
+        e.actionState = 'chase';
+      }
     } else {
+      if (e.attackCooldown > 0) e.attackCooldown -= dt;
+      
       const speed = e.slowTimer > 0 ? e.baseSpeed * 0.4 : e.baseSpeed;
       if (e.slowTimer > 0) e.slowTimer -= dt;
 
       if (distToPlayer < 800) {
         const angle = Math.atan2(s.player.y - e.y, s.player.x - e.x);
-        if (e.type === 'archer') {
+        
+        if (distToPlayer < s.player.r + e.r + 15 && e.hp > 0 && e.type !== 'kamikaze' && e.type !== 'archer' && (!e.attackCooldown || e.attackCooldown <= 0)) {
+          e.actionState = 'attack';
+          e.attackAnimTimer = 30;
+          e.attackCooldown = 90;
+          e.hasDealtDamage = false;
+          e.dx = 0;
+          e.dy = 0;
+          e.mesh.rotation.y = angle;
+        } else if (e.type === 'archer') {
           if (distToPlayer > 300) {
             e.dx = Math.cos(angle) * speed;
             e.dy = Math.sin(angle) * speed;
@@ -459,6 +497,25 @@ export function updateEnemies(dt) {
     let nx = e.x + e.dx * 1.5 * dt;
     let ny = e.y + e.dy * 1.5 * dt;
 
+    if (e.isBossChild && s.bossActive) {
+      const distToBoss = Math.hypot(e.x - s.bossX, e.y - s.bossY);
+      
+      if (distToBoss > 230) {
+        // Force child to run towards the boss to catch up
+        const angleToBoss = Math.atan2(s.bossY - e.y, s.bossX - e.x);
+        e.dx = Math.cos(angleToBoss) * e.baseSpeed * 2;
+        e.dy = Math.sin(angleToBoss) * e.baseSpeed * 2;
+        nx = e.x + e.dx * 1.5 * dt;
+        ny = e.y + e.dy * 1.5 * dt;
+        e.actionState = 'chase'; 
+      } else if (Math.hypot(nx - s.bossX, ny - s.bossY) > 230) {
+        // Slide along the perimeter if trying to step out of bounds
+        const angleToBoss = Math.atan2(ny - s.bossY, nx - s.bossX);
+        nx = s.bossX + Math.cos(angleToBoss) * 230;
+        ny = s.bossY + Math.sin(angleToBoss) * 230;
+      }
+    }
+
     if (e.type === 'ghost') {
       e.x = nx; e.y = ny;
     } else {
@@ -472,12 +529,31 @@ export function updateEnemies(dt) {
     }
 
     // Smooth mesh follow
-    e.mesh.position.x += (e.x - e.mesh.position.x) * Math.min(dt * 10, 1);
-    e.mesh.position.z += (e.y - e.mesh.position.z) * Math.min(dt * 10, 1);
+    let lungeOffsetX = 0;
+    let lungeOffsetY = 0;
+    if (e.actionState === 'attack') {
+      const attackProgress = (30 - e.attackAnimTimer) / 30; // 0 to 1
+      const lunge = Math.sin(attackProgress * Math.PI) * 10;
+      const angle = e.mesh.rotation.y;
+      lungeOffsetX = Math.cos(angle) * lunge;
+      lungeOffsetY = Math.sin(angle) * lunge;
+    }
+    
+    e.mesh.position.x += (e.x + lungeOffsetX - e.mesh.position.x) * Math.min(dt * 10, 1);
+    e.mesh.position.z += (e.y + lungeOffsetY - e.mesh.position.z) * Math.min(dt * 10, 1);
 
     const speedScalar = Math.hypot(e.dx, e.dy);
     let meshYTarget = e.meshY + getTerrainHeight(e.x, e.y);
-    if (speedScalar > 0.1) {
+    
+    if (e.actionState === 'attack') {
+      const attackProgress = (30 - e.attackAnimTimer) / 30;
+      const swing = Math.sin(attackProgress * Math.PI) * 1.5;
+      const l = e.limbs;
+      if (l['arm-left']) l['arm-left'].rotation.x = -swing;
+      if (l['arm-right']) l['arm-right'].rotation.x = -swing;
+      if (l['leg-left']) l['leg-left'].rotation.x = 0;
+      if (l['leg-right']) l['leg-right'].rotation.x = 0;
+    } else if (speedScalar > 0.1) {
       e.mesh.rotation.y = Math.atan2(e.dx, e.dy);
       if (e.walkCycle === undefined) e.walkCycle = Math.random() * Math.PI * 2;
       e.walkCycle += speedScalar * 0.08 * dt;
@@ -495,7 +571,7 @@ export function updateEnemies(dt) {
       if (l['arm-right']) l['arm-right'].rotation.x = 0;
     }
     e.mesh.position.y += (meshYTarget - e.mesh.position.y) * Math.min(dt * 8, 1);
-    e.hpGroup.position.set(e.x, e.meshY + 23, e.y);
+    e.hpGroup.position.set(e.x, e.mesh.position.y + 40, e.y);
     e.hpGroup.lookAt(s.camera.position);
 
     const hpPercent = Math.max(0, e.hp / e.maxHp);
@@ -511,15 +587,6 @@ export function updateEnemies(dt) {
         e.hp = 0;
         s.scene.remove(e.mesh); s.scene.remove(e.hpGroup);
         s.enemies.splice(idx, 1);
-        if (s.player.hp <= 0) teleportToHometown('Anda pingsan! Terlempar kembali ke Kota.');
-      } else if (s.player.defending) {
-        const angle = Math.atan2(e.y - s.player.y, e.x - s.player.x);
-        e.dx = Math.cos(angle) * 5; e.dy = Math.sin(angle) * 5;
-        e.stunTimer = 15;
-      } else {
-        s.player.hp = Math.max(0, s.player.hp - 0.3);
-        s.cameraShake = Math.max(s.cameraShake || 0, 2);
-        spawnDamageText(s.player.x, 30, s.player.y, `-0.3`, '#ff8888');
         if (s.player.hp <= 0) teleportToHometown('Anda pingsan! Terlempar kembali ke Kota.');
       }
     }
@@ -544,29 +611,34 @@ export function updateBoss(dt) {
   const dist = Math.hypot(s.player.x - s.bossX, s.player.y - s.bossY);
   const angle = Math.atan2(s.player.y - s.bossY, s.player.x - s.bossX);
 
-  if (dist > 80) {
-    s.bossX += Math.cos(angle) * 1.5 * dt;
-    s.bossY += Math.sin(angle) * 1.5 * dt;
+  const spawnX = mapSize - 1000;
+  const spawnY = mapSize - 1000;
+  const distToSpawn = Math.hypot(s.bossX - spawnX, s.bossY - spawnY);
+
+  if (distToSpawn > 350) {
+    s.bossReturning = true;
   }
 
-  s.bossMesh.position.x += (s.bossX - s.bossMesh.position.x) * Math.min(dt * 6, 1);
-  s.bossMesh.position.z += (s.bossY - s.bossMesh.position.z) * Math.min(dt * 6, 1);
-  const bossTerrainY = getTerrainHeight(s.bossX, s.bossY);
-  s.bossMesh.position.y += (30 + bossTerrainY - s.bossMesh.position.y) * Math.min(dt * 6, 1);
-  s.bossMesh.rotation.y += 0.02 * dt;
-  s.bossMesh.rotation.x = Math.sin(Date.now() / 300) * 0.2;
+  const isAggro = dist < 300 || s.bossHp < s.bossMaxHp;
 
-  s.bossHpGroup.position.x += (s.bossX - s.bossHpGroup.position.x) * Math.min(dt * 6, 1);
-  s.bossHpGroup.position.z += (s.bossY - s.bossHpGroup.position.z) * Math.min(dt * 6, 1);
-  s.bossHpGroup.position.y += (80 - s.bossHpGroup.position.y) * Math.min(dt * 6, 1);
-  s.bossHpGroup.lookAt(s.camera.position);
+  if (s.bossReturning) {
+    if (distToSpawn < 10) {
+      s.bossReturning = false;
+      s.bossHp = s.bossMaxHp; // Reset health to drop aggro
+    } else {
+      const returnAngle = Math.atan2(spawnY - s.bossY, spawnX - s.bossX);
+      s.bossX += Math.cos(returnAngle) * 3 * dt;
+      s.bossY += Math.sin(returnAngle) * 3 * dt;
+      s.bossMesh.rotation.y = -returnAngle + Math.PI / 2;
+    }
+  } else if (isAggro) {
+    if (dist > 80) {
+      s.bossX += Math.cos(angle) * 1.5 * dt;
+      s.bossY += Math.sin(angle) * 1.5 * dt;
+      s.bossMesh.rotation.y = -angle + Math.PI / 2;
+    }
 
-  const pct = Math.max(0, s.bossHp / s.bossMaxHp);
-  s.bossHpFg.scale.x = Math.max(0.001, pct);
-  s.bossHpFg.position.x = -(80 - (80 * pct)) / 2;
-
-  // Boss AoE Slam Attack
-  s.bossAttackTimer = (s.bossAttackTimer || 0) + dt;
+    s.bossAttackTimer = (s.bossAttackTimer || 0) + dt;
   if (s.bossAttackTimer > 150 && dist < 120) {
      s.bossAttackTimer = 0;
      s.cameraShake = Math.max(s.cameraShake || 0, 20);
@@ -586,21 +658,38 @@ export function updateBoss(dt) {
            s.player.y += Math.sin(knockAngle) * 20;
         }
      }
-  } else if (Math.random() < 0.05) {
-    const m = new THREE.Mesh(
-      new THREE.SphereGeometry(10, 8, 8),
-      new THREE.MeshBasicMaterial({ color: 0xff0000 })
-    );
-    m.position.set(s.bossX, 30, s.bossY);
-    s.scene.add(m);
-    const pAngle = angle + (Math.random() - 0.5);
-    s.projectiles.push({
-      x: s.bossX, y: s.bossY,
-      dx: Math.cos(pAngle) * 8, dy: Math.sin(pAngle) * 8,
-      mesh: m, isEnemy: true,
-    });
-    playSound('shoot');
+    } else if (Math.random() < 0.05) {
+      const m = new THREE.Mesh(
+        new THREE.SphereGeometry(10, 8, 8),
+        new THREE.MeshBasicMaterial({ color: 0xff0000 })
+      );
+      m.position.set(s.bossX, 30, s.bossY);
+      s.scene.add(m);
+      const pAngle = angle + (Math.random() - 0.5);
+      s.projectiles.push({
+        x: s.bossX, y: s.bossY,
+        dx: Math.cos(pAngle) * 8, dy: Math.sin(pAngle) * 8,
+        mesh: m, isEnemy: true,
+      });
+      playSound('shoot');
+    }
   }
+
+  // Smooth position interpolation after logic
+  s.bossMesh.position.x += (s.bossX - s.bossMesh.position.x) * Math.min(dt * 6, 1);
+  s.bossMesh.position.z += (s.bossY - s.bossMesh.position.z) * Math.min(dt * 6, 1);
+  const bossTerrainY = getTerrainHeight(s.bossX, s.bossY);
+  s.bossMesh.position.y += (30 + bossTerrainY - s.bossMesh.position.y) * Math.min(dt * 6, 1);
+  s.bossMesh.rotation.x = Math.sin(Date.now() / 300) * 0.1;
+
+  s.bossHpGroup.position.x += (s.bossX - s.bossHpGroup.position.x) * Math.min(dt * 6, 1);
+  s.bossHpGroup.position.z += (s.bossY - s.bossHpGroup.position.z) * Math.min(dt * 6, 1);
+  s.bossHpGroup.position.y += (80 - s.bossHpGroup.position.y) * Math.min(dt * 6, 1);
+  s.bossHpGroup.lookAt(s.camera.position);
+
+  const pct = Math.max(0, s.bossHp / s.bossMaxHp);
+  s.bossHpFg.scale.x = Math.max(0.001, pct);
+  s.bossHpFg.position.x = -(80 - (80 * pct)) / 2;
 
   // Contact damage
   if (dist < s.player.r + 30) {
@@ -608,9 +697,7 @@ export function updateBoss(dt) {
       s.player.hp -= 1.0;
       playSound('hit');
       if (s.player.hp <= 0) triggerGameOver('Kamu dihancurkan The Golden Golem!');
-    } else {
-      s.bossX -= Math.cos(angle) * 10;
-      s.bossY -= Math.sin(angle) * 10;
+      // Boss does not move
     }
   }
 

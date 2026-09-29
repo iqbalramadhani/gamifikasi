@@ -12,7 +12,7 @@ export const state = {
 
   playerMesh: null,
   shieldMesh: null,
-  altarCrystal: null,
+  altarCrystal: null, // Keep key so it doesn't break anything, but won't be used
   rainParticles: null,
 
   // GLTF references
@@ -65,8 +65,7 @@ export const state = {
 
   gold: 0,
   potions: 0,
-  crystalCount: 0,
-  crystalGoal: 10,
+
   bountyQuest: null,
   bountyQuestProgress: 0,
 
@@ -76,7 +75,7 @@ export const state = {
   wildsLoaded: false,
   hometownGroup: null,
   wildsGroup: null,
-  crystalItems: [],
+
   coinItems: [],
   expOrbs: [],
   potionItems: [],

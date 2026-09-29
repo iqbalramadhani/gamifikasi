@@ -16,7 +16,6 @@ export const armorList = [
   { name: "Dragon Armor", hp: 300, cost: 1000, color: 0x221111 },
 ];
 
-/** Enemy template definitions — order matches the random type selector. */
 export const enemyTemplates = [
   { hp: 3,   speed: 1.5, r: 11, typeStr: 'spike',    charKey: 'char_e' },
   { hp: 1.5, speed: 1.5, r: 9,  typeStr: 'slime',    charKey: 'char_f' },
@@ -24,14 +23,14 @@ export const enemyTemplates = [
   { hp: 4,   speed: 1.5, r: 9,  typeStr: 'archer',   charKey: 'char_h' },
   { hp: 2,   speed: 1.5, r: 9,  typeStr: 'kamikaze', charKey: 'char_i' },
   { hp: 5,   speed: 1.5, r: 8,  typeStr: 'ghost',    charKey: 'char_j' },
-  { hp: 6,   speed: 1.8, r: 12, typeStr: 'knight',   charKey: 'char_k' },
-  { hp: 3,   speed: 1.2, r: 8,  typeStr: 'mage',     charKey: 'char_l' },
-  { hp: 10,  speed: 1.0, r: 18, typeStr: 'warrior',  charKey: 'char_m' },
-  { hp: 4,   speed: 2.5, r: 8,  typeStr: 'thief',    charKey: 'char_n' },
-  { hp: 12,  speed: 1.3, r: 16, typeStr: 'paladin',  charKey: 'char_o' },
-  { hp: 7,   speed: 1.4, r: 10, typeStr: 'necro',    charKey: 'char_p' },
-  { hp: 5,   speed: 2.0, r: 9,  typeStr: 'ranger',   charKey: 'char_q' },
-  { hp: 15,  speed: 1.1, r: 20, typeStr: 'demon',    charKey: 'char_r' },
+  { hp: 6,   speed: 1.5, r: 12, typeStr: 'knight',   charKey: 'char_k' },
+  { hp: 3,   speed: 1.5, r: 8,  typeStr: 'mage',     charKey: 'char_l' },
+  { hp: 10,  speed: 1.5, r: 18, typeStr: 'warrior',  charKey: 'char_m' },
+  { hp: 4,   speed: 1.5, r: 8,  typeStr: 'thief',    charKey: 'char_n' },
+  { hp: 12,  speed: 1.5, r: 16, typeStr: 'paladin',  charKey: 'char_o' },
+  { hp: 7,   speed: 1.5, r: 10, typeStr: 'necro',    charKey: 'char_p' },
+  { hp: 5,   speed: 1.5, r: 9,  typeStr: 'ranger',   charKey: 'char_q' },
+  { hp: 15,  speed: 1.5, r: 20, typeStr: 'demon',    charKey: 'char_r' },
 ];
 
 export const lootTable = {

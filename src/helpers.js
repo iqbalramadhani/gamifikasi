@@ -33,18 +33,6 @@ export function blocked(x, y, r = state.player.r) {
 export function checkItems() {
   const s = state;
 
-  s.crystalItems.forEach(item => {
-    if (!item.taken && Math.hypot(s.player.x - item.x, s.player.y - item.y) < 28) {
-      item.taken = true;
-      item.mesh.visible = false;
-      s.crystalCount++;
-      playSound('coin');
-      document.getElementById('message').textContent =
-        `💎 Crystal ditemukan! ${s.crystalCount}/${s.crystalGoal}`;
-      if (s.crystalCount === s.crystalGoal) spawnBoss();
-      if (typeof window.saveGame === 'function') window.saveGame(true);
-    }
-  });
 
   s.lootDrops.forEach(drop => {
     if (!drop.taken) {
@@ -205,7 +193,4 @@ export function spawnBoss() {
   s.bossHpFg.position.z = 0.2;
   s.bossHpGroup.add(bg, s.bossHpFg);
   s.scene.add(s.bossHpGroup);
-
-  // Destroy the altar crystal
-  if (s.altarCrystal) s.scene.remove(s.altarCrystal);
 }

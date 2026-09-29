@@ -8,7 +8,7 @@ import { blocked, spawnParticles, checkItems } from './helpers.js';
 // ─── UI throttled update ──────────────────────────────────────────────────────
 
 let uiThrottle = 0;
-let lastHp = -1, lastGold = -1, lastCrystal = -1;
+let lastHp = -1, lastGold = -1;
 
 export function updateUI() {
   checkItems();
@@ -32,10 +32,6 @@ export function updateUI() {
   if (lastGold !== s.gold) {
     document.getElementById('gold').textContent = s.gold;
     lastGold = s.gold;
-  }
-  if (lastCrystal !== s.crystalCount) {
-    document.getElementById('crystal').textContent = `${s.crystalCount}/${s.crystalGoal}`;
-    lastCrystal = s.crystalCount;
   }
 
   const expEl = document.getElementById('exp');
@@ -85,11 +81,6 @@ export function drawMinimap() {
   ctx.fillStyle = 'yellow';
   ctx.fillRect((mapSize / 2) * scale - 3, (mapSize / 2) * scale - 3, 6, 6);
 
-  // Crystals
-  ctx.fillStyle = 'cyan';
-  s.crystalItems.forEach(c => {
-    if (!c.taken) ctx.fillRect(c.x * scale - 1, c.y * scale - 1, 2, 2);
-  });
 
   // Enemies
   ctx.fillStyle = 'red';

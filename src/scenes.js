@@ -6,6 +6,7 @@ import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { state } from './state.js';
 import { mapSize } from './constants.js';
 import { loadedModels } from './model-loader.js';
+import { spawnEnemy } from './combat.js';
 
 export function getTerrainHeight(x, y) {
   // Area kota (Hometown) harus sepenuhnya datar
@@ -15,7 +16,7 @@ export function getTerrainHeight(x, y) {
   if (distFromCenter <= 300) return 0; // Area altar datar
   const distanceFactor = Math.min(1, (distFromCenter - 300) / 200);
   const wave = Math.sin(x * 0.003) * Math.cos(y * 0.003) * 30;
-  const noise = Math.sin(x * 0.01) * Math.sin(y * 0.01) * 10;
+  const noise = Math.sin(x * 0.005) * Math.sin(y * 0.005) * 15;
   return (wave + noise) * distanceFactor;
 }
 
@@ -107,7 +108,7 @@ export function initSetup() {
   grassTex.repeat.set(mapSize / 150, mapSize / 150);
 
   // Floor (Terrain Bergelombang)
-  const floorGeo = new THREE.PlaneGeometry(mapSize, mapSize, 64, 64);
+  const floorGeo = new THREE.PlaneGeometry(mapSize, mapSize, 200, 200);
   const posAttribute = floorGeo.attributes.position;
   
   for (let i = 0; i < posAttribute.count; i++) {
@@ -157,7 +158,7 @@ export function initSetup() {
 export function initMap() {
   const s = state;
   s.wildsGroup = new THREE.Group();
-  s.wildsGroup.add(s.wildsGroup);
+  s.scene.add(s.wildsGroup);
 
   const ms = mapSize;
 
@@ -173,12 +174,7 @@ export function initMap() {
     new THREE.MeshLambertMaterial({ color: 0x444444 })
   );
   altarPillar.position.y = 20;
-  s.altarCrystal = new THREE.Mesh(
-    new THREE.OctahedronGeometry(15, 0),
-    new THREE.MeshBasicMaterial({ color: 0x00ffff, wireframe: true })
-  );
-  s.altarCrystal.position.y = 50;
-  altarGroup.add(altarBase, altarPillar, s.altarCrystal);
+  altarGroup.add(altarBase, altarPillar);
   altarGroup.position.set(ms / 2, 0, ms / 2);
   s.wildsGroup.add(altarGroup);
   s.obstaclesWilds.push({ x: ms / 2, y: ms / 2, r: 40 });
@@ -763,16 +759,7 @@ export function initHometown() {
 
 export function initEntities() {
   const s = state;
-  // Crystals
-  const crystalGeo = new THREE.OctahedronGeometry(8, 0);
-  const crystalMat = new THREE.MeshLambertMaterial({ color: 0x00ffff });
-  for (let i = 0; i < s.crystalGoal; i++) {
-    const pos = spawnAtFreePos();
-    const mesh = new THREE.Mesh(crystalGeo, crystalMat);
-    mesh.position.set(pos.x, 15 + getTerrainHeight(pos.x, pos.y), pos.y);
-    s.scene.add(mesh);
-    s.crystalItems.push({ x: pos.x, y: pos.y, taken: false, mesh });
-  }
+
 
   // Coins removed for inventory system
 
@@ -1110,4 +1097,79 @@ export function initWildsNPCs() {
   s.wildsPortal = new THREE.Mesh(portalGeo, wildsPortalMat);
   s.wildsPortal.position.set(mapSize / 2, 30, mapSize / 2 + 60);
   s.wildsGroup.add(s.wildsPortal);
+
+  // BOSS (The Golden Golem)
+  s.bossActive = true;
+  s.bossX = mapSize - 1000;
+  s.bossY = mapSize - 1000;
+  
+  if (loadedModels.enemy) {
+    const gltfBoss = SkeletonUtils.clone(loadedModels.enemy);
+    gltfBoss.scale.set(100, 100, 100);
+    gltfBoss.position.y = -30;
+    gltfBoss.traverse((child) => {
+      if (child.isMesh && child.material) {
+        child.material = child.material.clone();
+        child.material.color.setHex(0xffd700);
+      }
+    });
+    s.bossMesh = new THREE.Group();
+    s.bossMesh.add(gltfBoss);
+  } else {
+    const bGeo = new THREE.BoxGeometry(60, 60, 60);
+    const bMat = new THREE.MeshLambertMaterial({ color: 0xffd700 });
+    s.bossMesh = new THREE.Mesh(bGeo, bMat);
+  }
+  
+  s.bossMesh.position.set(s.bossX, 30 + getTerrainHeight(s.bossX, s.bossY), s.bossY);
+  s.wildsGroup.add(s.bossMesh);
+
+  s.bossHpGroup = new THREE.Group();
+  const bg = new THREE.Mesh(new THREE.PlaneGeometry(80, 8), new THREE.MeshBasicMaterial({ color: 0x222222 }));
+  s.bossHpFg = new THREE.Mesh(new THREE.PlaneGeometry(80, 8), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
+  s.bossHpFg.position.z = 0.2;
+  s.bossHpGroup.add(bg, s.bossHpFg);
+  s.bossHpGroup.position.set(s.bossX, 80 + getTerrainHeight(s.bossX, s.bossY), s.bossY);
+  s.wildsGroup.add(s.bossHpGroup);
+
+  // FENCES (Circular Arena)
+  const arenaRadius = 250;
+  const numFences = 36; 
+  
+  for (let i = 0; i < numFences; i++) {
+    const angle = (i / numFences) * Math.PI * 2;
+    
+    // Create an entrance gap pointing towards the center of the map
+    // The angle towards the center (-1, -1 vector) is -3*PI/4, which is 225 degrees (around i = 22 or 23).
+    if (i >= 20 && i <= 25) continue;
+
+    const fx = s.bossX + Math.cos(angle) * arenaRadius;
+    const fy = s.bossY + Math.sin(angle) * arenaRadius;
+
+    let mesh;
+    if (loadedModels.fence) {
+      mesh = SkeletonUtils.clone(loadedModels.fence);
+      mesh.scale.set(15, 15, 15); 
+    } else {
+      mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(45, 40, 10),
+        new THREE.MeshLambertMaterial({ color: 0x5c4033 })
+      );
+    }
+    
+    mesh.position.set(fx, getTerrainHeight(fx, fy), fy);
+    mesh.rotation.y = -angle; // Face outward/tangent
+    s.wildsGroup.add(mesh);
+    s.obstaclesWilds.push({ x: fx, y: fy, r: 25 });
+  }
+
+  // Spawn Boss Children inside fence
+  setTimeout(() => {
+    spawnEnemy(s.bossX + 80, s.bossY + 80, 0.5, true);
+    spawnEnemy(s.bossX - 80, s.bossY + 80, 0.5, true);
+    spawnEnemy(s.bossX + 80, s.bossY - 80, 0.5, true);
+    spawnEnemy(s.bossX - 80, s.bossY - 80, 0.5, true);
+    spawnEnemy(s.bossX + 130, s.bossY, 0.5, true);
+    spawnEnemy(s.bossX - 130, s.bossY, 0.5, true);
+  }, 1000); // Slight delay to ensure combat.js is fully initialized
 }

@@ -20,8 +20,7 @@
       </div>
       <div class="badge" style="background: rgba(0, 50, 150, 0.6); border-color: #3498db;">⭐ Lv <span id="player-level">1</span> (EXP: <span id="exp">0</span>/<span id="max-exp">20</span>)</div>
       <div class="badge">💰 Gold: <span id="gold">0</span></div>
-      <div class="badge">💎 Crystal: <span id="crystal">0</span>/10</div>
-      <div class="badge">🗡️ Main: Cari 10 Crystal</div>
+
       <div class="badge" id="side-quest-badge" style="display:none; background: #8e44ad; border-color: #9b59b6;">📜 Bounty: <span id="side-quest-text"></span></div>
       <div class="badge" id="zoom-badge" style="background: rgba(46, 204, 113, 0.6); border-color: #2ecc71;">🔍 Zoom: <span id="val-cam-z-hud">200</span></div>
       
@@ -76,7 +75,7 @@
     <div id="main-menu" style="display: flex;">
       <div class="box" style="background: rgba(10, 20, 10, 0.9); border: 2px solid #f1c40f;">
         <h1 style="color: #f1c40f; font-size: 36px; margin-bottom: 10px;">⚔️ THE LOST KINGDOM 3D</h1>
-        <p style="color: #bbb; margin-bottom: 20px;">Berpetualang, Kumpulkan Crystal, dan Kalahkan The Golden Golem!</p>
+        <p style="color: #bbb; margin-bottom: 20px;">Berpetualang, Selesaikan Misi Bounty, dan Kalahkan The Golden Golem!</p>
         <button class="ui-btn" onclick="startGame()" style="font-size: 24px; padding: 15px 40px; background: #27ae60;">MULAI PETUALANGAN</button>
       </div>
     </div>
@@ -157,7 +156,7 @@
     <div id="win">
       <div class="box">
         <h2>🏆 Kerajaan Diselamatkan!</h2>
-        <p>Kamu berhasil mengumpulkan 10 Crystal.</p><button class="ui-btn" onclick="location.reload()">Main Lagi</button>
+        <p>Kamu berhasil mengalahkan The Golden Golem.</p><button class="ui-btn" onclick="location.reload()">Main Lagi</button>
       </div>
     </div>
     <div id="lose">

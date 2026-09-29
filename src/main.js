@@ -8,7 +8,7 @@ import * as THREE from 'three';
 // Subsystem modules
 import { state } from './state.js';
 import { loadAllModels, loadedModels } from './model-loader.js';
-import { initSetup, initMap, initHometown, initEntities, initNPCs, getTerrainHeight } from './scenes.js';
+import { initSetup, initMap, initHometown, initEntities, initNPCs, initWildsNPCs, getTerrainHeight } from './scenes.js';
 import { spawnBoss, spawnParticles, checkItems } from './helpers.js';
 import { spawnEnemy, usePotion } from './combat.js';
 import {
@@ -82,6 +82,19 @@ window.startGame = async () => {
   initEntities();
   initNPCs();
 
+  if (state.currentScene === 'wilds') {
+    if (!state.wildsLoaded) {
+      initMap();
+      initWildsNPCs();
+      state.wildsLoaded = true;
+    }
+    if (state.hometownGroup) state.hometownGroup.visible = false;
+    if (state.wildsGroup) state.wildsGroup.visible = true;
+  } else {
+    if (state.wildsGroup) state.wildsGroup.visible = false;
+    if (state.hometownGroup) state.hometownGroup.visible = true;
+  }
+
   gameLoop();
 };
 
@@ -89,7 +102,6 @@ window.togglePause = () => {
   if (!state.isGameStarted || state.gameOver) return;
   state.isPaused = !state.isPaused;
   document.getElementById('pause-menu').style.display = state.isPaused ? 'flex' : 'none';
-  if (!state.isPaused) gameLoop();
 };
 
 window.openSettings = () => { document.getElementById('settings-menu').style.display = 'flex'; };
@@ -293,7 +305,6 @@ if (state.dirLight) {
   }
 
   // Animate collectible items
-  state.crystalItems.forEach(item => { if (!item.taken) item.mesh.rotation.y += 0.05 * dt; });
   state.coinItems.forEach(item => { if (!item.taken) item.mesh.rotation.z += 0.05 * dt; });
   state.expOrbs.forEach(item => { if (!item.taken) item.mesh.rotation.y += 0.05 * dt; });
   state.potionItems.forEach(item => { if (!item.taken) item.mesh.rotation.y += 0.05 * dt; });
