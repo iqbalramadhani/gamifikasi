@@ -352,9 +352,11 @@ function killEnemy(index) {
   spawnParticles(e.x, e.y, 0xff0000, 20, 'death');
 
   // Spawn Loot
-  if (Math.random() < 0.6) {
-    const loot = lootTable[e.typeStr];
-    if (loot) {
+  const loot = lootTable[e.type];
+  if (loot) {
+    // Drop chance is inversely proportional to item value (more expensive = rarer)
+    const dropChance = 1.0 / Math.sqrt(loot.value);
+    if (Math.random() < dropChance) {
       const dropMesh = new THREE.Mesh(
         new THREE.OctahedronGeometry(4, 0),
         new THREE.MeshLambertMaterial({ color: loot.color })

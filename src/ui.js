@@ -570,7 +570,8 @@ export function updateInventoryUI() {
       div.style.borderBottom = '1px solid #444';
       
       const nameSpan = document.createElement('span');
-      nameSpan.textContent = name;
+      const icon = lootDef && lootDef.icon ? lootDef.icon : '';
+      nameSpan.textContent = icon ? `${icon} ${name}` : name;
       
       const countSpan = document.createElement('span');
       countSpan.textContent = `x${count}`;
