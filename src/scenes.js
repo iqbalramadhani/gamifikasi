@@ -861,17 +861,35 @@ export function initEntities() {
     
     s.playerMesh.add(s.gltfPlayerRef);
 
-    if (loadedModels.sword && s.playerArmR) {
-      const gltfSword = SkeletonUtils.clone(loadedModels.sword);
-      gltfSword.scale.set(0.5, 0.5, 0.5);
-      gltfSword.position.set(0, -0.3, 0.1);
-      gltfSword.rotation.x = Math.PI / 2;
-      s.playerArmR.add(gltfSword);
-    } else if (loadedModels.sword) {
-      const gltfSword = SkeletonUtils.clone(loadedModels.sword);
-      gltfSword.scale.set(15, 15, 15);
-      gltfSword.position.set(10, 0, 15);
-      s.playerMesh.add(gltfSword);
+    // Create programmatic sword to ensure it looks like a sword (since sword.glb was an arrow)
+    s.playerSwordMesh = new THREE.Group();
+    
+    const bladeGeo = new THREE.BoxGeometry(0.1, 1.2, 0.2);
+    s.playerBladeMat = new THREE.MeshLambertMaterial({ color: 0xcccccc });
+    const blade = new THREE.Mesh(bladeGeo, s.playerBladeMat);
+    blade.position.y = 0.6;
+    
+    const hiltGeo = new THREE.BoxGeometry(0.4, 0.1, 0.3);
+    const hiltMat = new THREE.MeshLambertMaterial({ color: 0x5c4033 });
+    const hilt = new THREE.Mesh(hiltGeo, hiltMat);
+    
+    const handleGeo = new THREE.BoxGeometry(0.1, 0.3, 0.1);
+    const handle = new THREE.Mesh(handleGeo, hiltMat);
+    handle.position.y = -0.15;
+
+    s.playerSwordMesh.add(blade, hilt, handle);
+
+    if (s.playerArmR) {
+      // Attach to character's right arm
+      s.playerSwordMesh.position.set(0, -0.4, 0.2);
+      s.playerSwordMesh.rotation.x = Math.PI / 2;
+      s.playerArmR.add(s.playerSwordMesh);
+    } else {
+      // Fallback attachment
+      s.playerSwordMesh.scale.set(15, 15, 15);
+      s.playerSwordMesh.position.set(10, 0, 15);
+      s.playerSwordMesh.rotation.x = Math.PI / 2;
+      s.playerMesh.add(s.playerSwordMesh);
     }
   } else {
     // Classic fallback boxes

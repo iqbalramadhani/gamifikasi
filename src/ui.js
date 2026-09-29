@@ -313,8 +313,9 @@ export function updateBlacksmithUI() {
   const s = state;
   document.getElementById('blacksmith-gold').textContent = s.gold;
 
-  const wNext = weaponList[s.currentWeapon + 1];
-  if (wNext) {
+  const highestW = Math.max(...s.ownedWeapons);
+  const wNext = weaponList[highestW + 1];
+  if (wNext && highestW + 1 < weaponList.length - 1) { // exclude excalibur
     document.getElementById('weapon-desc').textContent = `${wNext.name} (DMG +${wNext.damage})`;
     document.getElementById('weapon-cost').textContent = wNext.cost;
     document.getElementById('btn-buy-weapon').disabled = s.gold < wNext.cost;
@@ -326,7 +327,8 @@ export function updateBlacksmithUI() {
     document.getElementById('btn-buy-weapon').textContent = 'Max Level';
   }
 
-  const aNext = armorList[s.currentArmor + 1];
+  const highestA = Math.max(...s.ownedArmors);
+  const aNext = armorList[highestA + 1];
   if (aNext) {
     document.getElementById('armor-desc').textContent = `${aNext.name} (HP +${aNext.hp})`;
     document.getElementById('armor-cost').textContent = aNext.cost;
@@ -342,73 +344,98 @@ export function updateBlacksmithUI() {
 
 export function buyWeapon() {
   const s = state;
-  const wNext = weaponList[s.currentWeapon + 1];
-  if (wNext && s.gold >= wNext.cost) {
+  // Blacksmith sells the NEXT unowned weapon in the sequence, up to max index (excluding Legendary)
+  const highestOwned = Math.max(...s.ownedWeapons);
+  const wNextIdx = highestOwned + 1;
+  const wNext = weaponList[wNextIdx];
+  if (wNext && s.gold >= wNext.cost && wNextIdx < weaponList.length - 1) { // exclude excalibur
     s.gold -= wNext.cost;
-    s.currentWeapon++;
-    const prevDmg = s.currentWeapon > 0 ? weaponList[s.currentWeapon - 1]?.damage ?? 0 : 0;
-    s.player.attackDamage += wNext.damage - prevDmg;
-    if (typeof s.playerBladeMat !== 'undefined' && s.playerBladeMat) s.playerBladeMat.color.setHex(wNext.color);
+    s.ownedWeapons.push(wNextIdx);
     
-    if (s.playerSwordMesh) {
-      const baseScale = s.gltfPlayerRef ? 0.5 : 15;
-      const newScale = baseScale + s.currentWeapon * (baseScale * 0.3);
-      s.playerSwordMesh.scale.set(newScale, newScale, newScale);
-      
-      s.playerSwordMesh.traverse(child => {
-        if (child.isMesh && child.material) {
-          child.material = child.material.clone();
-          child.material.color.setHex(wNext.color);
-          child.material.emissive.setHex(wNext.color);
-          child.material.emissiveIntensity = s.currentWeapon * 0.3;
-        }
-      });
-    }
-
     playSound('boss_spawn');
+    equipWeapon(wNextIdx);
     updateBlacksmithUI();
     updateUI();
     if (typeof window.saveGame === 'function') window.saveGame(true);
   }
 }
+
+window.equipWeapon = (idx) => {
+  const s = state;
+  if (!s.ownedWeapons.includes(idx)) return;
+  const prevDmg = weaponList[s.currentWeapon]?.damage ?? 0;
+  s.currentWeapon = idx;
+  const wNext = weaponList[idx];
+  s.player.attackDamage += (wNext.damage - prevDmg);
+  
+  if (typeof s.playerBladeMat !== 'undefined' && s.playerBladeMat) s.playerBladeMat.color.setHex(wNext.color);
+  if (s.playerSwordMesh) {
+    const baseScale = s.gltfPlayerRef ? 0.5 : 15;
+    // Cap visual scaling
+    const visualTier = Math.min(idx, 3);
+    const newScale = baseScale + visualTier * (baseScale * 0.3);
+    s.playerSwordMesh.scale.set(newScale, newScale, newScale);
+    
+    s.playerSwordMesh.traverse(child => {
+      if (child.isMesh && child.material) {
+        child.material = child.material.clone();
+        child.material.color.setHex(wNext.color);
+        child.material.emissive.setHex(wNext.color);
+        child.material.emissiveIntensity = visualTier * 0.3;
+      }
+    });
+  }
+  updateInventoryUI();
+};
 
 export function buyArmor() {
   const s = state;
-  const aNext = armorList[s.currentArmor + 1];
+  const highestOwned = Math.max(...s.ownedArmors);
+  const aNextIdx = highestOwned + 1;
+  const aNext = armorList[aNextIdx];
   if (aNext && s.gold >= aNext.cost) {
     s.gold -= aNext.cost;
-    s.currentArmor++;
-    const prevHp = s.currentArmor > 0 ? armorList[s.currentArmor - 1]?.hp ?? 0 : 0;
-    const hpDiff = aNext.hp - prevHp;
-    s.player.maxHp += hpDiff;
-    s.player.hp += hpDiff;
-    if (typeof s.playerBodyMat !== 'undefined' && s.playerBodyMat) s.playerBodyMat.color.setHex(aNext.color);
+    s.ownedArmors.push(aNextIdx);
     
-    if (s.gltfPlayerRef) {
-      s.gltfPlayerRef.traverse(child => {
-        if (child.isMesh && child.material) {
-          child.material = child.material.clone();
-          child.material.color.setHex(aNext.color);
-        }
-      });
-    }
-
-    if (!s.playerAuraLight && s.playerMesh) {
-      s.playerAuraLight = new THREE.PointLight(aNext.color, 1 + s.currentArmor * 0.5, 100 + s.currentArmor * 20);
-      s.playerAuraLight.position.y = 15;
-      s.playerMesh.add(s.playerAuraLight);
-    } else if (s.playerAuraLight) {
-      s.playerAuraLight.color.setHex(aNext.color);
-      s.playerAuraLight.intensity = 1 + s.currentArmor * 0.5;
-      s.playerAuraLight.distance = 100 + s.currentArmor * 20;
-    }
-
     playSound('boss_spawn');
+    equipArmor(aNextIdx);
     updateBlacksmithUI();
     updateUI();
     if (typeof window.saveGame === 'function') window.saveGame(true);
   }
 }
+
+window.equipArmor = (idx) => {
+  const s = state;
+  if (!s.ownedArmors.includes(idx)) return;
+  const prevHp = armorList[s.currentArmor]?.hp ?? 0;
+  s.currentArmor = idx;
+  const aNext = armorList[idx];
+  const hpDiff = aNext.hp - prevHp;
+  s.player.maxHp += hpDiff;
+  s.player.hp += hpDiff; // Heal or take away the difference
+  
+  if (typeof s.playerBodyMat !== 'undefined' && s.playerBodyMat) s.playerBodyMat.color.setHex(aNext.color);
+  if (s.gltfPlayerRef) {
+    s.gltfPlayerRef.traverse(child => {
+      if (child.isMesh && child.material) {
+        child.material = child.material.clone();
+        child.material.color.setHex(aNext.color);
+      }
+    });
+  }
+
+  if (!s.playerAuraLight && s.playerMesh) {
+    s.playerAuraLight = new THREE.PointLight(aNext.color, 1 + idx * 0.5, 100 + idx * 20);
+    s.playerAuraLight.position.y = 15;
+    s.playerMesh.add(s.playerAuraLight);
+  } else if (s.playerAuraLight) {
+    s.playerAuraLight.color.setHex(aNext.color);
+    s.playerAuraLight.intensity = 1 + idx * 0.5;
+    s.playerAuraLight.distance = 100 + idx * 20;
+  }
+  updateInventoryUI();
+};
 
 // ─── Level up ──────────────────────────────────────────────────────────────────
 
@@ -585,6 +612,54 @@ export function updateInventoryUI() {
   
   if (!hasItems) {
     listEl.innerHTML = '<p style="text-align:center; color:#888;">Tas kosong...</p>';
+  }
+
+  // Update Equipment section
+  const eqEl = document.getElementById('equipment-content');
+  if (eqEl) {
+    eqEl.innerHTML = '';
+    
+    // Weapons
+    s.ownedWeapons.forEach(idx => {
+      const w = weaponList[idx];
+      const isEquipped = s.currentWeapon === idx;
+      const div = document.createElement('div');
+      div.style.display = 'flex';
+      div.style.justifyContent = 'space-between';
+      div.style.padding = '5px 0';
+      div.style.borderBottom = '1px solid #444';
+      div.innerHTML = `<span>⚔️ ${w.name} <span style="color:#888; font-size:12px;">(+${w.damage} DMG)</span></span>`;
+      
+      const btn = document.createElement('button');
+      btn.textContent = isEquipped ? 'Dipakai' : 'Pakai';
+      btn.disabled = isEquipped;
+      btn.style.padding = '2px 8px';
+      btn.style.background = isEquipped ? '#27ae60' : '#3498db';
+      btn.onclick = () => window.equipWeapon(idx);
+      div.appendChild(btn);
+      eqEl.appendChild(div);
+    });
+    
+    // Armors
+    s.ownedArmors.forEach(idx => {
+      const a = armorList[idx];
+      const isEquipped = s.currentArmor === idx;
+      const div = document.createElement('div');
+      div.style.display = 'flex';
+      div.style.justifyContent = 'space-between';
+      div.style.padding = '5px 0';
+      div.style.borderBottom = '1px solid #444';
+      div.innerHTML = `<span>🛡️ ${a.name} <span style="color:#888; font-size:12px;">(+${a.hp} HP)</span></span>`;
+      
+      const btn = document.createElement('button');
+      btn.textContent = isEquipped ? 'Dipakai' : 'Pakai';
+      btn.disabled = isEquipped;
+      btn.style.padding = '2px 8px';
+      btn.style.background = isEquipped ? '#27ae60' : '#3498db';
+      btn.onclick = () => window.equipArmor(idx);
+      div.appendChild(btn);
+      eqEl.appendChild(div);
+    });
   }
 }
 

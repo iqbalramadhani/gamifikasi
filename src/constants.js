@@ -7,6 +7,7 @@ export const weaponList = [
   { name: "Iron Sword", damage: 2, cost: 100, color: 0xaaaaaa },
   { name: "Golden Sword", damage: 5, cost: 300, color: 0xffd700 },
   { name: "Fire Blade", damage: 10, cost: 800, color: 0xff4400 },
+  { name: "Excalibur (Legendary)", damage: 50, cost: Infinity, color: 0x00ffff },
 ];
 
 export const armorList = [

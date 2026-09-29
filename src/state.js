@@ -62,6 +62,8 @@ export const state = {
   upgrades: { hpLevel: 1, atkLevel: 1, spdLevel: 1 },
   currentWeapon: 0,
   currentArmor: 0,
+  ownedWeapons: [0],
+  ownedArmors: [0],
 
   gold: 0,
   potions: 0,

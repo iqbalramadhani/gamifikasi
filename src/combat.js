@@ -711,8 +711,12 @@ export function updateBoss(dt) {
     if (typeof window.saveGame === 'function') window.saveGame(true);
     playSound('coin');
     spawnParticles(s.bossX, s.bossY, 0xffd700, 100, 'death');
-    document.getElementById('message').textContent = '👑 The Golden Golem telah dikalahkan!';
+    document.getElementById('message').textContent = '👑 The Golden Golem telah dikalahkan! Kamu mendapatkan senjata legendaris Excalibur!';
 
+    if (!s.ownedWeapons.includes(4)) {
+      s.ownedWeapons.push(4);
+    }
+    
     // Boss always drops a potion
     if (s.potions < 3) {
       const potGeo = new THREE.CylinderGeometry(3, 3, 8, 8);
