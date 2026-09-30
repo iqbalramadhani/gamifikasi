@@ -740,3 +740,15 @@ window.addEventListener('keydown', e => {
 window.addEventListener('keyup', e => {
   state.keys[e.key.toLowerCase()] = false;
 });
+
+// ─── Tutorial ─────────────────────────────────────────────────────────────────
+
+export function openTutorial() {
+  state.isPaused = true;
+  document.getElementById('tutorial-modal').style.display = 'flex';
+}
+
+export function closeTutorial() {
+  state.isPaused = false;
+  document.getElementById('tutorial-modal').style.display = 'none';
+}

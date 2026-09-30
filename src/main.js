@@ -20,7 +20,8 @@ import {
   openBlacksmith, closeBlacksmith, updateBlacksmithUI, buyWeapon, buyArmor,
   levelUp, openStats, closeStats, addStat,
   openQuestBoard, acceptQuest, claimQuest, closeQuestBoard, updateQuestUI,
-  openInventory, closeInventory, sellAllLoot
+  openInventory, closeInventory, sellAllLoot,
+  openTutorial, closeTutorial
 } from './ui.js';
 import { updateWeather, updateParticles, updatePet, teleportTo } from './environment.js';
 window.teleportTo = teleportTo;
@@ -65,6 +66,8 @@ window.openInventory = openInventory;
 window.closeInventory = closeInventory;
 window.sellAllLoot = sellAllLoot;
 window.updateUI = updateUI;
+window.openTutorial = openTutorial;
+window.closeTutorial = closeTutorial;
 window.playerBodyMat = null;
 window.playerBladeMat = null;
 

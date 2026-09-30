@@ -34,6 +34,8 @@ export function saveGame(isAuto = false) {
     camera_z: s.cameraOffsetZ,
     camera_look_y: s.cameraLookAtY,
     inventory: JSON.stringify(s.inventory),
+    statPoints: s.player.statPoints,
+    stats: s.player.stats,
   };
 
   fetch('http://localhost:3001/api/save', {
@@ -96,6 +98,13 @@ export function loadGame() {
         s.inventory = {};
       }
 
+      // Rebuild owned weapons and armors based on current
+      s.ownedWeapons = [];
+      for (let i = 0; i <= s.currentWeapon; i++) s.ownedWeapons.push(i);
+      
+      s.ownedArmors = [];
+      for (let i = 0; i <= s.currentArmor; i++) s.ownedArmors.push(i);
+
       if (s.player.x < 2000) s.currentScene = 'hometown';
       else s.currentScene = 'wilds';
 
@@ -113,6 +122,11 @@ export function loadGame() {
           document.getElementById('val-cam-look').innerText = s.cameraLookAtY;
         }
       }
+
+      s.player.statPoints = d.statPoints ?? s.player.statPoints;
+      s.player.stats.str = d.stat_str ?? s.player.stats.str;
+      s.player.stats.agi = d.stat_agi ?? s.player.stats.agi;
+      s.player.stats.vit = d.stat_vit ?? s.player.stats.vit;
 
       // Restore equipment colors on loaded meshes
       if (s.playerBladeMat && weaponList[s.currentWeapon]) {
