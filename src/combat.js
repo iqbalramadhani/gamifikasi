@@ -53,7 +53,7 @@ export function spawnEnemy(ex, ey, scaleFactor = 1.0, isBossChild = false) {
 
     if (loadedModels[charKey]) {
       const gltfEnemy = SkeletonUtils.clone(loadedModels[charKey]);
-      gltfEnemy.scale.set(22 * scaleFactor, 22 * scaleFactor, 22 * scaleFactor);
+      gltfEnemy.scale.set(7 * scaleFactor, 7 * scaleFactor, 7 * scaleFactor);
       gltfEnemy.position.y = -12;
       mesh = new THREE.Group();
       mesh.add(gltfEnemy);
@@ -763,7 +763,7 @@ export function updateEnemies(dt) {
 function teleportToHometown(msg) {
   const s = state;
   s.player.hp = s.player.maxHp;
-  s.gold = Math.max(0, Math.floor(s.gold / 2));
+  s.player.exp = Math.max(0, Math.floor(s.player.exp / 2)); // Kurangi EXP menjadi setengah, gold tidak dikurangi
   if (typeof window.teleportTo === 'function') window.teleportTo('hometown');
   if (typeof window.saveGame === 'function') window.saveGame(true);
   if (msg) document.getElementById('message').textContent = `💀 ${msg}`;

@@ -338,6 +338,37 @@ export function initMap() {
       s.obstaclesWilds.push({ x: tx, y: ty, r: 25 });
     }
   }
+
+  // Map border cliffs (tebing tinggi di ujung map)
+  const borderSpacing = 150; // Jarak diperkecil agar lebih rapat
+  for (let i = 0; i <= ms; i += borderSpacing) {
+    // Top and bottom edges (z = 0 and z = ms)
+    [0, ms].forEach(z => {
+      let rockGroup;
+      if (loadedModels.rocks_high) {
+        rockGroup = SkeletonUtils.clone(loadedModels.rocks_high);
+        rockGroup.scale.set(180, 250, 180); // Skala diperlebar dan ditinggikan
+        rockGroup.position.set(i, -20, z);
+        rockGroup.rotation.y = Math.random() * Math.PI;
+        s.wildsGroup.add(rockGroup);
+      }
+      s.obstaclesWilds.push({ x: i, y: z, r: 250 }); // Obstacle diperbesar
+    });
+    // Left and right edges (x = 0 and x = ms)
+    if (i > 0 && i < ms) {
+      [0, ms].forEach(x => {
+        let rockGroup;
+        if (loadedModels.rocks_high) {
+          rockGroup = SkeletonUtils.clone(loadedModels.rocks_high);
+          rockGroup.scale.set(180, 250, 180);
+          rockGroup.position.set(x, -20, i);
+          rockGroup.rotation.y = Math.random() * Math.PI;
+          s.wildsGroup.add(rockGroup);
+        }
+        s.obstaclesWilds.push({ x: x, y: i, r: 250 });
+      });
+    }
+  }
 }
 
 // ─── Hometown generation ──────────────────────────────────────────────────────

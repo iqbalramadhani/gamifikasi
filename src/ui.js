@@ -1001,6 +1001,23 @@ export function useConsumable(id) {
   if (typeof window.updateInventoryUI === 'function') window.updateInventoryUI();
 }
 
+export function sellItem(id, sellPrice) {
+  const s = state;
+  if (!s.inventory || !s.inventory[id] || s.inventory[id] <= 0) return;
+  s.inventory[id]--;
+  s.gold += sellPrice;
+  playSound('coin');
+  const lootDef = Object.values(lootTable).find(l => l.id === id);
+  const itemName = lootDef ? lootDef.name : id;
+  const msgEl = document.getElementById('message');
+  if (msgEl) msgEl.textContent = `Terjual 1 ${itemName} seharga ${sellPrice}G!`;
+  const shopGold = document.getElementById('shop-gold');
+  if (shopGold) shopGold.textContent = s.gold;
+  if (typeof window.updateUI === 'function') window.updateUI();
+  updateInventoryUI();
+  if (typeof window.saveGame === 'function') window.saveGame(true);
+}
+
 export function sellAllLoot() {
   const s = state;
   let totalEarned = 0;

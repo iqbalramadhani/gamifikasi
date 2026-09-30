@@ -17,6 +17,9 @@ export const loadedModels = {
   char_k: null, char_l: null, char_m: null,
   char_n: null, char_o: null, char_p: null,
   char_q: null, char_r: null,
+  blob_alien: null, blob_birb: null, blob_cactoro: null,
+  blob_green: null, blob_green_spiky: null, blob_mushnub: null,
+  blob_pink: null, blob_yeti: null,
 };
 
 const modelsToLoad = [
@@ -55,6 +58,14 @@ const modelsToLoad = [
   { key: 'char_q', url: '/kenney_blocky-characters_20/Models/GLB format/character-q.glb' },
   { key: 'char_r', url: '/kenney_blocky-characters_20/Models/GLB format/character-r.glb' },
   { key: 'tent',     url: '/models/tent.glb' },
+  { key: 'blob_alien', url: '/monsterl1_10/Blob/glTF/Alien.gltf' },
+  { key: 'blob_birb', url: '/monsterl1_10/Blob/glTF/Birb.gltf' },
+  { key: 'blob_cactoro', url: '/monsterl1_10/Blob/glTF/Cactoro.gltf' },
+  { key: 'blob_green', url: '/monsterl1_10/Blob/glTF/GreenBlob.gltf' },
+  { key: 'blob_green_spiky', url: '/monsterl1_10/Blob/glTF/GreenSpikyBlob.gltf' },
+  { key: 'blob_mushnub', url: '/monsterl1_10/Blob/glTF/Mushnub.gltf' },
+  { key: 'blob_pink', url: '/monsterl1_10/Blob/glTF/PinkBlob.gltf' },
+  { key: 'blob_yeti', url: '/monsterl1_10/Blob/glTF/Yeti.gltf' },
 ];
 
 const fbxModelsToLoad = [

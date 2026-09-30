@@ -30,29 +30,14 @@ export const bootList = [
 ];
 
 export const enemyTemplates = [
-  { hp: 3,   speed: 1.5, r: 11, damage: 8,  typeStr: 'spike',    charKey: 'char_e' },
-  { hp: 1.5, speed: 1.5, r: 9,  damage: 5,  typeStr: 'slime',    charKey: 'char_f' },
-  { hp: 8,   speed: 1.5, r: 15, damage: 12, typeStr: 'golem',    charKey: 'char_g' },
-  { hp: 4,   speed: 1.5, r: 9,  damage: 10, typeStr: 'archer',   charKey: 'char_h' },
-  { hp: 2,   speed: 1.5, r: 9,  damage: 15, typeStr: 'kamikaze', charKey: 'char_i' },
-  { hp: 5,   speed: 1.5, r: 8,  damage: 8,  typeStr: 'ghost',    charKey: 'char_j' },
-  { hp: 6,   speed: 1.5, r: 12, damage: 10, typeStr: 'knight',   charKey: 'char_k' },
-  { hp: 3,   speed: 1.5, r: 8,  damage: 12, typeStr: 'mage',     charKey: 'char_l' },
-  { hp: 10,  speed: 1.5, r: 18, damage: 15, typeStr: 'warrior',  charKey: 'char_m' },
-  { hp: 4,   speed: 1.5, r: 8,  damage: 8,  typeStr: 'thief',    charKey: 'char_n' },
-  { hp: 12,  speed: 1.5, r: 16, damage: 18, typeStr: 'paladin',  charKey: 'char_o' },
-  { hp: 7,   speed: 1.5, r: 10, damage: 14, typeStr: 'necro',    charKey: 'char_p' },
-  { hp: 5,   speed: 1.5, r: 9,  damage: 10, typeStr: 'ranger',   charKey: 'char_q' },
-  { hp: 15,  speed: 1.5, r: 20, damage: 20, typeStr: 'demon',    charKey: 'char_r' },
-  { hp: 2,   speed: 1.5, r: 8,  damage: 5,  typeStr: 'zombie',   charKey: 'char_a' },
-  { hp: 4,   speed: 1.5, r: 10, damage: 7,  typeStr: 'skeleton', charKey: 'char_b' },
-  { hp: 6,   speed: 1.5, r: 12, damage: 12, typeStr: 'vampire',  charKey: 'char_c' },
-  { hp: 3,   speed: 1.5, r: 8,  damage: 6,  typeStr: 'goblin',   charKey: 'char_d' },
-  { hp: 8,   speed: 1.5, r: 15, damage: 12, typeStr: 'beast',    charKey: 'enemy' },
-  { hp: 25,  speed: 1.5, r: 25, damage: 25, typeStr: 'archdemon',charKey: 'char_r' },
-  { hp: 2,   speed: 2.0, r: 6,  damage: 6,  typeStr: 'bat',      charKey: 'char_j', isFlying: true },
-  { hp: 12,  speed: 1.2, r: 14, damage: 15, typeStr: 'gargoyle', charKey: 'enemy', isFlying: true },
-  { hp: 50,  speed: 1.0, r: 22, damage: 25, typeStr: 'dragon',   charKey: 'char_g' },
+  { hp: 4,   speed: 1.5, r: 9,  damage: 10, typeStr: 'archer',   charKey: 'blob_alien' },
+  { hp: 2,   speed: 1.5, r: 9,  damage: 15, typeStr: 'kamikaze', charKey: 'blob_birb', isFlying: true },
+  { hp: 3,   speed: 1.5, r: 11, damage: 8,  typeStr: 'spike',    charKey: 'blob_cactoro' },
+  { hp: 1.5, speed: 1.5, r: 9,  damage: 5,  typeStr: 'slime',    charKey: 'blob_green' },
+  { hp: 8,   speed: 1.5, r: 15, damage: 12, typeStr: 'golem',    charKey: 'blob_green_spiky' },
+  { hp: 5,   speed: 1.5, r: 8,  damage: 8,  typeStr: 'ghost',    charKey: 'blob_mushnub' },
+  { hp: 3,   speed: 1.5, r: 8,  damage: 12, typeStr: 'mage',     charKey: 'blob_pink' },
+  { hp: 10,  speed: 1.5, r: 18, damage: 15, typeStr: 'warrior',  charKey: 'blob_yeti' },
 ];
 
 export const lootTable = {
