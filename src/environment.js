@@ -92,7 +92,8 @@ export function updatePet(dt) {
   s.petMesh.position.z += (targetZ - s.petMesh.position.z) * 0.1 * dt;
   s.petMesh.rotation.y += 0.1 * dt;
 
-  // Pet occasionally fires at nearby enemies
+  // Pet occasionally fires at nearby enemies (Dinonaktifkan atas permintaan user)
+  /*
   if (Math.random() < 0.02) {
     let closest = null;
     let minDist = 200;
@@ -116,6 +117,7 @@ export function updatePet(dt) {
       playSound('shoot');
     }
   }
+  */
 }
 
 // ─── Teleport between scenes ──────────────────────────────────────────────────

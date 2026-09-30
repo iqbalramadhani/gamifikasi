@@ -78,6 +78,13 @@ export function move(dt) {
   if (s.gameOver || s.isPaused || !s.isGameStarted) return;
 
   let dx = 0, dy = 0;
+
+  if (s.player.attackHitDelay > 0) {
+    s.player.attackHitDelay -= dt;
+    if (s.player.attackHitDelay <= 0) {
+      doMeleeHit();
+    }
+  }
   if (s.keys.arrowup) dy += 1;
   if (s.keys.arrowdown) dy -= 1;
   if (s.keys.arrowleft) dx += 1;
@@ -112,7 +119,7 @@ export function move(dt) {
       playSound('spin');
       for (let i = s.enemies.length - 1; i >= 0; i--) {
         const e = s.enemies[i];
-        if (Math.hypot(e.x - s.player.x, e.y - s.player.y) < s.player.r + e.r + 120) {
+        if (Math.hypot(e.x - s.player.x, e.y - s.player.y) < s.player.r + e.r + 100) {
           e.hp -= s.player.attackDamage * 3;
           e.slowTimer = 90;
           e.stunTimer = 20;
@@ -243,60 +250,70 @@ function animatePlayer(walking) {
 export function attack() {
   const s = state;
   if (s.player.attackCooldown > 0 || s.gameOver || s.isPaused || !s.isGameStarted) return;
-  s.player.attackCooldown = 90; // Increased to allow full attack animation to play
-  playSound('dash'); // Swoosh sound for swing
+  s.player.attackCooldown = 90; // 1.5s total cooldown
+  s.player.attackHitDelay = 10; // Trigger damage early (halfway through the swing)
+  playSound('dash'); // Swoosh sound for swing starts immediately
+}
 
+function doMeleeHit() {
+  const s = state;
   let hitSomething = false;
 
   for (let i = s.enemies.length - 1; i >= 0; i--) {
     const e = s.enemies[i];
     const dist = Math.hypot(e.x - s.player.x, e.y - s.player.y);
     if (dist < s.player.r + e.r + 100) {
-      const angleToEnemy = Math.atan2(e.y - s.player.y, e.x - s.player.x);
-      const playerAngle = Math.atan2(s.player.facingY, s.player.facingX);
+      let dmg = s.player.attackDamage;
+      e.hp -= dmg;
+      e.slowTimer = 30;
+      e.stunTimer = 10;
+      hitSomething = true;
       
-      let angleDiff = angleToEnemy - playerAngle;
-      while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-      while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
-      
-      if (Math.abs(angleDiff) < Math.PI / 1.2) {
-        let dmg = s.player.attackDamage;
-        e.hp -= dmg;
-        e.slowTimer = 30;
-        e.stunTimer = 10;
-        hitSomething = true;
-        
-        spawnDamageText(e.x, e.mesh.position.y + 35, e.y, `-${dmg.toFixed(1)}`);
-        if (e.hp <= 0) killEnemy(i);
-        else spawnParticles(e.x, e.y, 0xffaa00, 5, 'hit');
-      }
+      spawnDamageText(e.x, e.mesh.position.y + 35, e.y, `-${dmg.toFixed(1)}`);
+      if (e.hp <= 0) killEnemy(i);
+      else spawnParticles(e.x, e.y, 0xffaa00, 5, 'hit');
     }
   }
 
   if (s.bossActive) {
     const dist = Math.hypot(s.bossX - s.player.x, s.bossY - s.player.y);
     if (dist < s.player.r + 150) {
-      const angleToEnemy = Math.atan2(s.bossY - s.player.y, s.bossX - s.player.x);
-      const playerAngle = Math.atan2(s.player.facingY, s.player.facingX);
-      
-      let angleDiff = angleToEnemy - playerAngle;
-      while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-      while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
-      
-      if (Math.abs(angleDiff) < Math.PI / 1.2) {
-        s.bossHp -= s.player.attackDamage;
-        hitSomething = true;
-        spawnDamageText(s.bossX, 50, s.bossY, `-${s.player.attackDamage.toFixed(1)}`);
-      }
+      s.bossHp -= s.player.attackDamage;
+      hitSomething = true;
+      spawnDamageText(s.bossX, 50, s.bossY, `-${s.player.attackDamage.toFixed(1)}`);
     }
   }
 
-  if (hitSomething) playSound('hit');
+  if (hitSomething) {
+    playSound('hit');
+    s.cameraShake = Math.max(s.cameraShake || 0, 8); // Screen shake on hit
+  }
   
-  // Show a swipe particle effect in front of player
-  const swipeX = s.player.x + s.player.facingX * 15;
-  const swipeY = s.player.y + s.player.facingY * 15;
-  spawnParticles(swipeX, swipeY, 0xffffff, 5, 'dust');
+  // Epic Slash Effect Mesh
+  const angle = Math.atan2(s.player.facingY, s.player.facingX);
+  const px = s.player.x + Math.cos(angle) * 40;
+  const pz = s.player.y + Math.sin(angle) * 40;
+  
+  const slashGeo = new THREE.BoxGeometry(10, 2, 180); // Wide blade of energy
+  const slashMat = new THREE.MeshBasicMaterial({ color: 0xffd700, transparent: true, opacity: 0.9 });
+  const slashMesh = new THREE.Mesh(slashGeo, slashMat);
+  
+  slashMesh.position.set(px, 15, pz);
+  slashMesh.rotation.y = -angle; // Align with facing direction
+  
+  s.scene.add(slashMesh);
+  
+  s.particles.push({
+    mesh: slashMesh,
+    dx: Math.cos(angle) * 12, // Fly forward
+    dy: Math.sin(angle) * 12, // mapped to Z in updateParticles
+    dz: 0,
+    life: 1.0,
+    decay: 0.08, // Fade out very fast
+  });
+
+  // Show dust kickup
+  spawnParticles(px, pz, 0xffffff, 8, 'dust');
 }
 
 // ─── Potion ───────────────────────────────────────────────────────────────────
