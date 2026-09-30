@@ -13,6 +13,7 @@
       <div class="title-nav">⚔️ The Lost Kingdom 3D</div>
       <div class="badge">❤️ HP: <span id="hp">100/100</span></div>
       <div class="badge">⚔️ ATK: <span id="atk">1</span></div>
+      <div class="badge" style="background: rgba(255, 200, 0, 0.5); border-color: #f1c40f;">✦ Crit: <span id="crit-chance">5.0%</span></div>
       <div class="badge">
         ⚡ SP: <span id="stamina-text">100/100</span>
         <div style="width: 100px; height: 5px; background: #555; margin-top: 5px; border-radius: 2px; overflow: hidden;">
@@ -24,6 +25,7 @@
 
       <div class="badge" id="side-quest-badge" style="display:none; background: #8e44ad; border-color: #9b59b6;">📜 Bounty: <span id="side-quest-text"></span></div>
       <div class="badge" id="zoom-badge" style="background: rgba(46, 204, 113, 0.6); border-color: #2ecc71;">🔍 Zoom: <span id="val-cam-z-hud">200</span></div>
+      <div class="badge" style="background: rgba(100, 100, 100, 0.6); border-color: #888;">🖥️ FPS: <span id="fps">60</span></div>
       
       <button onclick="saveGame()" style="margin-left: 15px; padding: 5px 15px; background-color: #27ae60; color: white; border: 2px solid #2ecc71; border-radius: 5px; font-weight: bold; cursor: pointer; text-shadow: 1px 1px 2px black; box-shadow: 0px 0px 10px rgba(46,204,113,0.5);">💾 Save Game</button>
       <span id="save-status" style="margin-left: 10px; color: #f1c40f; font-weight: bold; text-shadow: 1px 1px 2px black;"></span>
@@ -138,6 +140,18 @@
             <p>Harga: <span id="armor-cost" style="color:gold;">150</span> G</p>
             <button onclick="buyArmor()" id="btn-buy-armor" style="background:#555;">Tempa Armor</button>
           </div>
+          <div class="shop-item" style="border-color:#555; background:#222;">
+            <h3 style="color:#aaa;">🪖 Beli Helm</h3>
+            <p id="helmet-desc">Leather Cap (HP +10)</p>
+            <p>Harga: <span id="helmet-cost" style="color:gold;">200</span> G</p>
+            <button onclick="buyHelmet()" id="btn-buy-helmet" style="background:#555;">Tempa Helm</button>
+          </div>
+          <div class="shop-item" style="border-color:#555; background:#222;">
+            <h3 style="color:#aaa;">👢 Beli Boots</h3>
+            <p id="boots-desc">Traveler Boots (Speed +0.5)</p>
+            <p>Harga: <span id="boots-cost" style="color:gold;">150</span> G</p>
+            <button onclick="buyBoots()" id="btn-buy-boots" style="background:#555;">Tempa Boots</button>
+          </div>
         </div>
         <button onclick="closeBlacksmith()" style="margin-top: 15px; background: #c0392b;">Tutup</button>
       </div>
@@ -166,12 +180,31 @@
             <li style="margin-bottom: 10px;">⚔️ <strong style="color: #e74c3c;">Spasi (Space):</strong> Serangan Biasa (Tebasan)</li>
             <li style="margin-bottom: 10px;">🌀 <strong style="color: #e67e22;">Tombol X:</strong> Serangan Putar (Spin Attack) <small style="color: #aaa;">- Butuh 50 SP</small></li>
             <li style="margin-bottom: 10px;">⚡ <strong style="color: #9b59b6;">Tombol Z:</strong> Berlari Cepat (Dash) <small style="color: #aaa;">- Butuh 30 SP</small></li>
+            <li style="margin-bottom: 10px;">🦅 <strong style="color: #3498db;">Tombol V:</strong> Melompat (Jump) <small style="color: #aaa;">- Butuh 15 SP</small></li>
             <li style="margin-bottom: 10px;">🧪 <strong style="color: #2ecc71;">Tombol C:</strong> Gunakan Ramuan (Potion)</li>
             <li style="margin-bottom: 10px;">🎥 <strong style="color: #3498db;">Tombol Q / E:</strong> Putar Kamera</li>
             <li style="margin-bottom: 10px;">🔍 <strong style="color: #34495e;">Tombol + / - :</strong> Zoom Kamera</li>
           </ul>
         </div>
         <button class="ui-btn" onclick="closeTutorial()" style="margin-top: 20px; background: #2980b9; width: 100%;">Paham, Lanjut Main!</button>
+      </div>
+    </div>
+    
+    <!-- Full Map Modal -->
+    <div id="full-map-modal" class="modal" style="display: none; background: rgba(10,20,30,0.95); border: 2px solid #34495e; align-items:center; justify-content:center; z-index: 3000;">
+      <div class="modal-content" style="color: #ddd; width: 650px; padding: 20px;">
+        <h2 style="color:#2ecc71; margin-bottom: 5px; text-align: center;">🗺️ Peta Dunia (M)</h2>
+        <div style="display: flex; gap: 15px; justify-content: center; margin-bottom: 15px; font-size: 14px;">
+           <span style="color:white;">⚪ Pemain</span>
+           <span style="color:#00ffff;">🔵 Portal Desa</span>
+           <span style="color:#ff00ff;">🟣 Portal Hutan</span>
+           <span style="color:#ff0000;">🔴 BOS (The Golden Golem)</span>
+           <span style="color:#ffcc00;">🟡 NPC/Toko</span>
+        </div>
+        <div style="background: rgba(0,0,0,0.8); border: 2px solid #555; display: flex; justify-content: center; padding: 10px;">
+           <canvas id="fullmap-canvas" width="600" height="600" style="background: #1a3a1a;"></canvas>
+        </div>
+        <button class="ui-btn" onclick="closeFullMap()" style="margin-top: 15px; background: #c0392b; width: 100%;">Tutup Peta</button>
       </div>
     </div>
     
@@ -206,6 +239,10 @@
            <h3 style="margin-top:0; margin-bottom:10px; color:#aaa; font-size: 16px;">🛡️ Equipment</h3>
            <div id="equipment-content"></div>
         </div>
+        <div id="crafting-list" style="background: rgba(0,0,0,0.5); padding: 15px; border-radius: 5px; min-height: 100px; margin-top: 15px;">
+           <h3 style="margin-top:0; margin-bottom:10px; color:#aaa; font-size: 16px;">🔨 Crafting</h3>
+           <div id="crafting-content"></div>
+        </div>
         <div id="inventory-list" style="background: rgba(0,0,0,0.5); padding: 15px; border-radius: 5px; min-height: 150px; margin-top: 15px; max-height: 300px; overflow-y: auto;">
            <!-- Dynamic items -->
         </div>
@@ -220,7 +257,10 @@
         <div id="quest-content" style="background: rgba(0,0,0,0.5); padding: 15px; border-radius: 5px; min-height: 100px; margin-top: 15px;">
            <p style="color: #ccc; margin-top:0;">Dibutuhkan Petualang Tangguh!</p>
            <h3 id="quest-title" style="color: #e74c3c;">Basmi 5 Monster</h3>
+           <p id="quest-desc" style="color:#888;font-size:12px;">Kalahkan 5 musuh</p>
+           <p>Progress: <span id="quest-progress" style="color:#f1c40f;">0/5</span></p>
            <p>Hadiah: <span id="quest-reward" style="color: gold; font-weight: bold;">150 G</span> & <span style="color: #3498db; font-weight: bold;">EXP</span></p>
+           <div id="quest-history" style="margin-top:10px;"></div>
            <button id="btn-quest-action" class="ui-btn" onclick="acceptQuest()" style="background: #27ae60; width: 100%; margin-top: 10px;">Terima Misi</button>
         </div>
         <button class="ui-btn" onclick="closeQuestBoard()" style="margin-top: 15px; background: #555; width: 100%;">Tutup</button>

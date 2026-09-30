@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { state } from './state.js';
-import { mapSize, weaponList, armorList, lootTable } from './constants.js';
+import { mapSize, weaponList, armorList, helmetList, bootList, lootTable, consumableItems } from './constants.js';
 import { playSound } from './audio.js';
 import { blocked, spawnParticles, checkItems } from './helpers.js';
 
@@ -25,6 +25,8 @@ export function updateUI() {
   
   const atkEl = document.getElementById('atk');
   if (atkEl) atkEl.textContent = s.player.attackDamage;
+  const critEl = document.getElementById('crit-chance');
+  if (critEl) critEl.textContent = `${(s.critChance * 100).toFixed(1)}%`;
   
   const curStamina = Math.floor(s.player.stamina);
   const staminaTextEl = document.getElementById('stamina-text');
@@ -80,25 +82,68 @@ export function drawMinimap() {
   const scale = 150 / mapSize;
   const s = state;
 
-  // Altar
-  ctx.fillStyle = 'yellow';
+  // Background
+  ctx.fillStyle = s.currentScene === 'hometown' ? '#2d4f30' : '#1a3a1a';
+  ctx.fillRect(0, 0, 150, 150);
+
+  // Altar (center of wilds)
+  ctx.fillStyle = '#ffd700';
   ctx.fillRect((mapSize / 2) * scale - 3, (mapSize / 2) * scale - 3, 6, 6);
 
-
-  // Enemies
-  ctx.fillStyle = 'red';
-  s.enemies.forEach(e => ctx.fillRect(e.x * scale - 1, e.y * scale - 1, 3, 3));
-
-  if (s.bossActive) {
-    ctx.fillStyle = 'purple';
-    ctx.fillRect(s.bossX * scale - 4, s.bossY * scale - 4, 8, 8);
+  // Portals
+  if (s.hometownPortal) {
+    ctx.fillStyle = '#00ffff';
+    ctx.fillRect(s.hometownPortal.position.x * scale - 3, s.hometownPortal.position.z * scale - 3, 6, 6);
+  }
+  if (s.wildsPortal) {
+    ctx.fillStyle = '#ff00ff';
+    ctx.fillRect(s.wildsPortal.position.x * scale - 3, s.wildsPortal.position.z * scale - 3, 6, 6);
   }
 
-  // Player
-  ctx.fillStyle = 'white';
+  // Nearby enemies (max 15 for performance)
+  const nearby = s.enemies
+    .filter(e => Math.hypot(e.x - s.player.x, e.y - s.player.y) < 1500)
+    .sort((a, b) => Math.hypot(a.x - s.player.x, a.y - s.player.y) - Math.hypot(b.x - s.player.x, b.y - s.player.y))
+    .slice(0, 15);
+  ctx.fillStyle = '#ff4444';
+  nearby.forEach(e => ctx.fillRect(e.x * scale - 1.5, e.y * scale - 1.5, 3, 3));
+
+  // Boss
+  if (s.bossActive) {
+    ctx.fillStyle = '#ff0000';
+    ctx.fillRect(s.bossX * scale - 5, s.bossY * scale - 5, 10, 10);
+  }
+
+  // NPCs (shop, healer, blacksmith)
+  const npcColor = '#ffcc00';
+  [s.shopNPC, s.healerNPC, s.blacksmithNPC].forEach(npc => {
+    if (npc && npc.position) {
+      ctx.fillStyle = npcColor;
+      ctx.fillRect(npc.position.x * scale - 2, npc.position.z * scale - 2, 4, 4);
+    }
+  });
+
+  // Player (centered, always)
+  const px = 75, py = 75;
+  ctx.fillStyle = '#ffffff';
   ctx.beginPath();
-  ctx.arc(s.player.x * scale, s.player.y * scale, 3, 0, Math.PI * 2);
+  ctx.arc(px, py, 4, 0, Math.PI * 2);
   ctx.fill();
+
+  // Direction indicator
+  const dirLen = 8;
+  const dirAngle = Math.atan2(s.player.facingX, s.player.facingY);
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(px, py);
+  ctx.lineTo(px + Math.sin(dirAngle) * dirLen, py - Math.cos(dirAngle) * dirLen);
+  ctx.stroke();
+
+  // Border
+  ctx.strokeStyle = '#555';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(0, 0, 150, 150);
 }
 
 // ─── Interaction check ────────────────────────────────────────────────────────
@@ -343,6 +388,34 @@ export function updateBlacksmithUI() {
     document.getElementById('btn-buy-armor').disabled = true;
     document.getElementById('btn-buy-armor').textContent = 'Max Level';
   }
+
+  const highestH = Math.max(...s.ownedHelmets);
+  const hNext = helmetList[highestH + 1];
+  if (hNext) {
+    document.getElementById('helmet-desc').textContent = `${hNext.name} (HP +${hNext.hp})`;
+    document.getElementById('helmet-cost').textContent = hNext.cost;
+    document.getElementById('btn-buy-helmet').disabled = s.gold < hNext.cost;
+    document.getElementById('btn-buy-helmet').textContent = 'Tempa Helm';
+  } else {
+    document.getElementById('helmet-desc').textContent = 'Max Level';
+    document.getElementById('helmet-cost').textContent = '-';
+    document.getElementById('btn-buy-helmet').disabled = true;
+    document.getElementById('btn-buy-helmet').textContent = 'Max Level';
+  }
+
+  const highestB = Math.max(...s.ownedBoots);
+  const bNext = bootList[highestB + 1];
+  if (bNext) {
+    document.getElementById('boots-desc').textContent = `${bNext.name} (Speed +${bNext.speed})`;
+    document.getElementById('boots-cost').textContent = bNext.cost;
+    document.getElementById('btn-buy-boots').disabled = s.gold < bNext.cost;
+    document.getElementById('btn-buy-boots').textContent = 'Tempa Boots';
+  } else {
+    document.getElementById('boots-desc').textContent = 'Max Level';
+    document.getElementById('boots-cost').textContent = '-';
+    document.getElementById('btn-buy-boots').disabled = true;
+    document.getElementById('btn-buy-boots').textContent = 'Max Level';
+  }
 }
 
 export function buyWeapon() {
@@ -357,6 +430,38 @@ export function buyWeapon() {
     
     playSound('boss_spawn');
     equipWeapon(wNextIdx);
+    updateBlacksmithUI();
+    updateUI();
+    if (typeof window.saveGame === 'function') window.saveGame(true);
+  }
+}
+
+export function buyHelmet() {
+  const s = state;
+  const highestOwned = Math.max(...s.ownedHelmets);
+  const hNextIdx = highestOwned + 1;
+  const hNext = helmetList[hNextIdx];
+  if (hNext && s.gold >= hNext.cost) {
+    s.gold -= hNext.cost;
+    s.ownedHelmets.push(hNextIdx);
+    playSound('coin');
+    equipHelmet(hNextIdx);
+    updateBlacksmithUI();
+    updateUI();
+    if (typeof window.saveGame === 'function') window.saveGame(true);
+  }
+}
+
+export function buyBoots() {
+  const s = state;
+  const highestOwned = Math.max(...s.ownedBoots);
+  const bNextIdx = highestOwned + 1;
+  const bNext = bootList[bNextIdx];
+  if (bNext && s.gold >= bNext.cost) {
+    s.gold -= bNext.cost;
+    s.ownedBoots.push(bNextIdx);
+    playSound('coin');
+    equipBoots(bNextIdx);
     updateBlacksmithUI();
     updateUI();
     if (typeof window.saveGame === 'function') window.saveGame(true);
@@ -440,6 +545,33 @@ window.equipArmor = (idx) => {
   updateInventoryUI();
 };
 
+window.equipHelmet = (idx) => {
+  const s = state;
+  if (!s.ownedHelmets.includes(idx)) return;
+  const prevHp = helmetList[s.currentHelmet]?.hp ?? 0;
+  s.currentHelmet = idx;
+  const hNext = helmetList[idx];
+  const hpDiff = hNext.hp - prevHp;
+  s.player.maxHp += hpDiff;
+  s.player.hp += hpDiff;
+  if (typeof window.updateUI === 'function') window.updateUI();
+  if (typeof window.updateInventoryUI === 'function') window.updateInventoryUI();
+  if (typeof window.saveGame === 'function') window.saveGame(true);
+};
+
+window.equipBoots = (idx) => {
+  const s = state;
+  if (!s.ownedBoots.includes(idx)) return;
+  const prevSpeed = bootList[s.currentBoots]?.speed ?? 0;
+  s.currentBoots = idx;
+  const bNext = bootList[idx];
+  const speedDiff = bNext.speed - prevSpeed;
+  s.player.speed += speedDiff;
+  if (typeof window.updateUI === 'function') window.updateUI();
+  if (typeof window.updateInventoryUI === 'function') window.updateInventoryUI();
+  if (typeof window.saveGame === 'function') window.saveGame(true);
+};
+
 // ─── Level up ──────────────────────────────────────────────────────────────────
 
 export function levelUp() {
@@ -485,6 +617,7 @@ export function addStat(type) {
       s.player.speed += 0.3;
       s.player.maxStamina += 20;
       s.player.stamina += 20;
+      s.critChance = Math.min(0.6, s.critChance + 0.005);
     } else if (type === 'vit') {
       s.player.maxHp += 30;
       s.player.hp += 30;
@@ -510,16 +643,43 @@ export function updateStatsUI() {
   }
 }
 
+// Multi-stage quest definitions
+const QUEST_STAGES = [
+  { id: 1, name: 'Basmi 5 Monster', desc: 'Kalahkan 5 musuh', count: 5, reward: 100, expReward: 50 },
+  { id: 2, name: 'Kumpulkan Bahan', desc: 'Kumpulkan 3 Iron Shard', count: 3, reward: 250, expReward: 100, itemReq: 'iron_shard' },
+  { id: 3, name: 'Kalahkan Boss', desc: 'Kalahkan The Golden Golem', count: 1, reward: 500, expReward: 200 },
+];
+
 export function openQuestBoard() {
   document.getElementById('quest-board').style.display = 'flex';
   const s = state;
-  if (!s.bountyQuest) {
-    s.bountyQuest = { count: 5 + Math.floor(Math.random() * 10), reward: 50 + Math.floor(Math.random() * 100) };
-    s.bountyQuestProgress = 0;
+
+  // Initialize quest state if needed
+  if (s.questStage === 0 && !s.bountyQuest) {
+    s.bountyQuest = { ...QUEST_STAGES[0] };
+    s.questCompleted = [];
   }
-  document.getElementById('quest-title').textContent = `Basmi ${s.bountyQuest.count} Monster`;
-  document.getElementById('quest-reward').textContent = `${s.bountyQuest.reward} G`;
-  
+
+  // Show current quest
+  const currentQuest = s.bountyQuest;
+  if (currentQuest) {
+    document.getElementById('quest-title').textContent = currentQuest.name;
+    document.getElementById('quest-desc').textContent = currentQuest.desc;
+    document.getElementById('quest-reward').textContent = `${currentQuest.reward} G + ${currentQuest.expReward} EXP`;
+    document.getElementById('quest-progress').textContent = `${s.bountyQuestProgress}/${currentQuest.count}`;
+  }
+
+  // Show quest history
+  const historyEl = document.getElementById('quest-history');
+  if (historyEl) {
+    if (s.questCompleted.length > 0) {
+      historyEl.innerHTML = '<p style="color:#2ecc71;font-size:12px;margin:5px 0;">✅ Selesai:</p>' +
+        s.questCompleted.map(id => `<p style="color:#888;font-size:11px;">• ${QUEST_STAGES[id-1]?.name}</p>`).join('');
+    } else {
+      historyEl.innerHTML = '';
+    }
+  }
+
   const btn = document.getElementById('btn-quest-action');
   if (s.bountyQuestProgress >= s.bountyQuest.count) {
     btn.textContent = 'Klaim Hadiah';
@@ -544,12 +704,20 @@ export function claimQuest() {
   const s = state;
   if (s.bountyQuest && s.bountyQuestProgress >= s.bountyQuest.count) {
     s.gold += s.bountyQuest.reward;
-    s.player.exp += s.bountyQuest.reward;
+    s.player.exp += s.bountyQuest.expReward;
     playSound('coin');
     spawnParticles(s.player.x, s.player.y, 0xffff00, 30, 'heal');
-    s.bountyQuest = null;
+    s.questCompleted.push(s.bountyQuest.id);
     s.bountyQuestProgress = 0;
-    document.getElementById('side-quest-badge').style.display = 'none';
+
+    // Advance to next quest stage
+    const nextStage = QUEST_STAGES[s.bountyQuest.id];
+    if (nextStage && s.bountyQuest.id < QUEST_STAGES.length) {
+      s.bountyQuest = { ...QUEST_STAGES[s.bountyQuest.id] };
+    } else {
+      s.bountyQuest = null;
+      document.getElementById('side-quest-badge').style.display = 'none';
+    }
     closeQuestBoard();
     updateUI();
     if (s.player.exp >= s.player.nextExp) levelUp();
@@ -566,6 +734,8 @@ export function updateQuestUI() {
     document.getElementById('side-quest-text').textContent = `${s.bountyQuestProgress} / ${s.bountyQuest.count}`;
   }
 }
+
+window.useConsumable = useConsumable;
 
 export function openInventory() {
   const el = document.getElementById('inventory-menu');
@@ -606,15 +776,74 @@ export function updateInventoryUI() {
       const countSpan = document.createElement('span');
       countSpan.textContent = `x${count}`;
       countSpan.style.color = '#f1c40f';
-      
+
       div.appendChild(nameSpan);
       div.appendChild(countSpan);
+
+      // Add "Sell" button
+      if (lootDef) {
+        const sellBtn = document.createElement('button');
+        const sellPrice = Math.floor(lootDef.value * 0.8);
+        sellBtn.textContent = `Jual (${sellPrice}G)`;
+        sellBtn.style.padding = '2px 8px';
+        sellBtn.style.background = '#e67e22';
+        sellBtn.style.marginLeft = '8px';
+        sellBtn.onclick = () => sellItem(id, sellPrice);
+        div.appendChild(sellBtn);
+      }
+
+      // Add "Use" button for consumable items
+      const consumableDef = Object.values(consumableItems).find(c => c.id === id);
+      if (consumableDef && count > 0) {
+        const useBtn = document.createElement('button');
+        useBtn.textContent = 'Gunakan';
+        useBtn.style.padding = '2px 8px';
+        useBtn.style.background = '#27ae60';
+        useBtn.style.marginLeft = '8px';
+        useBtn.onclick = () => window.useConsumable(id);
+        div.appendChild(useBtn);
+      }
+
       listEl.appendChild(div);
     }
   }
-  
+
   if (!hasItems) {
     listEl.innerHTML = '<p style="text-align:center; color:#888;">Tas kosong...</p>';
+  }
+
+  // Crafting section
+  const craftEl = document.getElementById('crafting-content');
+  if (craftEl) {
+    craftEl.innerHTML = '';
+    const recipes = [
+      { name: 'Health Potion', icon: '🧪', ingredients: { wood_scrap: 2, slime_gel: 1 }, result: 'health_potion' },
+      { name: 'Antidote', icon: '🧪', ingredients: { bone: 3, magic_dust: 1 }, result: 'antidote' },
+      { name: 'Cooling Tea', icon: '🍵', ingredients: { iron_shard: 2, golem_core: 1 }, result: 'cooling_tea' },
+      { name: 'Health Crystal', icon: '💎', ingredients: { demon_horn: 1, hell_fire: 1, holy_gem: 1 }, result: 'health_crystal' },
+    ];
+    recipes.forEach(recipe => {
+      const canCraft = Object.entries(recipe.ingredients).every(([id, count]) => (s.inventory[id] ?? 0) >= count);
+      const div = document.createElement('div');
+      div.style.display = 'flex';
+      div.style.justifyContent = 'space-between';
+      div.style.alignItems = 'center';
+      div.style.padding = '5px 0';
+      div.style.borderBottom = '1px solid #444';
+      const ingText = Object.entries(recipe.ingredients).map(([id, count]) => {
+        const loot = Object.values(lootTable).find(l => l.id === id);
+        return `${loot ? loot.icon : id} x${count}`;
+      }).join(' + ');
+      div.innerHTML = `<span>${recipe.icon} ${recipe.name} <span style="color:#888; font-size:12px;">(${ingText})</span></span>`;
+      const btn = document.createElement('button');
+      btn.textContent = 'Craft';
+      btn.disabled = !canCraft;
+      btn.style.padding = '2px 8px';
+      btn.style.background = canCraft ? '#27ae60' : '#555';
+      btn.onclick = () => craftItem(recipe.result, recipe.ingredients);
+      div.appendChild(btn);
+      craftEl.appendChild(div);
+    });
   }
 
   // Update Equipment section
@@ -663,7 +892,113 @@ export function updateInventoryUI() {
       div.appendChild(btn);
       eqEl.appendChild(div);
     });
+
+    // Helmets
+    s.ownedHelmets.forEach(idx => {
+      const h = helmetList[idx];
+      const isEquipped = s.currentHelmet === idx;
+      const div = document.createElement('div');
+      div.style.display = 'flex';
+      div.style.justifyContent = 'space-between';
+      div.style.padding = '5px 0';
+      div.style.borderBottom = '1px solid #444';
+      div.innerHTML = `<span>🪖 ${h.name} <span style="color:#888; font-size:12px;">(+${h.hp} HP)</span></span>`;
+      const btn = document.createElement('button');
+      btn.textContent = isEquipped ? 'Dipakai' : 'Pakai';
+      btn.disabled = isEquipped;
+      btn.style.padding = '2px 8px';
+      btn.style.background = isEquipped ? '#27ae60' : '#3498db';
+      btn.onclick = () => window.equipHelmet(idx);
+      div.appendChild(btn);
+      eqEl.appendChild(div);
+    });
+
+    // Boots
+    s.ownedBoots.forEach(idx => {
+      const b = bootList[idx];
+      const isEquipped = s.currentBoots === idx;
+      const div = document.createElement('div');
+      div.style.display = 'flex';
+      div.style.justifyContent = 'space-between';
+      div.style.padding = '5px 0';
+      div.style.borderBottom = '1px solid #444';
+      div.innerHTML = `<span>👢 ${b.name} <span style="color:#888; font-size:12px;">(+${b.speed} Speed)</span></span>`;
+      const btn = document.createElement('button');
+      btn.textContent = isEquipped ? 'Dipakai' : 'Pakai';
+      btn.disabled = isEquipped;
+      btn.style.padding = '2px 8px';
+      btn.style.background = isEquipped ? '#27ae60' : '#3498db';
+      btn.onclick = () => window.equipBoots(idx);
+      div.appendChild(btn);
+      eqEl.appendChild(div);
+    });
   }
+}
+
+export function craftItem(resultId, ingredients) {
+  const s = state;
+  // Check if player has enough ingredients
+  for (const [id, count] of Object.entries(ingredients)) {
+    if ((s.inventory[id] ?? 0) < count) return;
+  }
+  // Remove ingredients
+  for (const [id, count] of Object.entries(ingredients)) {
+    s.inventory[id] -= count;
+  }
+  // Add result
+  s.inventory[resultId] = (s.inventory[resultId] ?? 0) + 1;
+  playSound('coin');
+  if (typeof window.updateInventoryUI === 'function') window.updateInventoryUI();
+  if (typeof window.saveGame === 'function') window.saveGame(true);
+  const msgEl = document.getElementById('message');
+  if (msgEl) msgEl.textContent = '✅ Crafting berhasil!';
+}
+
+export function useConsumable(id) {
+  const s = state;
+  const def = consumableItems[id];
+  if (!def || !s.inventory || !s.inventory[id] || s.inventory[id] <= 0) return;
+
+  const now = Date.now();
+  if (now - (s.lastCrystalUse || 0) < def.cooldown * 16.667) {
+    const msgEl = document.getElementById('message');
+    if (msgEl) msgEl.textContent = '⏳ Item ini masih cooldown!';
+    return;
+  }
+
+  s.inventory[id]--;
+
+  if (def.effect === 'heal') {
+    s.player.hp = Math.min(s.player.maxHp, s.player.hp + def.value);
+    s.lastCrystalUse = now;
+    playSound('coin');
+    spawnParticles(s.player.x, s.player.y, 0x00ff00, 10, 'heal');
+    const msgEl = document.getElementById('message');
+    if (msgEl) msgEl.textContent = `💎 ${def.name} digunakan! (+${def.value} HP)`;
+  } else if (def.effect === 'cure_poison') {
+    if (s.player.statusEffect && s.player.statusEffect.type === 'poison') {
+      s.player.statusEffect = null;
+      playSound('coin');
+      const msgEl = document.getElementById('message');
+      if (msgEl) msgEl.textContent = '✅ Racun berhasil diobati!';
+    } else {
+      const msgEl = document.getElementById('message');
+      if (msgEl) msgEl.textContent = 'Anda tidak sedang diracun.';
+    }
+  } else if (def.effect === 'cure_burn') {
+    if (s.player.statusEffect && s.player.statusEffect.type === 'burn') {
+      s.player.statusEffect = null;
+      playSound('coin');
+      const msgEl = document.getElementById('message');
+      if (msgEl) msgEl.textContent = '✅ Luka bakar berhasil diobati!';
+    } else {
+      const msgEl = document.getElementById('message');
+      if (msgEl) msgEl.textContent = 'Anda tidak sedang terbakar.';
+    }
+  }
+
+  if (typeof window.updateUI === 'function') window.updateUI();
+  if (typeof window.updateInventoryUI === 'function') window.updateInventoryUI();
 }
 
 export function sellAllLoot() {
@@ -718,7 +1053,7 @@ window.zoomCamera = function(dir) {
 window.addEventListener('keydown', e => {
   const key = e.key.toLowerCase();
   state.keys[key] = true;
-  if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'shift', 'z', 'x', 'c', 'v', 'tab', 'f', 'i', '=', '-'].includes(key)) {
+  if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'shift', 'z', 'x', 'c', 'v', 'tab', 'f', 'i', 'm', '=', '-'].includes(key)) {
     e.preventDefault();
   }
   if (key === 'escape' && typeof window.togglePause === 'function') window.togglePause();
@@ -726,6 +1061,11 @@ window.addEventListener('keydown', e => {
     const invEl = document.getElementById('inventory-menu');
     if (invEl && invEl.style.display === 'flex') closeInventory();
     else openInventory();
+  }
+  if (key === 'm') {
+    const mapEl = document.getElementById('full-map-modal');
+    if (mapEl && mapEl.style.display === 'flex') closeFullMap();
+    else openFullMap();
   }
   // Zoom: + = zoom in, - = zoom out
   if (key === '=' || key === '+') {
@@ -751,4 +1091,87 @@ export function openTutorial() {
 export function closeTutorial() {
   state.isPaused = false;
   document.getElementById('tutorial-modal').style.display = 'none';
+}
+
+// ─── Full Map ─────────────────────────────────────────────────────────────────
+
+export function openFullMap() {
+  state.isPaused = true;
+  document.getElementById('full-map-modal').style.display = 'flex';
+  drawFullMap();
+}
+
+export function closeFullMap() {
+  state.isPaused = false;
+  document.getElementById('full-map-modal').style.display = 'none';
+}
+
+export function drawFullMap() {
+  const canvas = document.getElementById('fullmap-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  
+  const mapWidth = 600;
+  const mapHeight = 600;
+  ctx.clearRect(0, 0, mapWidth, mapHeight);
+
+  // Background
+  ctx.fillStyle = '#1a3a1a';
+  ctx.fillRect(0, 0, mapWidth, mapHeight);
+
+  const scale = mapWidth / mapSize;
+  const s = state;
+
+  // Altar (Center)
+  ctx.fillStyle = '#ffd700';
+  ctx.fillRect((mapSize / 2) * scale - 4, (mapSize / 2) * scale - 4, 8, 8);
+
+  // Portals
+  if (s.hometownPortal) {
+    ctx.fillStyle = '#00ffff'; // Desa
+    ctx.beginPath();
+    ctx.arc(s.hometownPortal.position.x * scale, s.hometownPortal.position.z * scale, 6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  if (s.wildsPortal) {
+    ctx.fillStyle = '#ff00ff'; // Hutan
+    ctx.beginPath();
+    ctx.arc(s.wildsPortal.position.x * scale, s.wildsPortal.position.z * scale, 6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Boss
+  if (s.bossActive || (s.bossX && s.bossY)) {
+    ctx.fillStyle = '#ff0000';
+    ctx.fillRect(s.bossX * scale - 8, s.bossY * scale - 8, 16, 16);
+  }
+
+  // NPCs
+  const npcColor = '#ffcc00';
+  [s.shopNPC, s.healerNPC, s.blacksmithNPC].forEach(npc => {
+    if (npc && npc.position) {
+      ctx.fillStyle = npcColor;
+      ctx.beginPath();
+      ctx.arc(npc.position.x * scale, npc.position.z * scale, 5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  });
+
+  // Player
+  ctx.fillStyle = '#ffffff';
+  const px = s.player.x * scale;
+  const py = s.player.y * scale;
+  ctx.beginPath();
+  ctx.arc(px, py, 6, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Direction indicator
+  const dirLen = 12;
+  const dirAngle = Math.atan2(s.player.facingX, s.player.facingY);
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(px, py);
+  ctx.lineTo(px + Math.sin(dirAngle) * dirLen, py - Math.cos(dirAngle) * dirLen);
+  ctx.stroke();
 }

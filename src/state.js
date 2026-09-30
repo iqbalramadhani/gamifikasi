@@ -51,8 +51,10 @@ export const state = {
     attackCooldown: 0, defending: false,
     walkCycle: 0, dashCooldown: 0, spinCooldown: 0,
     isDashing: 0, isSpinning: 0, spinAngle: 0,
+    statusEffect: null,
     level: 1, exp: 0, nextExp: 20, statPoints: 0,
     stats: { str: 1, agi: 1, vit: 1 },
+    attackHitDelay: 0,
     height: 0, heightVelocity: 0, lastFootstep: 0,
   },
 
@@ -64,12 +66,22 @@ export const state = {
   currentArmor: 0,
   ownedWeapons: [0],
   ownedArmors: [0],
+  currentHelmet: 0,
+  currentBoots: 0,
+  ownedHelmets: [0],
+  ownedBootss: [0],
+  ownedBoots: [0],
+
+  critChance: 0.05,
+  critMultiplier: 2.0,
 
   gold: 0,
   potions: 0,
 
   bountyQuest: null,
   bountyQuestProgress: 0,
+  questStage: 0,
+  questCompleted: [],
 
   // Collections (populated at runtime)
   obstaclesHometown: [],
@@ -122,5 +134,7 @@ export const state = {
 
   // BGM flag
   bgmStarted: false,
+
+  lastCrystalUse: 0,
 };
 

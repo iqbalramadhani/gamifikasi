@@ -1,11 +1,32 @@
 import * as THREE from 'three';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { state } from './state.js';
-import { mapSize, weaponList, armorList, enemyTemplates, lootTable } from './constants.js';
+import { mapSize, weaponList, armorList, enemyTemplates, lootTable, consumableItems, statusEffects } from './constants.js';
 import { loadedModels } from './model-loader.js';
 import { blocked, spawnParticles, spawnDamageText } from './helpers.js';
 import { spawnAtFreePos, getTerrainHeight } from './scenes.js';
 import { playSound } from './audio.js';
+
+// ─── Critical hit helper ──────────────────────────────────────────────────────
+
+export function calcCritDamage(baseDmg) {
+  const s = state;
+  if (Math.random() < s.critChance) {
+    return { value: Math.ceil(baseDmg * s.critMultiplier), isCrit: true };
+  }
+  return { value: baseDmg, isCrit: false };
+}
+
+export function applyStatusEffect(enemy, type) {
+  const def = statusEffects[type];
+  if (!def) return;
+  enemy.statusEffect = {
+    type,
+    damage: def.damage,
+    duration: def.duration,
+    tickTimer: def.tickInterval,
+  };
+}
 
 // ─── Enemy spawner (called by initEntities + game loop) ──────────────────────
 
@@ -17,24 +38,32 @@ export function spawnEnemy(ex, ey, scaleFactor = 1.0, isBossChild = false) {
   }
 
   const tmpl = enemyTemplates[Math.floor(Math.random() * enemyTemplates.length)];
-  let { hp, speed: baseSpeed, r: eR, typeStr } = tmpl;
+  let { hp, speed: baseSpeed, r: eR, typeStr, isFlying, damage } = tmpl;
+
+  // Dragon only spawns at level 8+
+  if (typeStr === 'dragon' && s.player.level < 8) {
+    const adjusted = enemyTemplates.filter(t => t.typeStr !== 'dragon');
+    const altTmpl = adjusted[Math.floor(Math.random() * adjusted.length)];
+    ({ hp, speed: baseSpeed, r: eR, typeStr, isFlying, damage } = altTmpl);
+  }
+
   const charKey = tmpl.charKey;
 
   let mesh, eY;
 
-  if (loadedModels[charKey]) {
-    const gltfEnemy = SkeletonUtils.clone(loadedModels[charKey]);
-    gltfEnemy.scale.set(22 * scaleFactor, 22 * scaleFactor, 22 * scaleFactor);
-    gltfEnemy.position.y = -12;
-    mesh = new THREE.Group();
-    mesh.add(gltfEnemy);
-    eY = 15;
-  } else {
-    const boxGeo = new THREE.BoxGeometry(20 * scaleFactor, 20 * scaleFactor, 20 * scaleFactor);
-    const boxMat = new THREE.MeshLambertMaterial({ color: 0xff0000 });
-    mesh = new THREE.Mesh(boxGeo, boxMat);
-    eY = 10;
-  }
+    if (loadedModels[charKey]) {
+      const gltfEnemy = SkeletonUtils.clone(loadedModels[charKey]);
+      gltfEnemy.scale.set(22 * scaleFactor, 22 * scaleFactor, 22 * scaleFactor);
+      gltfEnemy.position.y = -12;
+      mesh = new THREE.Group();
+      mesh.add(gltfEnemy);
+      eY = isFlying ? 35 : 15;
+    } else {
+      const boxGeo = new THREE.BoxGeometry(20 * scaleFactor, 20 * scaleFactor, 20 * scaleFactor);
+      const boxMat = new THREE.MeshLambertMaterial({ color: 0xff0000 });
+      mesh = new THREE.Mesh(boxGeo, boxMat);
+      eY = isFlying ? 30 : 10;
+    }
 
   const levelMulti = 1 + s.player.level * 0.1;
   hp *= levelMulti;
@@ -62,12 +91,14 @@ export function spawnEnemy(ex, ey, scaleFactor = 1.0, isBossChild = false) {
   });
   s.enemies.push({
     x: ex, y: ey, r: eR, meshY: eY, dx, dy,
-    hp, maxHp: hp, baseSpeed,
+    hp, maxHp: hp, baseSpeed, damage: damage || 10,
     mesh, hpGroup, hpFg,
     stunTimer: 0, slowTimer: 0, type: typeStr,
     attackTimer: 0, walkCycle: Math.random() * Math.PI * 2,
     limbs,
     isBossChild,
+    isFlying: !!isFlying,
+    age: 0
   });
 }
 
@@ -120,19 +151,28 @@ export function move(dt) {
       for (let i = s.enemies.length - 1; i >= 0; i--) {
         const e = s.enemies[i];
         if (Math.hypot(e.x - s.player.x, e.y - s.player.y) < s.player.r + e.r + 100) {
-          e.hp -= s.player.attackDamage * 3;
+          const spinCrit = calcCritDamage(s.player.attackDamage * 3);
+          e.hp -= spinCrit.value;
           e.slowTimer = 90;
           e.stunTimer = 20;
           // knockback removed
-          spawnDamageText(e.x, e.mesh.position.y + 35, e.y, `-${s.player.attackDamage * 3}`);
+          const spinColor = spinCrit.isCrit ? '#ffff00' : '#ff4444';
+          const spinLabel = spinCrit.isCrit ? `CRIT! -${spinCrit.value}` : `-${spinCrit.value}`;
+          spawnDamageText(e.x, e.mesh.position.y + 35, e.y, spinLabel, spinColor);
           if (e.hp <= 0) killEnemy(i);
-          else spawnParticles(e.x, e.y, 0xffaa00, 5, 'hit');
+          else {
+            if (spinCrit.isCrit) spawnParticles(e.x, e.y, 0xffff00, 8, 'hit');
+            else spawnParticles(e.x, e.y, 0xffaa00, 5, 'hit');
+          }
         }
       }
       if (s.bossActive && Math.hypot(s.bossX - s.player.x, s.bossY - s.player.y) < s.player.r + 150) {
-        s.bossHp -= s.player.attackDamage * 3;
+        const bossSpinCrit = calcCritDamage(s.player.attackDamage * 3);
+        s.bossHp -= bossSpinCrit.value;
         playSound('hit');
-        spawnDamageText(s.bossX, 50, s.bossY, `-${s.player.attackDamage * 3}`);
+        const bsColor = bossSpinCrit.isCrit ? '#ffff00' : '#ff4444';
+        const bsLabel = bossSpinCrit.isCrit ? `CRIT! -${bossSpinCrit.value}` : `-${bossSpinCrit.value}`;
+        spawnDamageText(s.bossX, 50, s.bossY, bsLabel, bsColor);
       }
     }
 
@@ -263,24 +303,38 @@ function doMeleeHit() {
     const e = s.enemies[i];
     const dist = Math.hypot(e.x - s.player.x, e.y - s.player.y);
     if (dist < s.player.r + e.r + 100) {
-      let dmg = s.player.attackDamage;
-      e.hp -= dmg;
+      const crit = calcCritDamage(s.player.attackDamage);
+      e.hp -= crit.value;
       e.slowTimer = 30;
       e.stunTimer = 10;
       hitSomething = true;
-      
-      spawnDamageText(e.x, e.mesh.position.y + 35, e.y, `-${dmg.toFixed(1)}`);
+
+      const dmgColor = crit.isCrit ? '#ffff00' : '#ff4444';
+      const dmgLabel = crit.isCrit ? `CRIT! -${crit.value}` : `-${crit.value}`;
+      spawnDamageText(e.x, e.mesh.position.y + 35, e.y, dmgLabel, dmgColor);
+      // Apply status effects based on enemy type
+      if (['slime', 'mage', 'necro'].includes(e.type) && !e.statusEffect && Math.random() < 0.2) {
+        applyStatusEffect(e, 'poison');
+      } else if (['fire_enemy', 'dragon', 'archdemon'].includes(e.type) && !e.statusEffect && Math.random() < 0.15) {
+        applyStatusEffect(e, 'burn');
+      }
       if (e.hp <= 0) killEnemy(i);
-      else spawnParticles(e.x, e.y, 0xffaa00, 5, 'hit');
+      else {
+        if (crit.isCrit) spawnParticles(e.x, e.y, 0xffff00, 8, 'hit');
+        else spawnParticles(e.x, e.y, 0xffaa00, 5, 'hit');
+      }
     }
   }
 
   if (s.bossActive) {
     const dist = Math.hypot(s.bossX - s.player.x, s.bossY - s.player.y);
     if (dist < s.player.r + 150) {
-      s.bossHp -= s.player.attackDamage;
+      const critBoss = calcCritDamage(s.player.attackDamage);
+      s.bossHp -= critBoss.value;
       hitSomething = true;
-      spawnDamageText(s.bossX, 50, s.bossY, `-${s.player.attackDamage.toFixed(1)}`);
+      const bossDmgColor = critBoss.isCrit ? '#ffff00' : '#ff4444';
+      const bossDmgLabel = critBoss.isCrit ? `CRIT! -${critBoss.value}` : `-${critBoss.value}`;
+      spawnDamageText(s.bossX, 50, s.bossY, bossDmgLabel, bossDmgColor);
     }
   }
 
@@ -362,14 +416,22 @@ export function updateProjectiles(dt) {
       for (let j = s.enemies.length - 1; j >= 0; j--) {
         const e = s.enemies[j];
         if (Math.hypot(p.x - e.x, p.y - e.y) < e.r + 6) {
-          let dmg = p.isPet ? s.player.attackDamage * 0.1 : s.player.attackDamage;
-          e.hp -= dmg;
+          let baseDmg = p.isPet ? s.player.attackDamage * 0.1 : s.player.attackDamage;
+          const projCrit = calcCritDamage(baseDmg);
+          e.hp -= projCrit.value;
           e.slowTimer = 90;
           e.stunTimer = 15;
           // knockback removed
           hit = true;
           playSound('hit');
-          spawnDamageText(e.x, e.mesh.position.y + 35, e.y, `-${dmg.toFixed(1)}`);
+          const pColor = projCrit.isCrit ? '#ffff00' : '#ff4444';
+          const pLabel = projCrit.isCrit ? `CRIT! -${projCrit.value}` : `-${projCrit.value}`;
+          spawnDamageText(e.x, e.mesh.position.y + 35, e.y, pLabel, pColor);
+          // Apply status effects
+          if (!e.statusEffect && Math.random() < 0.15) {
+            if (['slime', 'mage', 'necro'].includes(e.type)) applyStatusEffect(e, 'poison');
+            else if (['dragon', 'archdemon'].includes(e.type)) applyStatusEffect(e, 'burn');
+          }
           if (e.hp <= 0) killEnemy(j);
           else spawnParticles(e.x, e.y, 0xffaa00, 5, 'hit');
           break;
@@ -377,11 +439,14 @@ export function updateProjectiles(dt) {
       }
       if (!hit && s.bossActive) {
         if (Math.hypot(p.x - s.bossX, p.y - s.bossY) < 30 + 6) {
-          let dmg = p.isPet ? s.player.attackDamage * 0.1 : s.player.attackDamage;
-          s.bossHp -= dmg;
+          let baseDmg = p.isPet ? s.player.attackDamage * 0.1 : s.player.attackDamage;
+          const bossProjCrit = calcCritDamage(baseDmg);
+          s.bossHp -= bossProjCrit.value;
           hit = true;
           playSound('hit');
-          spawnDamageText(s.bossX, 50, s.bossY, `-${dmg.toFixed(1)}`);
+          const bpColor = bossProjCrit.isCrit ? '#ffff00' : '#ff4444';
+          const bpLabel = bossProjCrit.isCrit ? `CRIT! -${bossProjCrit.value}` : `-${bossProjCrit.value}`;
+          spawnDamageText(s.bossX, 50, s.bossY, bpLabel, bpColor);
         }
       }
     }
@@ -457,8 +522,10 @@ export function updateEnemies(dt) {
     const maxEnemies = Math.min(80, 30 + s.player.level * 5);
     if (s._spawnTimer > spawnRate && s.enemies.length < maxEnemies) {
       s._spawnTimer = 0;
-      const edgeX = s.player.x + (Math.random() < 0.5 ? 1500 : -1500);
-      const edgeY = s.player.y + (Math.random() < 0.5 ? 1500 : -1500);
+      const ang = Math.random() * Math.PI * 2;
+      const dist = 1200 + Math.random() * 400;
+      const edgeX = s.player.x + Math.cos(ang) * dist;
+      const edgeY = s.player.y + Math.sin(ang) * dist;
       spawnEnemy(
         Math.max(50, Math.min(mapSize - 50, edgeX)),
         Math.max(50, Math.min(mapSize - 50, edgeY)),
@@ -472,11 +539,33 @@ export function updateEnemies(dt) {
 
     if (e.stunTimer > 0) {
       e.stunTimer -= dt;
-    } else if (e.actionState === 'attack') {
+    }
+
+    // Status effects
+    if (e.statusEffect && e.statusEffect.duration > 0) {
+      e.statusEffect.duration -= dt;
+      e.statusEffect.tickTimer -= dt;
+      if (e.statusEffect.tickTimer <= 0) {
+        e.hp -= e.statusEffect.damage;
+        spawnDamageText(e.x, e.mesh.position.y + 35, e.y, `-${e.statusEffect.damage}`,
+          e.statusEffect.type === 'poison' ? '#00ff00' : '#ff4400');
+        e.statusEffect.tickTimer = e.statusEffect.duration > 0 ?
+          statusEffects[e.statusEffect.type].tickInterval : 0;
+        spawnParticles(e.x, e.y, e.statusEffect.type === 'poison' ? 0x00ff00 : 0xff4400, 2, 'hit');
+        if (e.hp <= 0) { killEnemy(idx); continue; }
+      }
+      if (e.statusEffect.duration <= 0) {
+        e.statusEffect = null;
+      }
+    }
+
+    if (e.slowTimer > 0) e.slowTimer -= dt;
+
+    if (e.stunTimer <= 0 && e.actionState === 'attack') {
       e.attackAnimTimer -= dt;
       e.dx = 0;
       e.dy = 0;
-      
+
       if (e.attackAnimTimer <= 15 && !e.hasDealtDamage) {
         e.hasDealtDamage = true;
         if (distToPlayer < s.player.r + e.r + 20) {
@@ -486,23 +575,33 @@ export function updateEnemies(dt) {
             e.stunTimer = 15;
             playSound('hit');
           } else {
-            s.player.hp = Math.max(0, s.player.hp - 10);
+            const eDmg = e.damage || 10;
+            s.player.hp = Math.max(0, s.player.hp - eDmg);
             s.cameraShake = Math.max(s.cameraShake || 0, 5);
             playSound('hit');
-            spawnDamageText(s.player.x, 30, s.player.y, `-10`, '#ff8888');
+            spawnDamageText(s.player.x, 30, s.player.y, `-${eDmg}`, '#ff8888');
+            // Poison/burn chance when hit by elemental enemies
+            if (!s.player.statusEffect) {
+              if (['slime', 'mage', 'necro'].includes(e.type) && Math.random() < 0.3) {
+                s.player.statusEffect = { type: 'poison', ...statusEffects.poison };
+                document.getElementById('message').textContent = '☠️ Anda teracuni! Gunakan Antidote!';
+              } else if (['dragon', 'archdemon'].includes(e.type) && Math.random() < 0.25) {
+                s.player.statusEffect = { type: 'burn', ...statusEffects.burn };
+                document.getElementById('message').textContent = '🔥 Anda terbakar! Gunakan Cooling Tea!';
+              }
+            }
             if (s.player.hp <= 0) teleportToHometown('Anda pingsan! Terlempar kembali ke Kota.');
           }
         }
       }
-      
+
       if (e.attackAnimTimer <= 0) {
         e.actionState = 'chase';
       }
     } else {
       if (e.attackCooldown > 0) e.attackCooldown -= dt;
-      
+
       const speed = e.slowTimer > 0 ? e.baseSpeed * 0.4 : e.baseSpeed;
-      if (e.slowTimer > 0) e.slowTimer -= dt;
 
       if (distToPlayer < 800) {
         const angle = Math.atan2(s.player.y - e.y, s.player.x - e.x);
@@ -601,7 +700,8 @@ export function updateEnemies(dt) {
     e.mesh.position.z += (e.y + lungeOffsetY - e.mesh.position.z) * Math.min(dt * 10, 1);
 
     const speedScalar = Math.hypot(e.dx, e.dy);
-    let meshYTarget = e.meshY + getTerrainHeight(e.x, e.y);
+    let hoverBob = e.isFlying ? Math.sin(Date.now() / 300 + e.x) * 5 : 0;
+    let meshYTarget = e.meshY + hoverBob + getTerrainHeight(e.x, e.y);
     
     if (e.actionState === 'attack') {
       const attackProgress = (30 - e.attackAnimTimer) / 30;
@@ -648,6 +748,15 @@ export function updateEnemies(dt) {
         if (s.player.hp <= 0) teleportToHometown('Anda pingsan! Terlempar kembali ke Kota.');
       }
     }
+
+    // Despawn enemies too far away (after 3s grace period so freshly-spawned
+    // enemies are not removed before the player ever sees them)
+    e.age += dt;
+    if (!e.isBossChild && e.age > 180 && Math.hypot(e.x - s.player.x, e.y - s.player.y) > 2000 && e.stunTimer <= 0) {
+      s.scene.remove(e.mesh);
+      s.scene.remove(e.hpGroup);
+      s.enemies.splice(idx, 1);
+    }
   }
 }
 
@@ -677,6 +786,20 @@ export function updateBoss(dt) {
     s.bossReturning = true;
   }
 
+  // Phase 2: HP < 50%
+  if (s.bossPhase === 1 && s.bossHp <= s.bossMaxHp * 0.5) {
+    s.bossPhase = 2;
+    if (s.bossMesh.material) {
+      s.bossMesh.material.color.setHex(0x880000);
+    }
+    // Spawn 2 extra minions
+    for (let i = 0; i < 2; i++) {
+      const mx = s.bossX + (Math.random() - 0.5) * 160;
+      const my = s.bossY + (Math.random() - 0.5) * 160;
+      spawnEnemy(mx, my, 0.7, true);
+    }
+  }
+
   const isAggro = dist < 300 || s.bossHp < s.bossMaxHp;
 
   if (s.bossReturning) {
@@ -696,27 +819,30 @@ export function updateBoss(dt) {
       s.bossMesh.rotation.y = -angle + Math.PI / 2;
     }
 
+    const attackCooldown = s.bossPhase === 2 ? 100 : 150;
+    const projectileChance = s.bossPhase === 2 ? 0.10 : 0.05;
+    const groundPoundDmg = s.bossPhase === 2 ? 25 : 20;
     s.bossAttackTimer = (s.bossAttackTimer || 0) + dt;
-  if (s.bossAttackTimer > 150 && dist < 120) {
-     s.bossAttackTimer = 0;
-     s.cameraShake = Math.max(s.cameraShake || 0, 20);
-     spawnParticles(s.bossX, s.bossY, 0xffd700, 40, 'death');
-     playSound('hit');
-     if (dist < 100) {
-        if (!s.player.defending) {
-           s.player.hp -= 20;
-           spawnDamageText(s.player.x, 30, s.player.y, `-20`, '#ff00ff');
-           const knockAngle = Math.atan2(s.player.y - s.bossY, s.player.x - s.bossX);
-           s.player.x += Math.cos(knockAngle) * 40;
-           s.player.y += Math.sin(knockAngle) * 40;
-           if (s.player.hp <= 0) triggerGameOver('Kamu dihancurkan hentakan The Golden Golem!');
-        } else {
-           const knockAngle = Math.atan2(s.player.y - s.bossY, s.player.x - s.bossX);
-           s.player.x += Math.cos(knockAngle) * 20;
-           s.player.y += Math.sin(knockAngle) * 20;
-        }
-     }
-    } else if (Math.random() < 0.05) {
+    if (s.bossAttackTimer > attackCooldown && dist < 120) {
+       s.bossAttackTimer = 0;
+       s.cameraShake = Math.max(s.cameraShake || 0, s.bossPhase === 2 ? 25 : 20);
+       spawnParticles(s.bossX, s.bossY, 0xffd700, 40, 'death');
+       playSound('hit');
+       if (dist < 100) {
+          if (!s.player.defending) {
+             s.player.hp -= groundPoundDmg;
+             spawnDamageText(s.player.x, 30, s.player.y, `-${groundPoundDmg}`, '#ff00ff');
+             const knockAngle = Math.atan2(s.player.y - s.bossY, s.player.x - s.bossX);
+             s.player.x += Math.cos(knockAngle) * 40;
+             s.player.y += Math.sin(knockAngle) * 40;
+             if (s.player.hp <= 0) triggerGameOver('Kamu dihancurkan hentakan The Golden Golem!');
+          } else {
+             const knockAngle = Math.atan2(s.player.y - s.bossY, s.player.x - s.bossX);
+             s.player.x += Math.cos(knockAngle) * 20;
+             s.player.y += Math.sin(knockAngle) * 20;
+          }
+       }
+      } else if (Math.random() < projectileChance) {
       const m = new THREE.Mesh(
         new THREE.SphereGeometry(10, 8, 8),
         new THREE.MeshBasicMaterial({ color: 0xff0000 })
@@ -772,7 +898,7 @@ export function updateBoss(dt) {
     if (!s.ownedWeapons.includes(4)) {
       s.ownedWeapons.push(4);
     }
-    
+
     // Boss always drops a potion
     if (s.potions < 3) {
       const potGeo = new THREE.CylinderGeometry(3, 3, 8, 8);
@@ -782,6 +908,11 @@ export function updateBoss(dt) {
       s.scene.add(potMesh);
       s.potionItems.push({ x: s.bossX + 10, y: s.bossY + 10, mesh: potMesh, taken: false });
     }
+
+    // Show win screen
+    setTimeout(() => {
+      document.getElementById('win').style.display = 'flex';
+    }, 1000);
   }
 }
 

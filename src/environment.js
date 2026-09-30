@@ -92,17 +92,18 @@ export function updatePet(dt) {
   s.petMesh.position.z += (targetZ - s.petMesh.position.z) * 0.1 * dt;
   s.petMesh.rotation.y += 0.1 * dt;
 
-  // Pet occasionally fires at nearby enemies (Dinonaktifkan atas permintaan user)
-  /*
-  if (Math.random() < 0.02) {
+  // Pet occasionally fires at nearby enemies
+  s.petAttackTimer = (s.petAttackTimer ?? 0) + dt;
+  if (s.petAttackTimer > 60) {
+    s.petAttackTimer = 0;
     let closest = null;
-    let minDist = 200;
-    s.enemies.forEach(e => {
-      const d = Math.hypot(e.x - s.player.x, e.y - s.player.y);
+    let minDist = 150;
+    for (const e of s.enemies) {
+      const d = Math.hypot(e.x - s.petMesh.position.x, e.y - s.petMesh.position.z);
       if (d < minDist) { minDist = d; closest = e; }
-    });
+    }
     if (closest) {
-      const angle = Math.atan2(closest.y - s.petMesh.position.z, closest.x - s.petMesh.position.x);
+      const petAngle = Math.atan2(closest.y - s.petMesh.position.z, closest.x - s.petMesh.position.x);
       const m = new THREE.Mesh(
         new THREE.SphereGeometry(3, 4, 4),
         new THREE.MeshBasicMaterial({ color: 0xffffaa })
@@ -111,13 +112,12 @@ export function updatePet(dt) {
       s.scene.add(m);
       s.projectiles.push({
         x: m.position.x, y: m.position.z,
-        dx: Math.cos(angle) * 15, dy: Math.sin(angle) * 15,
+        dx: Math.cos(petAngle) * 15, dy: Math.sin(petAngle) * 15,
         mesh: m, isPet: true,
       });
       playSound('shoot');
     }
   }
-  */
 }
 
 // ─── Teleport between scenes ──────────────────────────────────────────────────
@@ -148,7 +148,7 @@ export function teleportTo(sceneName) {
     });
     s.enemies.length = 0;
 
-    // Spawn initial wave of enemies in the Wilds
+    // Spawn initial wave of enemies in the Wilds scattered around the map
     const initialSpawns = Math.min(30, 10 + s.player.level * 2);
     for (let i = 0; i < initialSpawns; i++) {
       if (typeof window.spawnEnemy === 'function') window.spawnEnemy();

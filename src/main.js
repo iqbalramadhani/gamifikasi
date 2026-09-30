@@ -21,7 +21,8 @@ import {
   levelUp, openStats, closeStats, addStat,
   openQuestBoard, acceptQuest, claimQuest, closeQuestBoard, updateQuestUI,
   openInventory, closeInventory, sellAllLoot,
-  openTutorial, closeTutorial
+  openTutorial, closeTutorial, useConsumable,
+  openFullMap, closeFullMap,
 } from './ui.js';
 import { updateWeather, updateParticles, updatePet, teleportTo } from './environment.js';
 window.teleportTo = teleportTo;
@@ -29,6 +30,11 @@ import { saveGame, loadGame } from './persistence.js';
 
 let autoSaveTimer = 0;
 const AUTO_SAVE_INTERVAL = 1800;
+
+// FPS counter
+let _fpsFrames = 0;
+let _fpsTime = 0;
+window._fpsDisplay = document.getElementById('fps');
 
 // Re-export loadedModels and THREE on window so inline handlers / fallback code
 // can still reference them (backward-compat with the old monolithic file).
@@ -68,6 +74,9 @@ window.sellAllLoot = sellAllLoot;
 window.updateUI = updateUI;
 window.openTutorial = openTutorial;
 window.closeTutorial = closeTutorial;
+window.useConsumable = useConsumable;
+window.openFullMap = openFullMap;
+window.closeFullMap = closeFullMap;
 window.playerBodyMat = null;
 window.playerBladeMat = null;
 
@@ -132,6 +141,16 @@ function gameLoop(timestamp) {
     ? Math.min((timestamp - state.lastTimestamp) / 16.667, 3)
     : 1;
   state.lastTimestamp = timestamp;
+
+  // FPS counter
+  _fpsFrames++;
+  _fpsTime += dt;
+  if (_fpsTime >= 60) {
+    const fps = Math.round(_fpsFrames / (_fpsTime / 60));
+    if (window._fpsDisplay) window._fpsDisplay.textContent = fps;
+    _fpsFrames = 0;
+    _fpsTime = 0;
+  }
 
   if (!state.isGameStarted) return;
 
@@ -219,6 +238,28 @@ function gameLoop(timestamp) {
     updateProjectiles(dt);
     updateEnemies(dt);
     if (state.bossActive) updateBoss(dt);
+
+    // Player status effects
+    if (state.player.statusEffect && state.player.statusEffect.duration > 0) {
+      state.player.statusEffect.duration -= dt;
+      state.player.statusEffect.tickTimer -= dt;
+      if (state.player.statusEffect.tickTimer <= 0) {
+        state.player.hp -= state.player.statusEffect.damage;
+        spawnDamageText(state.player.x, 30, state.player.y, `-${state.player.statusEffect.damage}`,
+          state.player.statusEffect.type === 'poison' ? '#00ff00' : '#ff4400');
+        state.player.statusEffect.tickTimer = state.player.statusEffect.duration > 0 ?
+          (state.player.statusEffect.type === 'poison' ? 60 : 60) : 0;
+        spawnParticles(state.player.x, state.player.y,
+          state.player.statusEffect.type === 'poison' ? 0x00ff00 : 0xff4400, 2, 'hit');
+        if (state.player.hp <= 0) {
+          teleportToHometown('Anda pingsan! Terlempar kembali ke Kota.');
+        }
+      }
+      if (state.player.statusEffect.duration <= 0) {
+        state.player.statusEffect = null;
+      }
+    }
+
     checkInteractions();
     updateWeather(dt);
     updateParticles(dt);
@@ -264,14 +305,13 @@ function gameLoop(timestamp) {
 
   if (state.playerMixer) {
     // Model 3D sungguhan, jangan dimirror (flip scale Z), cukup rotate Y
-    state.playerMesh.scale.z = 1; 
+    state.playerMesh.scale.z = 1;
   } else {
     // Legacy 2.5D untuk model balok
     if (state.player.facingX < 0) {
       state.playerMesh.scale.z = -1; // facing left
-    } else if (state.player.facingX > 0) {
-      state.playerMesh.scale.z = -1;  // facing right
     }
+    // facing right atau diam = default scale.z = 1
   }
 
   // Keep last facing when still

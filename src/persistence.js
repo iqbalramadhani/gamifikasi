@@ -27,6 +27,8 @@ export function saveGame(isAuto = false) {
     crystalCount: s.crystalCount,
     currentWeapon: s.currentWeapon,
     currentArmor: s.currentArmor,
+    currentHelmet: s.currentHelmet,
+    currentBoots: s.currentBoots,
     level: s.player.level,
     exp: s.player.exp,
     nextExp: s.player.nextExp,
@@ -36,6 +38,13 @@ export function saveGame(isAuto = false) {
     inventory: JSON.stringify(s.inventory),
     statPoints: s.player.statPoints,
     stats: s.player.stats,
+    bountyQuest: s.bountyQuest ? JSON.stringify(s.bountyQuest) : null,
+    bountyQuestProgress: s.bountyQuestProgress,
+    lastCrystalUse: s.lastCrystalUse ?? 0,
+    critChance: s.critChance,
+    critMultiplier: s.critMultiplier,
+    questStage: s.questStage,
+    questCompleted: s.questCompleted,
   };
 
   fetch('http://localhost:3001/api/save', {
@@ -91,6 +100,8 @@ export function loadGame() {
       s.crystalCount = d.crystalCount ?? 0;
       s.currentWeapon = d.currentWeapon ?? 0;
       s.currentArmor = d.currentArmor ?? 0;
+      s.currentHelmet = d.currentHelmet ?? 0;
+      s.currentBoots = d.currentBoots ?? 0;
 
       try {
         if (d.inventory) s.inventory = JSON.parse(d.inventory);
@@ -101,9 +112,15 @@ export function loadGame() {
       // Rebuild owned weapons and armors based on current
       s.ownedWeapons = [];
       for (let i = 0; i <= s.currentWeapon; i++) s.ownedWeapons.push(i);
-      
+
       s.ownedArmors = [];
       for (let i = 0; i <= s.currentArmor; i++) s.ownedArmors.push(i);
+
+      s.ownedHelmets = [];
+      for (let i = 0; i <= s.currentHelmet; i++) s.ownedHelmets.push(i);
+
+      s.ownedBoots = [];
+      for (let i = 0; i <= s.currentBoots; i++) s.ownedBoots.push(i);
 
       if (s.player.x < 2000) s.currentScene = 'hometown';
       else s.currentScene = 'wilds';
@@ -127,6 +144,18 @@ export function loadGame() {
       s.player.stats.str = d.stat_str ?? s.player.stats.str;
       s.player.stats.agi = d.stat_agi ?? s.player.stats.agi;
       s.player.stats.vit = d.stat_vit ?? s.player.stats.vit;
+
+      try {
+        if (d.bountyQuest) s.bountyQuest = JSON.parse(d.bountyQuest);
+      } catch (e) { s.bountyQuest = null; }
+      s.bountyQuestProgress = d.bountyQuestProgress ?? 0;
+      s.lastCrystalUse = d.lastCrystalUse ?? 0;
+      s.questStage = d.questStage ?? 0;
+      s.questCompleted = d.questCompleted ?? [];
+      s.critChance = d.critChance ?? 0.05;
+      s.critMultiplier = d.critMultiplier ?? 2.0;
+      s.questStage = d.questStage ?? 0;
+      s.questCompleted = d.questCompleted ?? [];
 
       // Restore equipment colors on loaded meshes
       if (s.playerBladeMat && weaponList[s.currentWeapon]) {
