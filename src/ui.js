@@ -23,6 +23,9 @@ export function updateUI() {
     lastHp = curHp;
   }
   
+  const atkEl = document.getElementById('atk');
+  if (atkEl) atkEl.textContent = s.player.attackDamage;
+  
   const curStamina = Math.floor(s.player.stamina);
   const staminaTextEl = document.getElementById('stamina-text');
   const staminaBarEl = document.getElementById('stamina-bar');
@@ -370,7 +373,7 @@ window.equipWeapon = (idx) => {
   
   if (typeof s.playerBladeMat !== 'undefined' && s.playerBladeMat) s.playerBladeMat.color.setHex(wNext.color);
   if (s.playerSwordMesh) {
-    const baseScale = s.gltfPlayerRef ? 0.5 : 15;
+    const baseScale = s.gltfPlayerRef ? 250 : 15;
     // Cap visual scaling
     const visualTier = Math.min(idx, 3);
     const newScale = baseScale + visualTier * (baseScale * 0.3);

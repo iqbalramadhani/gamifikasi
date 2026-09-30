@@ -52,7 +52,7 @@ export function initSetup() {
   bloomPass.threshold = 0.4;
   bloomPass.strength = 0.8;
   bloomPass.radius = 0.3;
-  s.composer.addPass(bloomPass);
+  // s.composer.addPass(bloomPass); // Dinonaktifkan sesuai permintaan pengguna
 
   window.addEventListener('resize', () => {
     s.camera.aspect = window.innerWidth / window.innerHeight;
@@ -772,26 +772,39 @@ export function initEntities() {
 
   if (loadedModels.player_model) {
     const fbxModel = SkeletonUtils.clone(loadedModels.player_model);
-    fbxModel.scale.set(0.4, 0.4, 0.4); // Scale diperbesar agar karakter tidak terlalu kecil
+    fbxModel.scale.set(0.3, 0.3, 0.3); // Scale diperkecil sedikit agar pas
     fbxModel.position.y = -15; 
     
     // Setup Animasi
     s.playerMixer = new THREE.AnimationMixer(fbxModel);
     s.playerActions = {};
     
-    if (loadedModels.idle_anim && loadedModels.idle_anim.animations.length > 0) {
+    if (loadedModels.sword_idle && loadedModels.sword_idle.animations && loadedModels.sword_idle.animations.length > 0) {
+      s.playerActions.idle = s.playerMixer.clipAction(loadedModels.sword_idle.animations[0]);
+    } else if (loadedModels.idle_anim && loadedModels.idle_anim.animations.length > 0) {
       s.playerActions.idle = s.playerMixer.clipAction(loadedModels.idle_anim.animations[0]);
     } else if (fbxModel.animations.length > 0) {
       s.playerActions.idle = s.playerMixer.clipAction(fbxModel.animations[0]);
     }
     
-    if (loadedModels.run_anim && loadedModels.run_anim.animations.length > 0) {
+    if (loadedModels.sword_run && loadedModels.sword_run.animations && loadedModels.sword_run.animations.length > 0) {
+      s.playerActions.run = s.playerMixer.clipAction(loadedModels.sword_run.animations[0]);
+    } else if (loadedModels.run_anim && loadedModels.run_anim.animations.length > 0) {
       s.playerActions.run = s.playerMixer.clipAction(loadedModels.run_anim.animations[0]);
     }
-    if (loadedModels.attack_anim && loadedModels.attack_anim.animations.length > 0) {
-      s.playerActions.attack = s.playerMixer.clipAction(loadedModels.attack_anim.animations[0]);
+    if (loadedModels.sword_slash && loadedModels.sword_slash.animations && loadedModels.sword_slash.animations.length > 0) {
+      console.log("Successfully loaded sword_slash animation:", loadedModels.sword_slash.animations[0]);
+      s.playerActions.attack = s.playerMixer.clipAction(loadedModels.sword_slash.animations[0]);
       s.playerActions.attack.setLoop(THREE.LoopOnce);
       s.playerActions.attack.clampWhenFinished = true;
+    } else {
+      console.error("Failed to load sword_slash animations! loadedModels.sword_slash is:", loadedModels.sword_slash);
+      // Fallback
+      if (loadedModels.attack_anim && loadedModels.attack_anim.animations.length > 0) {
+        s.playerActions.attack = s.playerMixer.clipAction(loadedModels.attack_anim.animations[0]);
+        s.playerActions.attack.setLoop(THREE.LoopOnce);
+        s.playerActions.attack.clampWhenFinished = true;
+      }
     }
     
     if (s.playerActions.idle) {
@@ -809,10 +822,15 @@ export function initEntities() {
     
     if (loadedModels.sword) {
       const gltfSword = SkeletonUtils.clone(loadedModels.sword);
+      s.playerSwordMesh = gltfSword;
+      // We no longer replace the material here; we'll let it use the arrow's native material.
+      // ui.js will handle cloning and coloring it.
+
       if (rightHand) {
-        gltfSword.scale.set(4, 4, 4);
-        gltfSword.position.set(0, 15, 0); // Sesuaikan offset dengan bentuk tangan
-        gltfSword.rotation.x = Math.PI / 2;
+        gltfSword.scale.set(250, 250, 250);
+        gltfSword.position.set(43, 8, -20);
+        gltfSword.rotation.set(Math.PI, Math.PI / 3, 0); 
+        gltfSword.rotateX(Math.PI); // Ini rumus pasti untuk memutar objek 180 derajat persis di tempatnya
         rightHand.add(gltfSword);
       } else {
         gltfSword.scale.set(15, 15, 15);
@@ -861,35 +879,57 @@ export function initEntities() {
     
     s.playerMesh.add(s.gltfPlayerRef);
 
-    // Create programmatic sword to ensure it looks like a sword (since sword.glb was an arrow)
-    s.playerSwordMesh = new THREE.Group();
-    
-    const bladeGeo = new THREE.BoxGeometry(0.1, 1.2, 0.2);
-    s.playerBladeMat = new THREE.MeshLambertMaterial({ color: 0xcccccc });
-    const blade = new THREE.Mesh(bladeGeo, s.playerBladeMat);
-    blade.position.y = 0.6;
-    
-    const hiltGeo = new THREE.BoxGeometry(0.4, 0.1, 0.3);
-    const hiltMat = new THREE.MeshLambertMaterial({ color: 0x5c4033 });
-    const hilt = new THREE.Mesh(hiltGeo, hiltMat);
-    
-    const handleGeo = new THREE.BoxGeometry(0.1, 0.3, 0.1);
-    const handle = new THREE.Mesh(handleGeo, hiltMat);
-    handle.position.y = -0.15;
-
-    s.playerSwordMesh.add(blade, hilt, handle);
-
-    if (s.playerArmR) {
-      // Attach to character's right arm
-      s.playerSwordMesh.position.set(0, -0.4, 0.2);
-      s.playerSwordMesh.rotation.x = Math.PI / 2;
-      s.playerArmR.add(s.playerSwordMesh);
+    if (loadedModels.sword) {
+      s.playerSwordMesh = SkeletonUtils.clone(loadedModels.sword);
+      s.playerBladeMat = new THREE.MeshLambertMaterial({ color: 0xcccccc });
+      s.playerSwordMesh.traverse(child => {
+        if (child.isMesh && child.material) {
+          child.material = s.playerBladeMat;
+        }
+      });
+      if (s.playerArmR) {
+        // Attach to character's right arm
+        s.playerSwordMesh.position.set(0, -0.4, 0.2);
+        s.playerSwordMesh.rotation.x = Math.PI / 2;
+        s.playerArmR.add(s.playerSwordMesh);
+      } else {
+        // Fallback attachment
+        s.playerSwordMesh.scale.set(15, 15, 15);
+        s.playerSwordMesh.position.set(10, 0, 15);
+        s.playerSwordMesh.rotation.x = Math.PI / 2;
+        s.playerMesh.add(s.playerSwordMesh);
+      }
     } else {
-      // Fallback attachment
-      s.playerSwordMesh.scale.set(15, 15, 15);
-      s.playerSwordMesh.position.set(10, 0, 15);
-      s.playerSwordMesh.rotation.x = Math.PI / 2;
-      s.playerMesh.add(s.playerSwordMesh);
+      // Create programmatic sword as fallback
+      s.playerSwordMesh = new THREE.Group();
+      
+      const bladeGeo = new THREE.BoxGeometry(0.1, 1.2, 0.2);
+      s.playerBladeMat = new THREE.MeshLambertMaterial({ color: 0xcccccc });
+      const blade = new THREE.Mesh(bladeGeo, s.playerBladeMat);
+      blade.position.y = 0.6;
+      
+      const hiltGeo = new THREE.BoxGeometry(0.4, 0.1, 0.3);
+      const hiltMat = new THREE.MeshLambertMaterial({ color: 0x5c4033 });
+      const hilt = new THREE.Mesh(hiltGeo, hiltMat);
+      
+      const handleGeo = new THREE.BoxGeometry(0.1, 0.3, 0.1);
+      const handle = new THREE.Mesh(handleGeo, hiltMat);
+      handle.position.y = -0.15;
+  
+      s.playerSwordMesh.add(blade, hilt, handle);
+  
+      if (s.playerArmR) {
+        // Attach to character's right arm
+        s.playerSwordMesh.position.set(0, -0.4, 0.2);
+        s.playerSwordMesh.rotation.x = Math.PI / 2;
+        s.playerArmR.add(s.playerSwordMesh);
+      } else {
+        // Fallback attachment
+        s.playerSwordMesh.scale.set(15, 15, 15);
+        s.playerSwordMesh.position.set(10, 0, 15);
+        s.playerSwordMesh.rotation.x = Math.PI / 2;
+        s.playerMesh.add(s.playerSwordMesh);
+      }
     }
   } else {
     // Classic fallback boxes
@@ -898,6 +938,15 @@ export function initEntities() {
 
   s.playerMesh.position.set(s.player.x, 15, s.player.y);
   s.scene.add(s.playerMesh);
+  
+  // Player HP Bar
+  const pHpBg = new THREE.Mesh(new THREE.PlaneGeometry(30, 4), new THREE.MeshBasicMaterial({ color: 0x000000 }));
+  s.playerHpFg = new THREE.Mesh(new THREE.PlaneGeometry(30, 4), new THREE.MeshBasicMaterial({ color: 0x008800 }));
+  s.playerHpFg.position.z = 0.2;
+  s.playerHpGroup = new THREE.Group();
+  s.playerHpGroup.add(pHpBg, s.playerHpFg);
+  s.scene.add(s.playerHpGroup);
+
 
   // Shield visual
   const shieldGeo = new THREE.SphereGeometry(24, 16, 16);
@@ -1144,7 +1193,7 @@ export function initWildsNPCs() {
 
   s.bossHpGroup = new THREE.Group();
   const bg = new THREE.Mesh(new THREE.PlaneGeometry(80, 8), new THREE.MeshBasicMaterial({ color: 0x222222 }));
-  s.bossHpFg = new THREE.Mesh(new THREE.PlaneGeometry(80, 8), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
+  s.bossHpFg = new THREE.Mesh(new THREE.PlaneGeometry(80, 8), new THREE.MeshBasicMaterial({ color: 0x880000 }));
   s.bossHpFg.position.z = 0.2;
   s.bossHpGroup.add(bg, s.bossHpFg);
   s.bossHpGroup.position.set(s.bossX, 80 + getTerrainHeight(s.bossX, s.bossY), s.bossY);

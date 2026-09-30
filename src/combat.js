@@ -42,7 +42,7 @@ export function spawnEnemy(ex, ey, scaleFactor = 1.0, isBossChild = false) {
   s.scene.add(mesh);
 
   const hpBgMat = new THREE.MeshBasicMaterial({ color: 0x222222 });
-  const hpFgMat = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+  const hpFgMat = new THREE.MeshBasicMaterial({ color: 0x008800 });
   const hpGeo = new THREE.PlaneGeometry(24, 4);
   const hpGroup = new THREE.Group();
   const hpBg = new THREE.Mesh(hpGeo, hpBgMat);
@@ -112,7 +112,7 @@ export function move(dt) {
       playSound('spin');
       for (let i = s.enemies.length - 1; i >= 0; i--) {
         const e = s.enemies[i];
-        if (Math.hypot(e.x - s.player.x, e.y - s.player.y) < s.player.r + e.r + 50) {
+        if (Math.hypot(e.x - s.player.x, e.y - s.player.y) < s.player.r + e.r + 120) {
           e.hp -= s.player.attackDamage * 3;
           e.slowTimer = 90;
           e.stunTimer = 20;
@@ -122,7 +122,7 @@ export function move(dt) {
           else spawnParticles(e.x, e.y, 0xffaa00, 5, 'hit');
         }
       }
-      if (s.bossActive && Math.hypot(s.bossX - s.player.x, s.bossY - s.player.y) < s.player.r + 60 + 50) {
+      if (s.bossActive && Math.hypot(s.bossX - s.player.x, s.bossY - s.player.y) < s.player.r + 150) {
         s.bossHp -= s.player.attackDamage * 3;
         playSound('hit');
         spawnDamageText(s.bossX, 50, s.bossY, `-${s.player.attackDamage * 3}`);
@@ -238,26 +238,65 @@ function animatePlayer(walking) {
   }
 }
 
-// ─── Shooting ─────────────────────────────────────────────────────────────────
+// ─── Melee Attack ─────────────────────────────────────────────────────────────
 
-const projGeo = new THREE.SphereGeometry(6, 8, 8);
-const projMat = new THREE.MeshBasicMaterial({ color: 0xff5500 });
-
-export function shoot() {
+export function attack() {
   const s = state;
   if (s.player.attackCooldown > 0 || s.gameOver || s.isPaused || !s.isGameStarted) return;
-  s.player.attackCooldown = 15;
-  playSound('shoot');
+  s.player.attackCooldown = 90; // Increased to allow full attack animation to play
+  playSound('dash'); // Swoosh sound for swing
 
-  const mesh = new THREE.Mesh(projGeo, projMat);
-  mesh.position.set(s.player.x, 15, s.player.y);
-  s.scene.add(mesh);
+  let hitSomething = false;
 
-  s.projectiles.push({
-    x: s.player.x, y: s.player.y,
-    dx: s.player.facingX * 10, dy: s.player.facingY * 10,
-    mesh, isEnemy: false,
-  });
+  for (let i = s.enemies.length - 1; i >= 0; i--) {
+    const e = s.enemies[i];
+    const dist = Math.hypot(e.x - s.player.x, e.y - s.player.y);
+    if (dist < s.player.r + e.r + 100) {
+      const angleToEnemy = Math.atan2(e.y - s.player.y, e.x - s.player.x);
+      const playerAngle = Math.atan2(s.player.facingY, s.player.facingX);
+      
+      let angleDiff = angleToEnemy - playerAngle;
+      while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+      while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+      
+      if (Math.abs(angleDiff) < Math.PI / 1.2) {
+        let dmg = s.player.attackDamage;
+        e.hp -= dmg;
+        e.slowTimer = 30;
+        e.stunTimer = 10;
+        hitSomething = true;
+        
+        spawnDamageText(e.x, e.mesh.position.y + 35, e.y, `-${dmg.toFixed(1)}`);
+        if (e.hp <= 0) killEnemy(i);
+        else spawnParticles(e.x, e.y, 0xffaa00, 5, 'hit');
+      }
+    }
+  }
+
+  if (s.bossActive) {
+    const dist = Math.hypot(s.bossX - s.player.x, s.bossY - s.player.y);
+    if (dist < s.player.r + 150) {
+      const angleToEnemy = Math.atan2(s.bossY - s.player.y, s.bossX - s.player.x);
+      const playerAngle = Math.atan2(s.player.facingY, s.player.facingX);
+      
+      let angleDiff = angleToEnemy - playerAngle;
+      while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+      while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+      
+      if (Math.abs(angleDiff) < Math.PI / 1.2) {
+        s.bossHp -= s.player.attackDamage;
+        hitSomething = true;
+        spawnDamageText(s.bossX, 50, s.bossY, `-${s.player.attackDamage.toFixed(1)}`);
+      }
+    }
+  }
+
+  if (hitSomething) playSound('hit');
+  
+  // Show a swipe particle effect in front of player
+  const swipeX = s.player.x + s.player.facingX * 15;
+  const swipeY = s.player.y + s.player.facingY * 15;
+  spawnParticles(swipeX, swipeY, 0xffffff, 5, 'dust');
 }
 
 // ─── Potion ───────────────────────────────────────────────────────────────────
@@ -573,7 +612,7 @@ export function updateEnemies(dt) {
       if (l['arm-right']) l['arm-right'].rotation.x = 0;
     }
     e.mesh.position.y += (meshYTarget - e.mesh.position.y) * Math.min(dt * 8, 1);
-    e.hpGroup.position.set(e.x, e.mesh.position.y + 40, e.y);
+    e.hpGroup.position.set(e.x, e.mesh.position.y + 90, e.y);
     e.hpGroup.lookAt(s.camera.position);
 
     const hpPercent = Math.max(0, e.hp / e.maxHp);
@@ -686,7 +725,7 @@ export function updateBoss(dt) {
 
   s.bossHpGroup.position.x += (s.bossX - s.bossHpGroup.position.x) * Math.min(dt * 6, 1);
   s.bossHpGroup.position.z += (s.bossY - s.bossHpGroup.position.z) * Math.min(dt * 6, 1);
-  s.bossHpGroup.position.y += (80 - s.bossHpGroup.position.y) * Math.min(dt * 6, 1);
+  s.bossHpGroup.position.y += (120 - s.bossHpGroup.position.y) * Math.min(dt * 6, 1);
   s.bossHpGroup.lookAt(s.camera.position);
 
   const pct = Math.max(0, s.bossHp / s.bossMaxHp);

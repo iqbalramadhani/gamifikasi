@@ -12,7 +12,7 @@ import { initSetup, initMap, initHometown, initEntities, initNPCs, initWildsNPCs
 import { spawnBoss, spawnParticles, checkItems } from './helpers.js';
 import { spawnEnemy, usePotion } from './combat.js';
 import {
-  move, shoot, updateProjectiles, updateEnemies, updateBoss,
+  move, attack, updateProjectiles, updateEnemies, updateBoss,
 } from './combat.js';
 import {
   updateUI, checkInteractions,
@@ -200,7 +200,7 @@ function gameLoop(timestamp) {
     }
 
     move(dt);
-    if (state.keys[' ']) shoot();
+    if (state.keys[' ']) attack();
 
     state.player.attackCooldown = Math.max(0, state.player.attackCooldown - dt);
     state.player.dashCooldown = Math.max(0, state.player.dashCooldown - dt);
@@ -248,6 +248,16 @@ function gameLoop(timestamp) {
 
   // Character always faces forward, plus any accumulated spin
   state.playerMesh.rotation.y = -Math.PI / 2 + state.player.spinAngle;
+
+  if (state.playerHpGroup) {
+    state.playerHpGroup.position.set(state.playerMesh.position.x, state.playerMesh.position.y + 40, state.playerMesh.position.z);
+    state.playerHpGroup.lookAt(state.camera.position);
+    const hpPercent = Math.max(0, state.player.hp / state.player.maxHp);
+    if (state.playerHpFg) {
+      state.playerHpFg.scale.x = Math.max(0.001, hpPercent);
+      state.playerHpFg.position.x = -(30 - (30 * hpPercent)) / 2;
+    }
+  }
 
   if (state.playerMixer) {
     // Model 3D sungguhan, jangan dimirror (flip scale Z), cukup rotate Y

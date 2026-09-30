@@ -188,7 +188,7 @@ export function spawnBoss() {
   );
   s.bossHpFg = new THREE.Mesh(
     new THREE.PlaneGeometry(80, 8),
-    new THREE.MeshBasicMaterial({ color: 0xff0000 })
+    new THREE.MeshBasicMaterial({ color: 0x880000 })
   );
   s.bossHpFg.position.z = 0.2;
   s.bossHpGroup.add(bg, s.bossHpFg);

@@ -21,7 +21,7 @@ export const loadedModels = {
 
 const modelsToLoad = [
   { key: 'player',     url: '/models/player.glb' },
-  { key: 'sword',      url: '/models/sword.glb' },
+  { key: 'sword',      url: '/models/weapon-arrow.glb' },
   { key: 'enemy',      url: '/models/enemy.glb' },
   { key: 'tree',       url: '/models/tree.glb' },
   { key: 'tree_high',  url: '/models/tree-high.glb' },
@@ -58,10 +58,13 @@ const modelsToLoad = [
 ];
 
 const fbxModelsToLoad = [
-  // { key: 'player_model', url: '/models/player_model.fbx' },
-  // { key: 'idle_anim', url: '/models/idle.fbx' },
-  // { key: 'run_anim', url: '/models/run.fbx' },
-  // { key: 'attack_anim', url: '/models/attack.fbx' },
+  { key: 'sword_idle', url: '/animations/sword_idle.fbx' },
+  { key: 'sword_run', url: '/animations/sword_run.fbx' },
+  { key: 'sword_slash', url: '/animations/sword_slash.fbx' },
+  { key: 'player_model', url: '/models/player_model.fbx' },
+  { key: 'idle_anim', url: '/models/idle.fbx' },
+  { key: 'run_anim', url: '/models/run.fbx' },
+  { key: 'attack_anim', url: '/models/attack.fbx' },
 ];
 
 /**
