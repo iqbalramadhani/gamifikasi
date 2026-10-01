@@ -222,8 +222,23 @@ export function checkInteractions() {
     return;
   }
 
-  if (s.hometownPortal) s.hometownPortal.rotation.y += 0.05;
-  if (s.wildsPortal) s.wildsPortal.rotation.y += 0.05;
+  const t = performance.now() * 0.001;
+  if (s.hometownPortal) {
+    s.hometownPortal.rotation.y += 0.05;
+    s.hometownPortal.position.y = 30 + Math.sin(t * 2) * 2;
+  }
+  if (s.wildsPortal) {
+    s.wildsPortal.rotation.y += 0.05;
+    s.wildsPortal.position.y = 30 + Math.sin(t * 2 + 1) * 2;
+  }
+  if (s.desertPortalWilds) {
+    s.desertPortalWilds.rotation.y += 0.05;
+    s.desertPortalWilds.position.y = 30 + Math.sin(t * 2 + 2) * 2;
+  }
+  if (s.desertPortalWilds2) {
+    s.desertPortalWilds2.rotation.y += 0.05;
+    s.desertPortalWilds2.position.y = 30 + Math.sin(t * 2 + 3) * 2;
+  }
 
   let interactText = '';
 

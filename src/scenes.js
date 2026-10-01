@@ -1088,15 +1088,70 @@ function scaleNPCToHeight(mesh, targetHeight) {
   mesh.position.y -= box2.min.y;
 }
 
+function createPortal(color) {
+  const group = new THREE.Group();
+
+  // Outer solid glowing ring
+  const ringMat = new THREE.MeshStandardMaterial({
+    color,
+    emissive: color,
+    emissiveIntensity: 0.9,
+    metalness: 0.2,
+    roughness: 0.4,
+    side: THREE.DoubleSide,
+  });
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(24, 2.5, 12, 48), ringMat);
+  ring.rotation.x = -Math.PI / 2;
+  ring.name = 'ring';
+  group.add(ring);
+
+  // Inner spinning portal disc (semi-transparent swirl surface)
+  const discMat = new THREE.MeshStandardMaterial({
+    color,
+    emissive: color,
+    emissiveIntensity: 0.8,
+    transparent: true,
+    opacity: 0.45,
+    side: THREE.DoubleSide,
+  });
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(22, 32), discMat);
+  disc.rotation.x = -Math.PI / 2;
+  disc.position.y = 0;
+  disc.name = 'disc';
+  group.add(disc);
+
+  // Vertical energy ribbons orbiting the portal
+  const ribbonMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    emissive: 0xffffff,
+    emissiveIntensity: 0.9,
+    transparent: true,
+    opacity: 0.35,
+    side: THREE.DoubleSide,
+  });
+  for (let i = 0; i < 3; i++) {
+    const ribbon = new THREE.Mesh(new THREE.TorusGeometry(30 + i * 5, 0.5, 8, 48), ribbonMat);
+    ribbon.rotation.x = Math.PI / 2;
+    ribbon.rotation.y = (Math.PI / 4) * i;
+    ribbon.name = 'ribbon';
+    group.add(ribbon);
+  }
+
+  // Point light so the portal glows the surrounding ground
+  const light = new THREE.PointLight(color, 2.5, 300, 2);
+  light.position.y = 5;
+  group.add(light);
+
+  return group;
+}
+
 export function initNPCs() {
   const s = state;
   const hx = 500, hy = 500;
   const NPC_HEIGHT = 30;
 
   // Portal to Wilds
-  const portalGeo = new THREE.OctahedronGeometry(20, 0);
-  const portalMat = new THREE.MeshLambertMaterial({ color: 0x00ffff, wireframe: true });
-  s.hometownPortal = new THREE.Mesh(portalGeo, portalMat);
+  s.hometownPortal = createPortal(0x00ffff);
   s.hometownPortal.position.set(hx, 30, hy + 400);
   s.hometownGroup.add(s.hometownPortal);
 
@@ -1188,20 +1243,13 @@ export function initNPCs() {
 export function initWildsNPCs() {
   const s = state;
   // Wilds return portal (near altar)
-  const portalGeo = new THREE.OctahedronGeometry(20, 0);
-  const wildsPortalMat = new THREE.MeshLambertMaterial({
-    color: 0xff00ff, wireframe: true,
-  });
-  s.wildsPortal = new THREE.Mesh(portalGeo, wildsPortalMat);
+  s.wildsPortal = createPortal(0xff00ff);
   s.wildsPortal.position.set(mapSize / 2, 30, mapSize / 2 + 60);
   s.wildsGroup.add(s.wildsPortal);
 
   // Portal to Scorched Dunes (wilds2) — placed near altar, always created;
   // level gate is enforced in ui.js
-  const desertPortalMat = new THREE.MeshLambertMaterial({
-    color: 0xff8800, wireframe: true,
-  });
-  s.desertPortalWilds = new THREE.Mesh(portalGeo, desertPortalMat);
+  s.desertPortalWilds = createPortal(0xff8800);
   s.desertPortalWilds.position.set(mapSize / 2, 30, mapSize / 2 + 400);
   s.wildsGroup.add(s.desertPortalWilds);
 
@@ -1514,10 +1562,8 @@ export function initWilds2() {
     }
   }
 
-  // ── Portal back to The Wilds (orange wireframe octahedron, near pyramid) ──
-  const portalGeo = new THREE.OctahedronGeometry(20, 0);
-  const portalMat = new THREE.MeshLambertMaterial({ color: 0xff8800, wireframe: true });
-  s.desertPortalWilds2 = new THREE.Mesh(portalGeo, portalMat);
+  // ── Portal back to The Wilds (orange glow portal, near pyramid) ──
+  s.desertPortalWilds2 = createPortal(0xff8800);
   s.desertPortalWilds2.position.set(ms / 2 + 600, 30, ms / 2);
   s.wilds2Group.add(s.desertPortalWilds2);
 }
