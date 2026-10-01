@@ -16,6 +16,13 @@ export function saveGame(isAuto = false) {
   statusEl.textContent = isAuto ? 'Auto…' : 'Menyimpan...';
   statusEl.style.color = isAuto ? '#3498db' : '#f39c12';
 
+  if (!s.inventory) s.inventory = {};
+  if (s.potions > 0) {
+    s.inventory['health_potion'] = s.potions;
+  } else {
+    delete s.inventory['health_potion'];
+  }
+
   const data = {
     x: s.player.x,
     y: s.player.y,
@@ -109,11 +116,6 @@ export function loadGame() {
       s.player.nextExp = d.nextExp ?? s.player.nextExp;
       s.gold = d.gold ?? 0;
       s.potions = d.potions ?? 0;
-      const btnPotion = document.getElementById('btn-potion');
-      if (btnPotion) {
-        btnPotion.textContent = `🧪 Heal (C) [${s.potions}]`;
-        btnPotion.style.opacity = s.potions > 0 ? '1.0' : '0.5';
-      }
       s.crystalCount = d.crystalCount ?? 0;
       s.currentWeapon = d.currentWeapon ?? 0;
       s.currentArmor = d.currentArmor ?? 0;
@@ -130,6 +132,27 @@ export function loadGame() {
       if (s.inventory && s.inventory.gold) {
         s.gold = (s.gold || 0) + (s.inventory.gold * 10);
         delete s.inventory.gold;
+      }
+
+      // Sinkronkan potion crafting dengan s.potions
+      if (s.inventory && s.inventory['health_potion'] !== undefined) {
+        if (s.inventory['health_potion'] !== s.potions) {
+          s.potions = (s.potions || 0) + (s.inventory['health_potion'] || 0);
+        }
+      }
+      if (!s.inventory) s.inventory = {};
+      if (s.potions > 0) {
+        s.inventory['health_potion'] = s.potions;
+      } else {
+        delete s.inventory['health_potion'];
+      }
+
+      const navPotionsEl = document.getElementById('nav-potions');
+      if (navPotionsEl) navPotionsEl.textContent = s.potions;
+      const btnPotion = document.getElementById('btn-potion');
+      if (btnPotion) {
+        btnPotion.textContent = `🧪 Heal (C) [${s.potions}]`;
+        btnPotion.style.opacity = s.potions > 0 ? '1.0' : '0.5';
       }
 
       // Restore owned weapon/armor/helmet/boots arrays (prefer saved list, fallback to current)

@@ -20,7 +20,7 @@ import {
   openBlacksmith, closeBlacksmith, updateBlacksmithUI, buyWeapon, buyArmor, buyHelmet, buyBoots,
   levelUp, openStats, closeStats, addStat,
   openQuestBoard, acceptQuest, claimQuest, closeQuestBoard, updateQuestUI,
-  openInventory, closeInventory, sellAllLoot,
+  openInventory, closeInventory, updateInventoryUI, sellAllLoot,
   openTutorial, closeTutorial, useConsumable,
   openFullMap, closeFullMap,
 } from './ui.js';
@@ -75,6 +75,7 @@ window.closeQuestBoard = closeQuestBoard;
 window.updateQuestUI = updateQuestUI;
 window.openInventory = openInventory;
 window.closeInventory = closeInventory;
+window.updateInventoryUI = updateInventoryUI;
 window.sellAllLoot = sellAllLoot;
 window.updateUI = updateUI;
 window.openTutorial = openTutorial;
@@ -133,6 +134,8 @@ window.startGame = async () => {
   }
 
   // Sinkronkan UI awal (termasuk tombol heal / potion)
+  const navPotionsEl = document.getElementById('nav-potions');
+  if (navPotionsEl) navPotionsEl.textContent = state.potions;
   const btnPotion = document.getElementById('btn-potion');
   if (btnPotion) {
     btnPotion.textContent = `🧪 Heal (C) [${state.potions}]`;

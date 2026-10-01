@@ -43,6 +43,11 @@ export function updateUI(force = false) {
     lastGold = s.gold;
   }
 
+  const navPotionsEl = document.getElementById('nav-potions');
+  if (navPotionsEl && (force || lastPotions !== s.potions)) {
+    navPotionsEl.textContent = s.potions;
+  }
+
   const btnPotion = document.getElementById('btn-potion');
   if (btnPotion && (force || lastPotions !== s.potions)) {
     btnPotion.textContent = `🧪 Heal (C) [${s.potions}]`;
@@ -387,15 +392,23 @@ export function buyPotion() {
   if (s.gold >= 15) {
     s.gold -= 15;
     s.potions++;
+    if (!s.inventory) s.inventory = {};
+    s.inventory['health_potion'] = s.potions;
     playSound('coin');
     const btn = document.getElementById('btn-potion');
-    if (btn) btn.textContent = `🧪 Heal (C) [${s.potions}]`;
+    if (btn) {
+      btn.textContent = `🧪 Heal (C) [${s.potions}]`;
+      btn.style.opacity = '1.0';
+    }
+    const navPotionsEl = document.getElementById('nav-potions');
+    if (navPotionsEl) navPotionsEl.textContent = s.potions;
     document.getElementById('shop-gold').textContent = s.gold;
     
     const msgEl = document.getElementById('message');
     if (msgEl) msgEl.textContent = '✅ Berhasil membeli Health Potion!';
     
-    updateUI();
+    updateUI(true);
+    updateInventoryUI();
     if (typeof window.saveGame === 'function') window.saveGame(true);
   } else {
     const msgEl = document.getElementById('message');
@@ -884,6 +897,13 @@ export function updateInventoryUI() {
     if (goldEl) goldEl.textContent = s.gold;
     if (typeof window.saveGame === 'function') window.saveGame(true);
   }
+
+  // Sinkronkan s.potions ke inventory health_potion
+  if (s.potions > 0) {
+    s.inventory['health_potion'] = s.potions;
+  } else {
+    delete s.inventory['health_potion'];
+  }
   
   for (const [id, count] of Object.entries(s.inventory)) {
     if (id === 'gold') continue;
@@ -1078,8 +1098,14 @@ export function craftItem(resultId, ingredients) {
     s.inventory[id] -= count;
   }
   // Add result
-  s.inventory[resultId] = (s.inventory[resultId] ?? 0) + 1;
+  if (resultId === 'health_potion') {
+    s.potions = (s.potions || 0) + 1;
+    s.inventory['health_potion'] = s.potions;
+  } else {
+    s.inventory[resultId] = (s.inventory[resultId] ?? 0) + 1;
+  }
   playSound('coin');
+  if (typeof updateUI === 'function') updateUI(true);
   updateInventoryUI();
   if (typeof window.saveGame === 'function') window.saveGame(true);
   const msgEl = document.getElementById('message');
@@ -1088,6 +1114,12 @@ export function craftItem(resultId, ingredients) {
 
 export function useConsumable(id) {
   const s = state;
+  if (id === 'health_potion') {
+    if (typeof window.usePotion === 'function') {
+      window.usePotion();
+    }
+    return;
+  }
   const def = consumableItems[id];
   if (!def || !s.inventory || !s.inventory[id] || s.inventory[id] <= 0) return;
 

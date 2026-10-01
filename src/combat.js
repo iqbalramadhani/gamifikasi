@@ -622,18 +622,37 @@ export function triggerInteractable(it, index) {
 
 export function usePotion() {
   const s = state;
-  if (s.potions > 0 && s.player.hp < s.player.maxHp) {
-    s.potions--;
-    s.player.hp = Math.min(s.player.maxHp, s.player.hp + 40);
-    playSound('coin');
-    spawnParticles(s.player.x, s.player.y, 0x00ff00, 10, 'heal');
-    const btn = document.getElementById('btn-potion');
-    if (btn) {
-      btn.textContent = `🧪 Heal (C) [${s.potions}]`;
-      btn.style.opacity = s.potions > 0 ? '1.0' : '0.5';
-    }
-    if (typeof window.updateUI === 'function') window.updateUI(true);
+  if (s.potions <= 0) {
+    const msgEl = document.getElementById('message');
+    if (msgEl) msgEl.textContent = '❌ Tidak ada Health Potion!';
+    return;
   }
+  if (s.player.hp >= s.player.maxHp) {
+    const msgEl = document.getElementById('message');
+    if (msgEl) msgEl.textContent = 'HP sudah penuh!';
+    return;
+  }
+  s.potions--;
+  if (!s.inventory) s.inventory = {};
+  if (s.potions > 0) {
+    s.inventory['health_potion'] = s.potions;
+  } else {
+    delete s.inventory['health_potion'];
+  }
+  s.player.hp = Math.min(s.player.maxHp, s.player.hp + 40);
+  playSound('coin');
+  spawnParticles(s.player.x, s.player.y, 0x00ff00, 10, 'heal');
+  const btn = document.getElementById('btn-potion');
+  if (btn) {
+    btn.textContent = `🧪 Heal (C) [${s.potions}]`;
+    btn.style.opacity = s.potions > 0 ? '1.0' : '0.5';
+  }
+  const navPotionsEl = document.getElementById('nav-potions');
+  if (navPotionsEl) navPotionsEl.textContent = s.potions;
+  const msgEl = document.getElementById('message');
+  if (msgEl) msgEl.textContent = `🧪 Health Potion digunakan! (+40 HP)`;
+  if (typeof window.updateUI === 'function') window.updateUI(true);
+  if (typeof window.updateInventoryUI === 'function') window.updateInventoryUI();
 }
 
 // ─── Projectile update ────────────────────────────────────────────────────────

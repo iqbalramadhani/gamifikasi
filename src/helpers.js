@@ -54,11 +54,19 @@ export function checkItems() {
 
         if (drop.type === 'potion') {
           s.potions++;
+          if (!s.inventory) s.inventory = {};
+          s.inventory['health_potion'] = s.potions;
           const btn = document.getElementById('btn-potion');
-          if (btn) btn.textContent = `🧪 Heal (C) [${s.potions}]`;
+          if (btn) {
+            btn.textContent = `🧪 Heal (C) [${s.potions}]`;
+            btn.style.opacity = '1.0';
+          }
+          const navPotionsEl = document.getElementById('nav-potions');
+          if (navPotionsEl) navPotionsEl.textContent = s.potions;
           const msgEl = document.getElementById('message');
           if (msgEl) msgEl.textContent = `🧪 Potion didapat! (${s.potions} tersisa)`;
           spawnDamageText(drop.x, 30, drop.y, '+1 Potion', '#ff4444');
+          if (typeof window.updateInventoryUI === 'function') window.updateInventoryUI();
         } else if (drop.type === 'gold' || drop.item?.id === 'gold') {
           const goldAmount = drop.item?.value || 10;
           s.gold = (s.gold || 0) + goldAmount;
@@ -101,9 +109,17 @@ export function checkItems() {
       item.taken = true;
       item.mesh.visible = false;
       s.potions++;
+      if (!s.inventory) s.inventory = {};
+      s.inventory['health_potion'] = s.potions;
       playSound('coin');
       const btn = document.getElementById('btn-potion');
-      if (btn) btn.textContent = `🧪 Heal (C) [${s.potions}]`;
+      if (btn) {
+        btn.textContent = `🧪 Heal (C) [${s.potions}]`;
+        btn.style.opacity = '1.0';
+      }
+      const navPotionsEl = document.getElementById('nav-potions');
+      if (navPotionsEl) navPotionsEl.textContent = s.potions;
+      if (typeof window.updateInventoryUI === 'function') window.updateInventoryUI();
     }
   });
 }

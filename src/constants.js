@@ -97,7 +97,7 @@ export const consumableItems = {
   health_crystal: { id: 'health_crystal', name: 'Health Crystal', icon: '💎', effect: 'heal', value: 50, cooldown: 300 },
   antidote: { id: 'antidote', name: 'Antidote', icon: '🧪', effect: 'cure_poison', value: 15, cooldown: 0 },
   cooling_tea: { id: 'cooling_tea', name: 'Cooling Tea', icon: '🍵', effect: 'cure_burn', value: 15, cooldown: 0 },
-  health_potion: { id: 'health_potion', name: 'Health Potion', icon: '🧪', effect: 'heal', value: 30, cooldown: 0 },
+  health_potion: { id: 'health_potion', name: 'Health Potion', icon: '🧪', effect: 'heal', value: 40, cooldown: 0 },
   hometown_portal: { id: 'hometown_portal', name: 'Portal Scroll', icon: '📜', effect: 'teleport', value: 50, cooldown: 0 },
   stamina_potion: { id: 'stamina_potion', name: 'Stamina Potion', icon: '⚡', effect: 'restore_sp', value: 25, cooldown: 0 },
 };
