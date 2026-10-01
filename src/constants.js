@@ -2,6 +2,9 @@
 
 export const mapSize = 20000;
 
+// Minimum player level to enter the Scorched Dunes (wilds2) map
+export const WILDS2_MIN_LEVEL = 10;
+
 export const weaponList = [
   { name: "Wooden Sword", damage: 0, cost: 0, color: 0xeeeeee },
   { name: "Iron Sword", damage: 2, cost: 100, color: 0xaaaaaa },
@@ -40,6 +43,19 @@ export const enemyTemplates = [
   { hp: 10,  speed: 1.5, r: 18, damage: 15, typeStr: 'warrior',  charKey: 'blob_yeti' },
 ];
 
+// Scorched Dunes (wilds2) enemy templates — level 10+
+// Mix of reused Blob models (stats bumped) + new Flying models.
+export const enemyTemplates2 = [
+  { hp: 12,  speed: 1.6, r: 16, damage: 20, typeStr: 'sc_golem',    charKey: 'blob_green_spiky' },
+  { hp: 10,  speed: 1.8, r: 15, damage: 18, typeStr: 'sc_warrior',  charKey: 'blob_yeti' },
+  { hp: 14,  speed: 1.5, r: 18, damage: 25, typeStr: 'sc_mage',     charKey: 'blob_pink' },
+  { hp: 8,   speed: 2.0, r: 12, damage: 12, typeStr: 'sc_slime',    charKey: 'blob_green' },
+  { hp: 6,   speed: 2.2, r: 12, damage: 15, typeStr: 'sc_archer',   charKey: 'blob_alien' },
+  { hp: 14,  speed: 2.5, r: 20, damage: 30, typeStr: 'sc_dragon',   charKey: 'fly_dragon',  isFlying: true },
+  { hp: 10,  speed: 2.8, r: 15, damage: 22, typeStr: 'sc_ghost',    charKey: 'fly_ghost',   isFlying: true },
+  { hp: 8,   speed: 3.0, r: 12, damage: 15, typeStr: 'sc_squidle',  charKey: 'fly_squidle', isFlying: true },
+];
+
 export const lootTable = {
   spike: { id: 'wood_scrap', name: 'Wood Scrap', value: 2, color: 0x8b5a2b, icon: '🪵' },
   slime: { id: 'slime_gel', name: 'Slime Gel', value: 5, color: 0x00ff00, icon: '💧' },
@@ -64,6 +80,15 @@ export const lootTable = {
   bat: { id: 'bat_wing', name: 'Bat Wing', value: 3, color: 0x333333, icon: '🦇' },
   gargoyle: { id: 'stone_wing', name: 'Stone Wing', value: 15, color: 0x555555, icon: '🗿' },
   dragon: { id: 'dragon_scale', name: 'Dragon Scale', value: 80, color: 0xcc2200, icon: '🐉' },
+  // Scorched Dunes (wilds2) tier-2 loot
+  sc_golem:   { id: 'sc_golem_heart',   name: 'Golem Heart',     value: 30, color: 0x556655, icon: '💚' },
+  sc_warrior: { id: 'sc_warrior_crown', name: 'Warrior Crown',   value: 35, color: 0x885522, icon: '👑' },
+  sc_mage:    { id: 'sc_mage_orb',      name: 'Mage Orb',        value: 40, color: 0x8844ff, icon: '🔮' },
+  sc_slime:   { id: 'sc_slime_essence', name: 'Slime Essence',   value: 25, color: 0x66ff66, icon: '💧' },
+  sc_archer:  { id: 'sc_archer_quiver', name: 'Archer Quiver',   value: 20, color: 0xaa8844, icon: '🏹' },
+  sc_dragon:  { id: 'sc_dragon_claw',   name: 'Dragon Claw',     value: 60, color: 0xff4400, icon: '🐲' },
+  sc_ghost:   { id: 'sc_ghost_wisp',    name: 'Ghost Wisp',      value: 45, color: 0x99bbff, icon: '👻' },
+  sc_squidle: { id: 'sc_squidle_fang',  name: 'Squidle Fang',    value: 30, color: 0x44aaaa, icon: '🦈' },
 };
 
 export const consumableItems = {
@@ -71,6 +96,8 @@ export const consumableItems = {
   antidote: { id: 'antidote', name: 'Antidote', icon: '🧪', effect: 'cure_poison', value: 15, cooldown: 0 },
   cooling_tea: { id: 'cooling_tea', name: 'Cooling Tea', icon: '🍵', effect: 'cure_burn', value: 15, cooldown: 0 },
   health_potion: { id: 'health_potion', name: 'Health Potion', icon: '🧪', effect: 'heal', value: 30, cooldown: 0 },
+  hometown_portal: { id: 'hometown_portal', name: 'Portal Scroll', icon: '📜', effect: 'teleport', value: 50, cooldown: 0 },
+  stamina_potion: { id: 'stamina_potion', name: 'Stamina Potion', icon: '⚡', effect: 'restore_sp', value: 25, cooldown: 0 },
 };
 
 export const statusEffects = {

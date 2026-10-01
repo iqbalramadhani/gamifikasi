@@ -164,14 +164,57 @@ if (s.keys.arrowright) dx -= 1;   // kanan di layar
 
 ---
 
+### 📌 Masalah 8: Map "Scorched Dunes" (wilds2) — stuck di portal balik
+
+**Gejala:** Setelah masuk gurun lewat portal oranye, pemain *stuck* di zona portal balik dan tidak bisa bergerak menjauhinya.
+
+**Root Cause:** Titik spawn gurun (`(ms/2, ms/2 + 150)` di `environment.js`) berada 50 satuan dari portal balik `desertPortalWilds2` (`(ms/2, ms/2 + 200)` di `scenes.js`). Radius interaksi F portal sendiri = 50, jadi begitu masuk gurun pemain sudah *di dalam* zona F — setiap tekan F langsung melempar balik ke The Wilds sebelum sempat keluar dari zona.
+
+**Fix di `src/scenes.js`:**
+Pindahkan portal balik dari `(ms/2, ms/2 + 200)` ke `(ms/2 + 600, ms/2)` — 600 satuan ke samping dari tengah. Jarak portal↔spawn sekarang ~630 satuan, di luar zona F.
+
+```js
+// scenes.js — portal balik ke The Wilds
+s.desertPortalWilds2.position.set(ms / 2 + 600, 30, ms / 2);
+```
+
+> **Catatan:** Save lama yang koordinatnya dekat portal lama tetap aman — portalnya sudah tidak menempel lagi, jadi tidak ada loop.
+> **Status:** Terpasang, belum di-verify di browser (butuh `npm run dev` + jalan ke gurun).
+
+---
+
+## 📌 Map Baru: Scorched Dunes (`wilds2`) — Level 10+
+
+Fitur map kedua bertema gurun pasir (penerus The Wilds, mewakili level 20-30 dalam rencana panjang). Ini merangkum perubahan lintas file yang sudah terpasang:
+
+| Area | Perubahan |
+|------|-----------|
+| `constants.js` | `WILDS2_MIN_LEVEL = 10`, `enemyTemplates2` (5 Blob + 3 Flying), loot tier-2 |
+| `model-loader.js` | Register `fly_dragon`, `fly_ghost`, `fly_squidle` (aset glTF embedded) |
+| `state.js` | Flag `wilds2Loaded`, `wilds2Group`, `desertPortalWilds`, `desertPortalWilds2` |
+| `scenes.js` | `initWilds2()` — piramida tengah, cluster batu gurun, kolam quicksand, border cliffs, portal balik; `getTerrainHeightWilds2` |
+| `environment.js` | Branch `teleportTo('wilds2')`, override cuaca pasir di `updateWeather` |
+| `combat.js` | `spawnEnemy2()` (level 10+), spawner `updateEnemies` cabang per scene |
+| `helpers.js` | `blocked()` pilih set obstacle per scene (wilds2) |
+| `ui.js` | Interaksi portal (gate level 10), minimap: bg pasir `#c2a36b`, dot oranye portal |
+| `main.js` | Import `initWilds2` + `spawnEnemy2`, expose `window.spawnEnemy2`, branch `startGame` untuk `wilds2` |
+| `persistence.js` + `server.js` | Simpan/muat `current_scene` (save di gurun tidak drop ke The Wilds) |
+
+**Alur portal:** Hometown → (portal desa) → The Wilds → (portal oranye, level ≥ 10) → Scorched Dunes → (portal oranye balik, bebas) → The Wilds.
+
+---
+
 ## 📁 File yang Diubah dalam Sesi
 
 | File | Perubahan |
 |------|-----------|
-| `src/main.js` | Kamera chase, rotasi karakter, scale flip, expose `window.teleportTo` |
-| `src/combat.js` | Tombol arah (dx/dy), `facingX`/`facingY` assignment |
-| `src/ui.js` | Cooldown portal, reset `s.keys.f`, debounce interaksi NPC |
-| `src/environment.js` | Fungsi `teleportTo`, clear enemy, spawn enemy baru, reset kamera |
+| `src/main.js` | Kamera chase, rotasi karakter, scale flip, expose `window.teleportTo`; import `initWilds2`+`spawnEnemy2`, branch startGame wilds2 |
+| `src/combat.js` | Tombol arah (dx/dy), `facingX`/`facingY`; `spawnEnemy2` + spawner per scene |
+| `src/ui.js` | Cooldown portal, minimap pasir + dot oranye, interaksi portal gurun |
+| `src/environment.js` | Fungsi `teleportTo` (termasuk wilds2), cuaca gurun, clear enemy |
+| `src/scenes.js` | `initWilds2`, portal oranye dua arah, terrain gurun |
+| `src/constants.js` / `state.js` / `helpers.js` / `model-loader.js` | Konstanta, flag, collision, aset Flying |
+| `src/persistence.js` / `server.js` | Kolom `current_scene` save/load |
 
 ---
 

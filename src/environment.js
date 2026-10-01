@@ -3,7 +3,7 @@ import { state } from './state.js';
 import { playSound } from './audio.js';
 import { spawnParticles } from './helpers.js';
 import { mapSize } from './constants.js';
-import { initMap, initWildsNPCs } from './scenes.js';
+import { initMap, initWildsNPCs, initWilds2 } from './scenes.js';
 
 // ─── Weather / day-night cycle ────────────────────────────────────────────────
 
@@ -14,6 +14,19 @@ export function updateWeather(dt) {
   } else {
     s.dayTime += 0.0003 * dt;
     if (s.dayTime > 1) s.dayTime = 0;
+  }
+
+  // Scorched Dunes: fixed hot sand atmosphere, no day-night cycle / rain
+  if (s.currentScene === 'wilds2') {
+    let r = 217, g = 178, b = 106; // hazy sand sky
+    if (s.bossActive) { r = 150; g = 50; b = 30; }
+    if (s.dirLight) s.dirLight.intensity = s.bossActive ? 0.4 : 1.0;
+    if (s.scene) {
+      s.scene.background.setRGB(r / 255, g / 255, b / 255);
+      s.scene.fog.color.setRGB(r / 255, g / 255, b / 255);
+    }
+    if (s.rainParticles) s.rainParticles.material.opacity = 0;
+    return;
   }
 
   let lightIntensity = 0.8;
@@ -136,8 +149,9 @@ export function teleportTo(sceneName) {
     }
     
     if (s.hometownGroup) s.hometownGroup.visible = false;
+    if (s.wilds2Group) s.wilds2Group.visible = false;
     if (s.wildsGroup) s.wildsGroup.visible = true;
-    
+
     s.player.x = Math.floor(mapSize / 2);
     s.player.y = Math.floor(mapSize / 2) + 100;
 
@@ -155,8 +169,37 @@ export function teleportTo(sceneName) {
     }
 
     document.getElementById('message').textContent = 'Merasuki The Wilds...';
+  } else if (sceneName === 'wilds2') {
+    if (!s.wilds2Loaded) {
+      console.log('Lazy loading Scorched Dunes...');
+      initWilds2();
+      s.wilds2Loaded = true;
+    }
+
+    if (s.hometownGroup) s.hometownGroup.visible = false;
+    if (s.wildsGroup) s.wildsGroup.visible = false;
+    if (s.wilds2Group) s.wilds2Group.visible = true;
+
+    s.player.x = Math.floor(mapSize / 2);
+    s.player.y = Math.floor(mapSize / 2) + 150;
+
+    // Clear existing enemies
+    s.enemies.forEach(e => {
+      s.scene.remove(e.mesh);
+      s.scene.remove(e.hpGroup);
+    });
+    s.enemies.length = 0;
+
+    // Spawn initial wave of tier-2 enemies in the desert
+    const initialSpawns = Math.min(30, 10 + s.player.level * 2);
+    for (let i = 0; i < initialSpawns; i++) {
+      if (typeof window.spawnEnemy2 === 'function') window.spawnEnemy2();
+    }
+
+    document.getElementById('message').textContent = 'Memasuki Scorched Dunes...';
   } else {
     if (s.wildsGroup) s.wildsGroup.visible = false;
+    if (s.wilds2Group) s.wilds2Group.visible = false;
     if (s.hometownGroup) s.hometownGroup.visible = true;
     
     s.player.x = 500;

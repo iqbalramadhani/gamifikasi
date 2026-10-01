@@ -11,12 +11,27 @@ Dokumen ini merangkum struktur proyek, mekanik inti (khususnya sistem pertarunga
 Game ini dibangun secara modular menggunakan ECMAScript Modules (ESM). Berikut adalah pembagian file dan tugasnya:
 
 *   **`index.html`**: File utama penyaji UI (User Interface) berbasis HTML/CSS. Menangani *overlay* menu utama, papan misi, toko (shop/altar), inventaris, pengaturan kamera, dan *joystick/on-screen buttons* untuk versi *mobile*.
-*   **`src/main.js`**: Titik masuk utama aplikasi (Entry Point). Menangani inisialisasi awal Three.js, *game loop* utama (`requestAnimationFrame`), transisi cuaca, sinkronisasi kamera, input *keyboard*, dan penyimpanan data (*save/load*).
+*   **`src/main.js`**: Titik masuk utama aplikasi (Entry Point). Menangani inisialisasi awal Three.js, *game loop* utama (`requestAnimationFrame`), sinkronisasi kamera, input *keyboard*, dan orkestrasi *save/load* (pelaku simpan/muat ada di `src/persistence.js`).
 *   **`src/state.js`**: Pusat penyimpanan data (*State Management*). Menyimpan status *real-time* pemain, daftar musuh, proyektil, referensi aset 3D (*meshes*), inventaris, emas, hingga level pemain.
 *   **`src/scenes.js`**: Bertugas memuat model 3D (GLTF), membangun peta dasar (Hometown & Wilds), pencahayaan (*lighting*), efek pasca-pemrosesan (*Bloom Pass*), serta memposisikan NPC dan objek lingkungan.
 *   **`src/combat.js`**: Inti logika pertempuran. Menangani pergerakan pemain/musuh, kalkulasi *hitbox* dan jeda tebasan (*delay*), status stun, pengurangan HP (Health Points), sistem skill berputar (*spin attack*), serta *drop loot* musuh.
 *   **`src/environment.js`**: Menangani elemen lingkungan dinamis, seperti pergerakan efek partikel, hewan peliharaan (Peri), dan cuaca (Siang-Malam / Hujan).
-*   **`src/audio.js`**: Sistem pemutaran *sound effect* dan *background music* menggunakan Web Audio API.
+*   **`src/persistence.js`**: Menyimpan & memuat progres pemain (posisi, HP, level, inventori, poin statistik, *current scene*) ke backend.
+*   **`src/persistence.js` / `server.js`**: Skema penyimpanan SQLite. Kolom `current_scene` mencatat map tempat pemain terakhir aktif, sehingga save di gurun tidak membuat pemain jatuh kembali ke The Wilds.
+
+---
+
+## 6. Map Dunia & Portal
+
+Game memiliki tiga area yang terhubung lewat portal 3D (berbentuk oktahedron kawat, dipergunakan tombol `F`):
+
+1.  **Hometown / Safe Haven** — area permukiman aman tanpa musuh.
+2.  **The Wilds** — peta hutan untuk semua level; tempat portal oranye dan *boss* (*The Golden Golem*) berada.
+3.  **Scorched Dunes (`wilds2`)** — peta gurun pasir dengan *landmark* piramida tengah, cluster batu, dan kolam *quicksand*. **Khusus level 10+**: portal oranye di The Wilds terkunci sampai pemain mencapai level `WILDS2_MIN_LEVEL` (10). Setelah masuk, portal balik ke The Wilds bebas digunakan kapan pun (tidak perlu cek level lagi).
+
+Musuh di gurun memakai *tier-2* (`enemyTemplates2`) — campuran Blob (lebih kuat) dan *flying* (Dragon, Ghost, Squidle) — dengan skala level yang lebih tajam daripada The Wilds.
+
+> **Catatan teknis:** Setiap map punya *group* Three.js sendiri (`hometownGroup`, `wildsGroup`, `wilds2Group`). Saat pindah map, group lain disembunyikan; *obstacle set* collision dipilih otomatis sesuai `state.currentScene` di `helpers.js → blocked()`.
 
 ---
 

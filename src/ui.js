@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { state } from './state.js';
-import { mapSize, weaponList, armorList, helmetList, bootList, lootTable, consumableItems } from './constants.js';
+import { mapSize, weaponList, armorList, helmetList, bootList, lootTable, consumableItems, WILDS2_MIN_LEVEL } from './constants.js';
 import { playSound } from './audio.js';
 import { blocked, spawnParticles, checkItems } from './helpers.js';
 
@@ -12,6 +12,7 @@ let lastHp = -1, lastGold = -1;
 
 export function updateUI() {
   checkItems();
+  updateQuestUI();
 
   uiThrottle++;
   if (uiThrottle % 6 !== 0) return; // Throttle to ~10 fps for DOM writes
@@ -82,13 +83,20 @@ export function drawMinimap() {
   const scale = 150 / mapSize;
   const s = state;
 
-  // Background
-  ctx.fillStyle = s.currentScene === 'hometown' ? '#2d4f30' : '#1a3a1a';
+  // Background — hometown is green, The Wilds is dark forest green,
+  // Scorched Dunes (wilds2) is sandy/tan.
+  ctx.fillStyle =
+    s.currentScene === 'hometown' ? '#2d4f30'
+    : s.currentScene === 'wilds2' ? '#c2a36b'
+    : '#1a3a1a';
   ctx.fillRect(0, 0, 150, 150);
 
-  // Altar (center of wilds)
-  ctx.fillStyle = '#ffd700';
-  ctx.fillRect((mapSize / 2) * scale - 3, (mapSize / 2) * scale - 3, 6, 6);
+  // Altar (center of wilds) — only shown when actually in the Wilds, since
+  // the same coordinates point to the pyramid in wilds2.
+  if (s.currentScene !== 'wilds2') {
+    ctx.fillStyle = '#ffd700';
+    ctx.fillRect((mapSize / 2) * scale - 3, (mapSize / 2) * scale - 3, 6, 6);
+  }
 
   // Portals
   if (s.hometownPortal) {
@@ -98,6 +106,15 @@ export function drawMinimap() {
   if (s.wildsPortal) {
     ctx.fillStyle = '#ff00ff';
     ctx.fillRect(s.wildsPortal.position.x * scale - 3, s.wildsPortal.position.z * scale - 3, 6, 6);
+  }
+  // Desert portals — orange
+  if (s.desertPortalWilds && s.currentScene !== 'wilds2') {
+    ctx.fillStyle = '#ff8800';
+    ctx.fillRect(s.desertPortalWilds.position.x * scale - 3, s.desertPortalWilds.position.z * scale - 3, 6, 6);
+  }
+  if (s.desertPortalWilds2 && s.currentScene === 'wilds2') {
+    ctx.fillStyle = '#ff8800';
+    ctx.fillRect(s.desertPortalWilds2.position.x * scale - 3, s.desertPortalWilds2.position.z * scale - 3, 6, 6);
   }
 
   // Nearby enemies (max 15 for performance)
@@ -276,7 +293,7 @@ export function checkInteractions() {
         }
       }
     }
-  } else {
+  } else if (s.currentScene === 'wilds') {
     if (s.wildsPortal) {
       const distPortal = Math.hypot(s.player.x - s.wildsPortal.position.x, s.player.y - s.wildsPortal.position.z);
       if (distPortal < 50) {
@@ -284,6 +301,36 @@ export function checkInteractions() {
         if (s.keys.f && s.shopCooldown === 0) {
           s.shopCooldown = 60;
           if (typeof window.teleportTo === 'function') window.teleportTo('hometown');
+          s.keys.f = false;
+        }
+      }
+    }
+
+    // Portal to Scorched Dunes (level-gated)
+    if (s.desertPortalWilds) {
+      const distPortal = Math.hypot(s.player.x - s.desertPortalWilds.position.x, s.player.y - s.desertPortalWilds.position.z);
+      if (distPortal < 50) {
+        if (s.player.level >= WILDS2_MIN_LEVEL) {
+          interactText = `Tekan [F] masuk ke Scorched Dunes (Level ${WILDS2_MIN_LEVEL}+)`;
+          if (s.keys.f && s.shopCooldown === 0) {
+            s.shopCooldown = 60;
+            if (typeof window.teleportTo === 'function') window.teleportTo('wilds2');
+            s.keys.f = false;
+          }
+        } else {
+          interactText = `🔒 Butuh Level ${WILDS2_MIN_LEVEL} untuk masuk!`;
+        }
+      }
+    }
+  } else if (s.currentScene === 'wilds2') {
+    // Portal back to The Wilds
+    if (s.desertPortalWilds2) {
+      const distPortal = Math.hypot(s.player.x - s.desertPortalWilds2.position.x, s.player.y - s.desertPortalWilds2.position.z);
+      if (distPortal < 50) {
+        interactText = 'Tekan [F] kembali ke The Wilds';
+        if (s.keys.f && s.shopCooldown === 0) {
+          s.shopCooldown = 60;
+          if (typeof window.teleportTo === 'function') window.teleportTo('wilds');
           s.keys.f = false;
         }
       }
@@ -315,28 +362,75 @@ export function closeShop() {
   s.shopCooldown = 30;
 }
 
-export function buyUpgrade(type) {
+export function buyPotion() {
   const s = state;
-  if (type === 'hp' && s.gold >= 15) {
+  if (s.gold >= 15) {
     s.gold -= 15;
-    s.player.maxHp += 20;
-    s.player.hp = s.player.maxHp;
-    s.upgrades.hpLevel++;
-    document.getElementById('shop-hp-level').textContent = 'Lv ' + s.upgrades.hpLevel;
-  } else if (type === 'atk' && s.gold >= 20) {
-    s.gold -= 20;
-    s.player.attackDamage += 1;
-    s.upgrades.atkLevel++;
-    document.getElementById('shop-atk-level').textContent = 'Lv ' + s.upgrades.atkLevel;
-  } else if (type === 'spd' && s.gold >= 15) {
-    s.gold -= 15;
-    s.player.speed += 1;
-    s.upgrades.spdLevel++;
-    document.getElementById('shop-spd-level').textContent = 'Lv ' + s.upgrades.spdLevel;
+    s.potions++;
+    playSound('coin');
+    const btn = document.getElementById('btn-potion');
+    if (btn) btn.textContent = `🧪 Heal (C) [${s.potions}]`;
+    document.getElementById('shop-gold').textContent = s.gold;
+    
+    const msgEl = document.getElementById('message');
+    if (msgEl) msgEl.textContent = '✅ Berhasil membeli Health Potion!';
+    
+    updateUI();
+    if (typeof window.saveGame === 'function') window.saveGame(true);
+  } else {
+    const msgEl = document.getElementById('message');
+    if (msgEl) msgEl.textContent = 'Gold tidak cukup!';
   }
-  document.getElementById('shop-gold').textContent = s.gold;
-  updateUI();
-  if (typeof window.saveGame === 'function') window.saveGame(true);
+}
+
+export function buyInventoryItem(id, cost) {
+  const s = state;
+  if (s.gold >= cost) {
+    s.gold -= cost;
+    if (!s.inventory) s.inventory = {};
+    if (!s.inventory[id]) s.inventory[id] = 0;
+    s.inventory[id]++;
+    playSound('coin');
+    document.getElementById('shop-gold').textContent = s.gold;
+    const msgEl = document.getElementById('message');
+    const name = consumableItems[id]?.name || id;
+    if (msgEl) msgEl.textContent = `✅ Berhasil membeli ${name}!`;
+    updateUI();
+    if (typeof window.saveGame === 'function') window.saveGame(true);
+  } else {
+    const msgEl = document.getElementById('message');
+    if (msgEl) msgEl.textContent = 'Gold tidak cukup!';
+  }
+}
+
+export function buyMysteryBox(cost) {
+  const s = state;
+  if (s.gold >= cost) {
+    s.gold -= cost;
+    playSound('coin');
+    document.getElementById('shop-gold').textContent = s.gold;
+    
+    // Pick random loot
+    const lootKeys = Object.keys(lootTable);
+    const randomLootId = lootKeys[Math.floor(Math.random() * lootKeys.length)];
+    const lootItem = lootTable[randomLootId];
+    
+    if (!s.inventory) s.inventory = {};
+    if (!s.inventory[lootItem.id]) s.inventory[lootItem.id] = 0;
+    
+    // Give 1-3 random loot items
+    const amount = Math.floor(Math.random() * 3) + 1;
+    s.inventory[lootItem.id] += amount;
+    
+    const msgEl = document.getElementById('message');
+    if (msgEl) msgEl.textContent = `🎁 Gacha! Mendapatkan ${amount}x ${lootItem.name}!`;
+    
+    updateUI();
+    if (typeof window.saveGame === 'function') window.saveGame(true);
+  } else {
+    const msgEl = document.getElementById('message');
+    if (msgEl) msgEl.textContent = 'Gold tidak cukup!';
+  }
 }
 
 // ─── Blacksmith ───────────────────────────────────────────────────────────────
@@ -555,7 +649,7 @@ window.equipHelmet = (idx) => {
   s.player.maxHp += hpDiff;
   s.player.hp += hpDiff;
   if (typeof window.updateUI === 'function') window.updateUI();
-  if (typeof window.updateInventoryUI === 'function') window.updateInventoryUI();
+  updateInventoryUI();
   if (typeof window.saveGame === 'function') window.saveGame(true);
 };
 
@@ -568,7 +662,7 @@ window.equipBoots = (idx) => {
   const speedDiff = bNext.speed - prevSpeed;
   s.player.speed += speedDiff;
   if (typeof window.updateUI === 'function') window.updateUI();
-  if (typeof window.updateInventoryUI === 'function') window.updateInventoryUI();
+  updateInventoryUI();
   if (typeof window.saveGame === 'function') window.saveGame(true);
 };
 
@@ -731,7 +825,10 @@ export function closeQuestBoard() {
 export function updateQuestUI() {
   const s = state;
   if (s.bountyQuest) {
-    document.getElementById('side-quest-text').textContent = `${s.bountyQuestProgress} / ${s.bountyQuest.count}`;
+    document.getElementById('side-quest-badge').style.display = 'inline-flex';
+    document.getElementById('side-quest-text').textContent = `${s.bountyQuest.name} (${s.bountyQuestProgress} / ${s.bountyQuest.count})`;
+  } else {
+    document.getElementById('side-quest-badge').style.display = 'none';
   }
 }
 
@@ -761,7 +858,8 @@ export function updateInventoryUI() {
     if (count > 0) {
       hasItems = true;
       const lootDef = Object.values(lootTable).find(l => l.id === id);
-      const name = lootDef ? lootDef.name : id;
+      const consDef = consumableItems[id];
+      const name = lootDef ? lootDef.name : (consDef ? consDef.name : id);
       
       const div = document.createElement('div');
       div.style.display = 'flex';
@@ -770,7 +868,9 @@ export function updateInventoryUI() {
       div.style.borderBottom = '1px solid #444';
       
       const nameSpan = document.createElement('span');
-      const icon = lootDef && lootDef.icon ? lootDef.icon : '';
+      let icon = '';
+      if (lootDef && lootDef.icon) icon = lootDef.icon;
+      else if (consDef && consDef.icon) icon = consDef.icon;
       nameSpan.textContent = icon ? `${icon} ${name}` : name;
       
       const countSpan = document.createElement('span');
@@ -948,7 +1048,7 @@ export function craftItem(resultId, ingredients) {
   // Add result
   s.inventory[resultId] = (s.inventory[resultId] ?? 0) + 1;
   playSound('coin');
-  if (typeof window.updateInventoryUI === 'function') window.updateInventoryUI();
+  updateInventoryUI();
   if (typeof window.saveGame === 'function') window.saveGame(true);
   const msgEl = document.getElementById('message');
   if (msgEl) msgEl.textContent = '✅ Crafting berhasil!';
@@ -995,10 +1095,24 @@ export function useConsumable(id) {
       const msgEl = document.getElementById('message');
       if (msgEl) msgEl.textContent = 'Anda tidak sedang terbakar.';
     }
+  } else if (def.effect === 'teleport') {
+    if (typeof window.teleportTo === 'function') {
+      window.teleportTo('hometown');
+      playSound('coin');
+      const msgEl = document.getElementById('message');
+      if (msgEl) msgEl.textContent = '🌀 Berteleportasi ke Hometown!';
+      closeInventory();
+    }
+  } else if (def.effect === 'restore_sp') {
+    s.player.stamina = s.player.maxStamina;
+    playSound('coin');
+    spawnParticles(s.player.x, s.player.y, 0x00ffff, 10, 'heal');
+    const msgEl = document.getElementById('message');
+    if (msgEl) msgEl.textContent = '⚡ Stamina pulih penuh!';
   }
 
   if (typeof window.updateUI === 'function') window.updateUI();
-  if (typeof window.updateInventoryUI === 'function') window.updateInventoryUI();
+  updateInventoryUI();
 }
 
 export function sellItem(id, sellPrice) {
@@ -1070,7 +1184,7 @@ window.zoomCamera = function(dir) {
 window.addEventListener('keydown', e => {
   const key = e.key.toLowerCase();
   state.keys[key] = true;
-  if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'shift', 'z', 'x', 'c', 'v', 'tab', 'f', 'i', 'm', '=', '-'].includes(key)) {
+  if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'shift', 'z', 'x', 'c', 'v', 'tab', 'f', 'i', 'j', 'm', '=', '-'].includes(key)) {
     e.preventDefault();
   }
   if (key === 'escape' && typeof window.togglePause === 'function') window.togglePause();
@@ -1078,6 +1192,11 @@ window.addEventListener('keydown', e => {
     const invEl = document.getElementById('inventory-menu');
     if (invEl && invEl.style.display === 'flex') closeInventory();
     else openInventory();
+  }
+  if (key === 'j') {
+    const qbEl = document.getElementById('quest-board');
+    if (qbEl && qbEl.style.display === 'flex') closeQuestBoard();
+    else openQuestBoard();
   }
   if (key === 'm') {
     const mapEl = document.getElementById('full-map-modal');

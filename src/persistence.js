@@ -35,6 +35,7 @@ export function saveGame(isAuto = false) {
     camera_y: s.cameraOffsetY,
     camera_z: s.cameraOffsetZ,
     camera_look_y: s.cameraLookAtY,
+    current_scene: s.currentScene,
     inventory: JSON.stringify(s.inventory),
     statPoints: s.player.statPoints,
     stats: s.player.stats,
@@ -122,9 +123,6 @@ export function loadGame() {
       s.ownedBoots = [];
       for (let i = 0; i <= s.currentBoots; i++) s.ownedBoots.push(i);
 
-      if (s.player.x < 2000) s.currentScene = 'hometown';
-      else s.currentScene = 'wilds';
-
       if (d.camera_y != null) {
         s.cameraOffsetY = d.camera_y;
         s.cameraOffsetZ = d.camera_z;
@@ -138,6 +136,15 @@ export function loadGame() {
           document.getElementById('cam-look').value = s.cameraLookAtY;
           document.getElementById('val-cam-look').innerText = s.cameraLookAtY;
         }
+      }
+
+      // Restore saved scene; fall back to coordinate-based inference for old saves
+      if (d.current_scene) {
+        s.currentScene = d.current_scene;
+      } else if (s.player.x < 2000) {
+        s.currentScene = 'hometown';
+      } else {
+        s.currentScene = 'wilds';
       }
 
       s.player.statPoints = d.statPoints ?? s.player.statPoints;

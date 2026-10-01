@@ -20,6 +20,7 @@ export const loadedModels = {
   blob_alien: null, blob_birb: null, blob_cactoro: null,
   blob_green: null, blob_green_spiky: null, blob_mushnub: null,
   blob_pink: null, blob_yeti: null,
+  fly_dragon: null, fly_ghost: null, fly_squidle: null,
 };
 
 const modelsToLoad = [
@@ -66,6 +67,9 @@ const modelsToLoad = [
   { key: 'blob_mushnub', url: '/monsterl1_10/Blob/glTF/Mushnub.gltf' },
   { key: 'blob_pink', url: '/monsterl1_10/Blob/glTF/PinkBlob.gltf' },
   { key: 'blob_yeti', url: '/monsterl1_10/Blob/glTF/Yeti.gltf' },
+  { key: 'fly_dragon',  url: '/monsterl1_10/Flying/glTF/Dragon.gltf' },
+  { key: 'fly_ghost',   url: '/monsterl1_10/Flying/glTF/Ghost.gltf' },
+  { key: 'fly_squidle', url: '/monsterl1_10/Flying/glTF/Squidle.gltf' },
 ];
 
 const fbxModelsToLoad = [

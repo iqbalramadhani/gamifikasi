@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { state } from './state.js';
-import { mapSize, weaponList, armorList, enemyTemplates, lootTable, consumableItems, statusEffects } from './constants.js';
+import { mapSize, weaponList, armorList, enemyTemplates, enemyTemplates2, WILDS2_MIN_LEVEL, lootTable, consumableItems, statusEffects } from './constants.js';
 import { loadedModels } from './model-loader.js';
 import { blocked, spawnParticles, spawnDamageText } from './helpers.js';
-import { spawnAtFreePos, getTerrainHeight } from './scenes.js';
+import { spawnAtFreePos, spawnAtFreePosWilds2, getTerrainHeight } from './scenes.js';
 import { playSound } from './audio.js';
 
 // ─── Critical hit helper ──────────────────────────────────────────────────────
@@ -98,6 +98,73 @@ export function spawnEnemy(ex, ey, scaleFactor = 1.0, isBossChild = false) {
     limbs,
     isBossChild,
     isFlying: !!isFlying,
+    age: 0
+  });
+}
+
+// ─── Tier-2 enemy spawner (Scorched Dunes, level 10+) ──────────────────────
+
+export function spawnEnemy2(ex, ey, scaleFactor = 1.0, isBossChild = false) {
+  const s = state;
+  if (s.player.level < WILDS2_MIN_LEVEL) return;
+  if (!ex || !ey) {
+    const pos = spawnAtFreePosWilds2();
+    ex = pos.x; ey = pos.y;
+  }
+
+  const tmpl = enemyTemplates2[Math.floor(Math.random() * enemyTemplates2.length)];
+  let { hp, speed: baseSpeed, r: eR, typeStr, isFlying, damage } = tmpl;
+  const charKey = tmpl.charKey;
+
+  let mesh, eY;
+  if (loadedModels[charKey]) {
+    const gltfEnemy = SkeletonUtils.clone(loadedModels[charKey]);
+    gltfEnemy.scale.set(7 * scaleFactor, 7 * scaleFactor, 7 * scaleFactor);
+    gltfEnemy.position.y = -12;
+    mesh = new THREE.Group();
+    mesh.add(gltfEnemy);
+    eY = isFlying ? 35 : 15;
+  } else {
+    const boxGeo = new THREE.BoxGeometry(20 * scaleFactor, 20 * scaleFactor, 20 * scaleFactor);
+    const boxMat = new THREE.MeshLambertMaterial({ color: 0xff8800 });
+    mesh = new THREE.Mesh(boxGeo, boxMat);
+    eY = isFlying ? 30 : 10;
+  }
+
+  // Stronger scaling than the base Wilds tier
+  const levelMulti = 1 + s.player.level * 0.12;
+  hp *= levelMulti;
+  mesh.position.set(ex, eY, ey);
+  s.scene.add(mesh);
+
+  const hpBgMat = new THREE.MeshBasicMaterial({ color: 0x222222 });
+  const hpFgMat = new THREE.MeshBasicMaterial({ color: 0xaa2200 });
+  const hpGeo = new THREE.PlaneGeometry(24, 4);
+  const hpGroup = new THREE.Group();
+  const hpBg = new THREE.Mesh(hpGeo, hpBgMat);
+  const hpFg = new THREE.Mesh(hpGeo, hpFgMat);
+  hpFg.position.z = 0.1;
+  hpGroup.add(hpBg, hpFg);
+  s.scene.add(hpGroup);
+
+  const dx = (Math.random() - 0.5) * 2;
+  const dy = (Math.random() - 0.5) * 2;
+  const limbs = { 'leg-left': null, 'leg-right': null, 'arm-left': null, 'arm-right': null };
+  mesh.traverse(child => {
+    if (child.name && limbs.hasOwnProperty(child.name)) {
+      limbs[child.name] = child;
+    }
+  });
+  s.enemies.push({
+    x: ex, y: ey, r: eR, meshY: eY, dx, dy,
+    hp, maxHp: hp, baseSpeed, damage: damage || 10,
+    mesh, hpGroup, hpFg,
+    stunTimer: 0, slowTimer: 0, type: typeStr,
+    attackTimer: 0, walkCycle: Math.random() * Math.PI * 2,
+    limbs,
+    isBossChild,
+    isFlying: !!isFlying,
+    tier: 2,
     age: 0
   });
 }
@@ -498,6 +565,16 @@ function killEnemy(index) {
     s.lootDrops.push({ x: e.x + 5, y: e.y + 5, taken: false, type: 'potion', mesh: dropMesh });
   }
 
+  if (Math.random() < 0.05) {
+    const portalMesh = new THREE.Mesh(
+      new THREE.BoxGeometry(3, 1, 3),
+      new THREE.MeshLambertMaterial({ color: 0x00ffff })
+    );
+    portalMesh.position.set(e.x - 5, 3, e.y + 5);
+    s.scene.add(portalMesh);
+    s.lootDrops.push({ x: e.x - 5, y: e.y + 5, taken: false, type: 'consumable', item: { id: 'hometown_portal', name: 'Portal Scroll' }, mesh: portalMesh });
+  }
+
   // EXP orb
   const expGeo = new THREE.DodecahedronGeometry(5, 0);
   const expMat = new THREE.MeshBasicMaterial({ color: 0x0088ff });
@@ -515,21 +592,24 @@ export function updateEnemies(dt) {
   const s = state;
   if (s.currentScene === 'hometown') return;
 
-  // Spawner
+  // Spawner — tier-2 enemies (slightly tighter) in Scorched Dunes
   if (s.isGameStarted) {
     s._spawnTimer = (s._spawnTimer ?? 0) + dt;
-    const spawnRate = Math.max(90, 240 - s.player.level * 10);
-    const maxEnemies = Math.min(80, 30 + s.player.level * 5);
+    const isWilds2 = s.currentScene === 'wilds2';
+    const spawnRate = isWilds2 ? Math.max(120, 280 - s.player.level * 10)
+                                : Math.max(90, 240 - s.player.level * 10);
+    const maxEnemies = isWilds2 ? Math.min(60, 20 + s.player.level * 3)
+                                 : Math.min(80, 30 + s.player.level * 5);
     if (s._spawnTimer > spawnRate && s.enemies.length < maxEnemies) {
       s._spawnTimer = 0;
       const ang = Math.random() * Math.PI * 2;
       const dist = 1200 + Math.random() * 400;
       const edgeX = s.player.x + Math.cos(ang) * dist;
       const edgeY = s.player.y + Math.sin(ang) * dist;
-      spawnEnemy(
-        Math.max(50, Math.min(mapSize - 50, edgeX)),
-        Math.max(50, Math.min(mapSize - 50, edgeY)),
-      );
+      const ex = Math.max(50, Math.min(mapSize - 50, edgeX));
+      const ey = Math.max(50, Math.min(mapSize - 50, edgeY));
+      if (isWilds2) spawnEnemy2(ex, ey);
+      else spawnEnemy(ex, ey);
     }
   }
 
@@ -900,14 +980,12 @@ export function updateBoss(dt) {
     }
 
     // Boss always drops a potion
-    if (s.potions < 3) {
-      const potGeo = new THREE.CylinderGeometry(3, 3, 8, 8);
-      const potMat = new THREE.MeshLambertMaterial({ color: 0xff0000 });
-      const potMesh = new THREE.Mesh(potGeo, potMat);
-      potMesh.position.set(s.bossX + 10, 10, s.bossY + 10);
-      s.scene.add(potMesh);
-      s.potionItems.push({ x: s.bossX + 10, y: s.bossY + 10, mesh: potMesh, taken: false });
-    }
+    const potGeo = new THREE.CylinderGeometry(3, 3, 8, 8);
+    const potMat = new THREE.MeshLambertMaterial({ color: 0xff0000 });
+    const potMesh = new THREE.Mesh(potGeo, potMat);
+    potMesh.position.set(s.bossX + 10, 10, s.bossY + 10);
+    s.scene.add(potMesh);
+    s.potionItems.push({ x: s.bossX + 10, y: s.bossY + 10, mesh: potMesh, taken: false });
 
     // Show win screen
     setTimeout(() => {

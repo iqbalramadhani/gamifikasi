@@ -48,6 +48,7 @@ const db = new sqlite3.Database(dbPath, (err) => {
                 db.run(`ALTER TABLE player_data ADD COLUMN bountyQuest TEXT`, () => {});
                 db.run(`ALTER TABLE player_data ADD COLUMN bountyQuestProgress INTEGER DEFAULT 0`, () => {});
                 db.run(`ALTER TABLE player_data ADD COLUMN lastCrystalUse INTEGER DEFAULT 0`, () => {});
+                db.run(`ALTER TABLE player_data ADD COLUMN current_scene TEXT`, () => {});
             }
         });
     }
@@ -68,13 +69,13 @@ app.post('/api/save', (req, res) => {
                 gold = ?, potions = ?, crystalCount = ?, currentWeapon = ?, currentArmor = ?,
                 level = ?, exp = ?, nextExp = ?, camera_y = ?, camera_z = ?, camera_look_y = ?, inventory = ?,
                 statPoints = ?, stat_str = ?, stat_agi = ?, stat_vit = ?,
-                bountyQuest = ?, bountyQuestProgress = ?, lastCrystalUse = ? WHERE id = 1`;
+                bountyQuest = ?, bountyQuestProgress = ?, lastCrystalUse = ?, current_scene = ? WHERE id = 1`;
             const params = [
                 data.x, data.y, data.hp, data.maxHp, data.attackDamage,
                 data.gold, data.potions, data.crystalCount, data.currentWeapon, data.currentArmor,
                 data.level, data.exp, data.nextExp, data.camera_y, data.camera_z, data.camera_look_y, data.inventory,
                 data.statPoints, data.stats.str, data.stats.agi, data.stats.vit,
-                data.bountyQuest, data.bountyQuestProgress, data.lastCrystalUse,
+                data.bountyQuest, data.bountyQuestProgress, data.lastCrystalUse, data.current_scene,
             ];
             db.run(sql, params, function(err) {
                 if (err) return res.status(500).json({ error: err.message });
@@ -84,14 +85,14 @@ app.post('/api/save', (req, res) => {
             // Insert jika belum ada
             const sql = `INSERT INTO player_data (
                 id, player_x, player_y, hp, maxHp, attackDamage,
-                gold, potions, crystalCount, currentWeapon, currentArmor, level, exp, nextExp, camera_y, camera_z, camera_look_y, inventory, statPoints, stat_str, stat_agi, stat_vit, bountyQuest, bountyQuestProgress, lastCrystalUse
-            ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+                gold, potions, crystalCount, currentWeapon, currentArmor, level, exp, nextExp, camera_y, camera_z, camera_look_y, inventory, statPoints, stat_str, stat_agi, stat_vit, bountyQuest, bountyQuestProgress, lastCrystalUse, current_scene
+            ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
             const params = [
                 data.x, data.y, data.hp, data.maxHp, data.attackDamage,
                 data.gold, data.potions, data.crystalCount, data.currentWeapon, data.currentArmor,
                 data.level, data.exp, data.nextExp, data.camera_y, data.camera_z, data.camera_look_y, data.inventory,
                 data.statPoints, data.stats.str, data.stats.agi, data.stats.vit,
-                data.bountyQuest, data.bountyQuestProgress, data.lastCrystalUse,
+                data.bountyQuest, data.bountyQuestProgress, data.lastCrystalUse, data.current_scene,
             ];
             db.run(sql, params, function(err) {
                 if (err) return res.status(500).json({ error: err.message });

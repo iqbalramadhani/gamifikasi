@@ -18,7 +18,11 @@ export function blocked(x, y, r = state.player.r) {
     if (x - r < 0 || x + r > mapSize || y - r < 0 || y + r > mapSize) return true;
   }
   
-  const obs = isHometown ? s.obstaclesHometown : s.obstaclesWilds;
+  const obs = isHometown
+    ? s.obstaclesHometown
+    : (s.currentScene === 'wilds2')
+      ? s.obstaclesWilds2
+      : s.obstaclesWilds;
   for (let i = 0; i < obs.length; i++) {
     const o = obs[i];
     if (Math.abs(o.x - x) > o.r + r || Math.abs(o.y - y) > o.r + r) continue;
@@ -79,14 +83,12 @@ export function checkItems() {
 
   s.potionItems.forEach(item => {
     if (!item.taken && Math.hypot(s.player.x - item.x, s.player.y - item.y) < s.player.r + 15) {
-      if (s.potions < 3) {
-        item.taken = true;
-        item.mesh.visible = false;
-        s.potions++;
-        playSound('coin');
-        const btn = document.getElementById('btn-potion');
-        if (btn) btn.textContent = `🧪 Heal (C) [${s.potions}]`;
-      }
+      item.taken = true;
+      item.mesh.visible = false;
+      s.potions++;
+      playSound('coin');
+      const btn = document.getElementById('btn-potion');
+      if (btn) btn.textContent = `🧪 Heal (C) [${s.potions}]`;
     }
   });
 }

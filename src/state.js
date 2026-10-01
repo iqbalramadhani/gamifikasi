@@ -90,6 +90,13 @@ export const state = {
   hometownGroup: null,
   wildsGroup: null,
 
+  // Scorched Dunes (wilds2) — level 10+
+  wilds2Loaded: false,
+  obstaclesWilds2: [],
+  wilds2Group: null,
+  desertPortalWilds: null,  // portal in wilds → wilds2
+  desertPortalWilds2: null, // portal in wilds2 → wilds
+
   coinItems: [],
   expOrbs: [],
   potionItems: [],

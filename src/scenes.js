@@ -1196,6 +1196,15 @@ export function initWildsNPCs() {
   s.wildsPortal.position.set(mapSize / 2, 30, mapSize / 2 + 60);
   s.wildsGroup.add(s.wildsPortal);
 
+  // Portal to Scorched Dunes (wilds2) — placed near altar, always created;
+  // level gate is enforced in ui.js
+  const desertPortalMat = new THREE.MeshLambertMaterial({
+    color: 0xff8800, wireframe: true,
+  });
+  s.desertPortalWilds = new THREE.Mesh(portalGeo, desertPortalMat);
+  s.desertPortalWilds.position.set(mapSize / 2, 30, mapSize / 2 + 400);
+  s.wildsGroup.add(s.desertPortalWilds);
+
   // BOSS (The Golden Golem)
   s.bossActive = true;
   s.bossX = mapSize - 1000;
@@ -1270,4 +1279,245 @@ export function initWildsNPCs() {
     spawnEnemy(s.bossX + 130, s.bossY, 0.5, true);
     spawnEnemy(s.bossX - 130, s.bossY, 0.5, true);
   }, 1000); // Slight delay to ensure combat.js is fully initialized
+}
+
+// ─── Scorched Dunes (wilds2) — desert map, level 10+ ─────────────────────────
+
+/**
+ * Terrain height for wilds2: gentle rolling dunes + central pyramid bump.
+ * Used only when currentScene === 'wilds2' (player mesh / wilds2 entities).
+ */
+export function getTerrainHeightWilds2(x, y) {
+  const cx = mapSize / 2, cz = mapSize / 2;
+  const distFromCenter = Math.hypot(x - cx, y - cz);
+  // Pyramid flat zone
+  if (distFromCenter <= 350) return 0;
+  const distanceFactor = Math.min(1, (distFromCenter - 350) / 300);
+  // Smooth dunes (different frequency from the Wilds so it looks distinct)
+  const wave = Math.sin(x * 0.0018) * Math.cos(y * 0.0025) * 22;
+  const noise = Math.sin(x * 0.0042 + 1.3) * Math.sin(y * 0.0037) * 12;
+  // Central pyramid plateau rises
+  const plateau = Math.max(0, 40 - distFromCenter * 0.12);
+  return (wave + noise) * distanceFactor + plateau;
+}
+
+/** Wilds2 spawn finder (same pattern as spawnAtFreePos but uses obstaclesWilds2). */
+export function spawnAtFreePosWilds2() {
+  const s = state;
+  let x, y, valid = false;
+  while (!valid) {
+    x = 50 + Math.random() * (mapSize - 100);
+    y = 50 + Math.random() * (mapSize - 100);
+    if (Math.hypot(x - mapSize / 2, y - mapSize / 2) < 500) continue;
+    if (Math.hypot(x - s.player.x, y - s.player.y) < 500) continue;
+    if (s.obstaclesWilds2.some(o => Math.hypot(o.x - x, o.y - y) < o.r + 30)) continue;
+    valid = true;
+  }
+  return { x, y };
+}
+
+export function initWilds2() {
+  const s = state;
+  s.wilds2Group = new THREE.Group();
+  s.scene.add(s.wilds2Group);
+
+  const ms = mapSize;
+
+  // ── Sand floor (separate plane so it only renders when wilds2 is visible) ──
+  const texCanvas = document.createElement('canvas');
+  texCanvas.width = 512;
+  texCanvas.height = 512;
+  const ctx = texCanvas.getContext('2d');
+  ctx.fillStyle = '#d9b26a'; // Base sand color
+  ctx.fillRect(0, 0, 512, 512);
+  for (let i = 0; i < 15000; i++) {
+    ctx.fillStyle = Math.random() > 0.5 ? '#e8c987' : '#c2a36b'; // Light & dark sand grains
+    ctx.globalAlpha = Math.random() * 0.8 + 0.2;
+    ctx.fillRect(Math.random() * 512, Math.random() * 512, 2 + Math.random() * 2, 2 + Math.random() * 4);
+  }
+  const sandTex = new THREE.CanvasTexture(texCanvas);
+  sandTex.wrapS = THREE.RepeatWrapping;
+  sandTex.wrapT = THREE.RepeatWrapping;
+  sandTex.repeat.set(ms / 150, ms / 150);
+
+  const floorGeo = new THREE.PlaneGeometry(ms, ms, 200, 200);
+  const posAttr = floorGeo.attributes.position;
+  for (let i = 0; i < posAttr.count; i++) {
+    const vx = posAttr.getX(i);
+    const vy = posAttr.getY(i);
+    const worldX = vx + (ms / 2);
+    const worldY = (ms / 2) - vy;
+    posAttr.setZ(i, getTerrainHeightWilds2(worldX, worldY));
+  }
+  floorGeo.computeVertexNormals();
+  const floorMat = new THREE.MeshStandardMaterial({
+    map: sandTex,
+    roughness: 0.95,
+    metalness: 0.02,
+  });
+  const floor = new THREE.Mesh(floorGeo, floorMat);
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.set(ms / 2, 0, ms / 2);
+  floor.receiveShadow = true;
+  s.wilds2Group.add(floor);
+
+  // ── Central ancient pyramid (3 stacked tiers, sandstone + gold cap) ──
+  const pyramidGroup = new THREE.Group();
+  const sandstoneMat = new THREE.MeshLambertMaterial({ color: 0xc2a36b });
+  const goldMat = new THREE.MeshLambertMaterial({ color: 0xffd700, emissive: 0x886600, emissiveIntensity: 0.5 });
+
+  const tier1 = new THREE.Mesh(new THREE.CylinderGeometry(40, 200, 80, 4), sandstoneMat);
+  tier1.position.y = 40;
+  const tier2 = new THREE.Mesh(new THREE.CylinderGeometry(40, 130, 60, 4), sandstoneMat);
+  tier2.position.y = 105;
+  const tier3 = new THREE.Mesh(new THREE.ConeGeometry(40, 50, 4), goldMat);
+  tier3.position.y = 160;
+  pyramidGroup.add(tier1, tier2, tier3);
+  pyramidGroup.rotation.y = Math.PI / 4; // Point a face toward map center
+  pyramidGroup.position.set(ms / 2, 0, ms / 2);
+  s.wilds2Group.add(pyramidGroup);
+  s.obstaclesWilds2.push({ x: ms / 2, y: ms / 2, r: 160 });
+
+  // ── Scattered rocks / sand boulders around the pyramid ──
+  for (let i = 0; i < 80; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 250 + Math.random() * 400;
+    const rx = ms / 2 + Math.cos(angle) * dist;
+    const ry = ms / 2 + Math.sin(angle) * dist;
+    if (rx < 50 || rx > ms - 50 || ry < 50 || ry > ms - 50) continue;
+    const rr = 10 + Math.random() * 15;
+    let rockGroup;
+    if (Math.random() < 0.5 && loadedModels.rocks_high)
+      rockGroup = SkeletonUtils.clone(loadedModels.rocks_high);
+    else if (loadedModels.rocks_low)
+      rockGroup = SkeletonUtils.clone(loadedModels.rocks_low);
+    if (rockGroup) {
+      const sc = 20 + Math.random() * 15;
+      rockGroup.scale.set(sc, sc, sc);
+      rockGroup.position.set(rx, getTerrainHeightWilds2(rx, ry), ry);
+      rockGroup.rotation.y = Math.random() * Math.PI;
+      s.wilds2Group.add(rockGroup);
+    } else {
+      const rock = new THREE.Mesh(
+        new THREE.DodecahedronGeometry(rr, 0),
+        new THREE.MeshLambertMaterial({ color: 0xb89a6a })
+      );
+      rock.position.set(rx, rr + getTerrainHeightWilds2(rx, ry), ry);
+      rock.rotation.y = Math.random() * Math.PI;
+      s.wilds2Group.add(rock);
+    }
+    s.obstaclesWilds2.push({ x: rx, y: ry, r: rr * 0.8 });
+  }
+
+  // ── Desert rock clusters (reuse rocks models + sand-colored obsidian) ──
+  const numClusters = 150;
+  for (let c = 0; c < numClusters; c++) {
+    const cx = 200 + Math.random() * (ms - 400);
+    const cy = 200 + Math.random() * (ms - 400);
+    if (Math.hypot(cx - ms / 2, cy - ms / 2) < 500) continue;
+
+    const isRockCluster = Math.random() < 0.4;
+    const clusterSize = 10 + Math.floor(Math.random() * 20);
+
+    for (let i = 0; i < clusterSize; i++) {
+      const rAngle = Math.random() * Math.PI * 2;
+      const rDist = Math.random() * 200;
+      const x = cx + Math.cos(rAngle) * rDist;
+      const y = cy + Math.sin(rAngle) * rDist;
+      if (x < 50 || x > ms - 50 || y < 50 || y > ms - 50) continue;
+      if (Math.hypot(x - ms / 2, y - ms / 2) < 450) continue;
+      if (s.obstaclesWilds2.some(o => Math.hypot(o.x - x, o.y - y) < o.r + 15)) continue;
+
+      if (isRockCluster) {
+        const r = 15 + Math.random() * 25;
+        let rockGroup;
+        if (Math.random() < 0.5 && loadedModels.rocks_high)
+          rockGroup = SkeletonUtils.clone(loadedModels.rocks_high);
+        else if (loadedModels.rocks_low)
+          rockGroup = SkeletonUtils.clone(loadedModels.rocks_low);
+        else if (loadedModels.stones)
+          rockGroup = SkeletonUtils.clone(loadedModels.stones);
+
+        if (rockGroup) {
+          const sc = 30 + Math.random() * 10;
+          rockGroup.scale.set(sc, sc, sc);
+          rockGroup.position.set(x, getTerrainHeightWilds2(x, y), y);
+          rockGroup.rotation.y = Math.random() * Math.PI;
+          s.wilds2Group.add(rockGroup);
+        } else {
+          const rock = new THREE.Mesh(
+            new THREE.DodecahedronGeometry(r, 0),
+            new THREE.MeshLambertMaterial({ color: 0xb89a6a })
+          );
+          rock.position.set(x, r + getTerrainHeightWilds2(x, y), y);
+          rock.rotation.y = Math.random() * Math.PI;
+          s.wilds2Group.add(rock);
+        }
+        s.obstaclesWilds2.push({ x, y, r: r * 0.8 });
+      } else {
+        // Cactus-style / dead tree silhouettes (thin trunks)
+        const trunkH = 30 + Math.random() * 30;
+        const trunk = new THREE.Mesh(
+          new THREE.CylinderGeometry(4, 5, trunkH, 6),
+          new THREE.MeshLambertMaterial({ color: 0x6b5b3e })
+        );
+        trunk.position.set(x, trunkH / 2 + getTerrainHeightWilds2(x, y), y);
+        trunk.rotation.z = (Math.random() - 0.5) * 0.2;
+        s.wilds2Group.add(trunk);
+        s.obstaclesWilds2.push({ x, y, r: 10 });
+      }
+    }
+  }
+
+  // ── Quicksand pools (dark sunken circles) ──
+  const numQuicksand = 10;
+  for (let q = 0; q < numQuicksand; q++) {
+    const qx = 300 + Math.random() * (ms - 600);
+    const qy = 300 + Math.random() * (ms - 600);
+    if (Math.hypot(qx - ms / 2, qy - ms / 2) < 500) continue;
+    if (s.obstaclesWilds2.some(o => Math.hypot(o.x - qx, o.y - qy) < o.r + 80)) continue;
+
+    const pool = new THREE.Mesh(
+      new THREE.CircleGeometry(80, 24),
+      new THREE.MeshLambertMaterial({ color: 0x8a7a55, emissive: 0x221a0f, emissiveIntensity: 0.3 })
+    );
+    pool.rotation.x = -Math.PI / 2;
+    pool.position.set(qx, 1 + getTerrainHeightWilds2(qx, qy), qy);
+    s.wilds2Group.add(pool);
+    s.obstaclesWilds2.push({ x: qx, y: qy, r: 80 });
+  }
+
+  // ── Border cliffs (same pattern as Wilds) ──
+  const borderSpacing = 150;
+  for (let i = 0; i <= ms; i += borderSpacing) {
+    [0, ms].forEach(z => {
+      if (loadedModels.rocks_high) {
+        const rockGroup = SkeletonUtils.clone(loadedModels.rocks_high);
+        rockGroup.scale.set(180, 250, 180);
+        rockGroup.position.set(i, -20, z);
+        rockGroup.rotation.y = Math.random() * Math.PI;
+        s.wilds2Group.add(rockGroup);
+      }
+      s.obstaclesWilds2.push({ x: i, y: z, r: 250 });
+    });
+    if (i > 0 && i < ms) {
+      [0, ms].forEach(x => {
+        if (loadedModels.rocks_high) {
+          const rockGroup = SkeletonUtils.clone(loadedModels.rocks_high);
+          rockGroup.scale.set(180, 250, 180);
+          rockGroup.position.set(x, -20, i);
+          rockGroup.rotation.y = Math.random() * Math.PI;
+          s.wilds2Group.add(rockGroup);
+        }
+        s.obstaclesWilds2.push({ x: x, y: i, r: 250 });
+      });
+    }
+  }
+
+  // ── Portal back to The Wilds (orange wireframe octahedron, near pyramid) ──
+  const portalGeo = new THREE.OctahedronGeometry(20, 0);
+  const portalMat = new THREE.MeshLambertMaterial({ color: 0xff8800, wireframe: true });
+  s.desertPortalWilds2 = new THREE.Mesh(portalGeo, portalMat);
+  s.desertPortalWilds2.position.set(ms / 2 + 600, 30, ms / 2);
+  s.wilds2Group.add(s.desertPortalWilds2);
 }

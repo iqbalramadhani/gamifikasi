@@ -8,15 +8,15 @@ import * as THREE from 'three';
 // Subsystem modules
 import { state } from './state.js';
 import { loadAllModels, loadedModels } from './model-loader.js';
-import { initSetup, initMap, initHometown, initEntities, initNPCs, initWildsNPCs, getTerrainHeight } from './scenes.js';
+import { initSetup, initMap, initHometown, initEntities, initNPCs, initWildsNPCs, initWilds2, getTerrainHeight } from './scenes.js';
 import { spawnBoss, spawnParticles, checkItems } from './helpers.js';
-import { spawnEnemy, usePotion } from './combat.js';
+import { spawnEnemy, spawnEnemy2, usePotion } from './combat.js';
 import {
   move, attack, updateProjectiles, updateEnemies, updateBoss,
 } from './combat.js';
 import {
   updateUI, checkInteractions,
-  openShop, closeShop, buyUpgrade,
+  openShop, closeShop, buyPotion, buyInventoryItem, buyMysteryBox,
   openBlacksmith, closeBlacksmith, updateBlacksmithUI, buyWeapon, buyArmor,
   levelUp, openStats, closeStats, addStat,
   openQuestBoard, acceptQuest, claimQuest, closeQuestBoard, updateQuestUI,
@@ -49,13 +49,16 @@ window.cameraLookAtY = state.cameraLookAtY;
 
 // Make a few helpers available on window for backward compat with onclicks
 window.spawnEnemy = spawnEnemy;
+window.spawnEnemy2 = spawnEnemy2;
 window.spawnParticles = spawnParticles;
 window.spawnBoss = spawnBoss;
 window.usePotion = usePotion;
 window.levelUp = levelUp;
 window.openShop = openShop;
 window.closeShop = closeShop;
-window.buyUpgrade = buyUpgrade;
+window.buyPotion = buyPotion;
+window.buyInventoryItem = buyInventoryItem;
+window.buyMysteryBox = buyMysteryBox;
 window.openBlacksmith = openBlacksmith;
 window.closeBlacksmith = closeBlacksmith;
 window.buyWeapon = buyWeapon;
@@ -101,9 +104,19 @@ window.startGame = async () => {
       state.wildsLoaded = true;
     }
     if (state.hometownGroup) state.hometownGroup.visible = false;
+    if (state.wilds2Group) state.wilds2Group.visible = false;
     if (state.wildsGroup) state.wildsGroup.visible = true;
+  } else if (state.currentScene === 'wilds2') {
+    if (!state.wilds2Loaded) {
+      initWilds2();
+      state.wilds2Loaded = true;
+    }
+    if (state.hometownGroup) state.hometownGroup.visible = false;
+    if (state.wildsGroup) state.wildsGroup.visible = false;
+    if (state.wilds2Group) state.wilds2Group.visible = true;
   } else {
     if (state.wildsGroup) state.wildsGroup.visible = false;
+    if (state.wilds2Group) state.wilds2Group.visible = false;
     if (state.hometownGroup) state.hometownGroup.visible = true;
   }
 

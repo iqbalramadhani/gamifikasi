@@ -30,6 +30,7 @@
       <button onclick="saveGame()" style="margin-left: 15px; padding: 5px 15px; background-color: #27ae60; color: white; border: 2px solid #2ecc71; border-radius: 5px; font-weight: bold; cursor: pointer; text-shadow: 1px 1px 2px black; box-shadow: 0px 0px 10px rgba(46,204,113,0.5);">💾 Save Game</button>
       <span id="save-status" style="margin-left: 10px; color: #f1c40f; font-weight: bold; text-shadow: 1px 1px 2px black;"></span>
       <button onclick="openInventory()" style="margin-left: 15px; padding: 5px 15px; background-color: #e67e22; color: white; border: 2px solid #d35400; border-radius: 5px; font-weight: bold; cursor: pointer; text-shadow: 1px 1px 2px black; box-shadow: 0px 0px 10px rgba(230,126,34,0.5);">🎒 Tas</button>
+      <button onclick="openQuestBoard()" style="margin-left: 15px; padding: 5px 15px; background-color: #f39c12; color: white; border: 2px solid #e67e22; border-radius: 5px; font-weight: bold; cursor: pointer; text-shadow: 1px 1px 2px black; box-shadow: 0px 0px 10px rgba(243,156,18,0.5);">📜 Misi (J)</button>
       <button onclick="openStats()" style="margin-left: 15px; padding: 5px 15px; background-color: #9b59b6; color: white; border: 2px solid #8e44ad; border-radius: 5px; font-weight: bold; cursor: pointer; text-shadow: 1px 1px 2px black; box-shadow: 0px 0px 10px rgba(155,89,182,0.5);">📊 Stats <span id="stat-notif" style="display:none; background:red; padding:2px 5px; border-radius:50%; font-size:12px;">!</span></button>
       <button onclick="openTutorial()" style="margin-left: 15px; padding: 5px 15px; background-color: #2980b9; color: white; border: 2px solid #3498db; border-radius: 5px; font-weight: bold; cursor: pointer; text-shadow: 1px 1px 2px black; box-shadow: 0px 0px 10px rgba(52,152,219,0.5);">📖 Cara Main</button>
       <button onclick="openSettings()" style="margin-left: 15px; padding: 5px 15px; background-color: #34495e; color: white; border: 2px solid #2c3e50; border-radius: 5px; font-weight: bold; cursor: pointer; text-shadow: 1px 1px 2px black; box-shadow: 0px 0px 10px rgba(44,62,80,0.5);">⚙️ Settings</button>
@@ -213,21 +214,39 @@
       <div class="shop-box">
         <h2>🛒 Altar Upgrade</h2>
         <p>Koin Anda: <span id="shop-gold" style="color:#f1c40f; font-weight:bold; font-size:24px;">0</span></p>
-        <div class="shop-item">
-          <span>❤️ Max HP (+20)<br><small id="shop-hp-level">Lv 1</small></span>
-          <button onclick="buyUpgrade('hp')">Beli (15 🪙)</button>
-        </div>
-        <div class="shop-item">
-          <span>⚔️ Attack Power (+1)<br><small id="shop-atk-level">Lv 1</small></span>
-          <button onclick="buyUpgrade('atk')">Beli (20 🪙)</button>
-        </div>
-        <div class="shop-item">
-          <span>👟 Speed (+1)<br><small id="shop-spd-level">Lv 1</small></span>
-          <button onclick="buyUpgrade('spd')">Beli (15 🪙)</button>
-        </div>
-        <div class="shop-item" style="border-top: 2px solid #444; padding-top: 10px;">
-          <span>🎒 Jual Semua Loot<br><small>Menukar isi tas ke Gold</small></span>
-          <button onclick="sellAllLoot()" style="background: #27ae60;">Jual</button>
+        <div class="shop-grid">
+          <div class="shop-item">
+            <span>🧪 Health Potion<br><small>Isi ulang potion penyembuh</small></span>
+            <button onclick="buyPotion()">Beli (15 🪙)</button>
+          </div>
+          <div class="shop-item">
+            <span>🧪 Antidote<br><small>Menawar Racun (Poison)</small></span>
+            <button onclick="buyInventoryItem('antidote', 15)">Beli (15 🪙)</button>
+          </div>
+          <div class="shop-item">
+            <span>🍵 Cooling Tea<br><small>Menyembuhkan Luka Bakar (Burn)</small></span>
+            <button onclick="buyInventoryItem('cooling_tea', 15)">Beli (15 🪙)</button>
+          </div>
+          <div class="shop-item">
+            <span>⚡ Stamina Potion<br><small>Memulihkan SP secara instan</small></span>
+            <button onclick="buyInventoryItem('stamina_potion', 20)">Beli (20 🪙)</button>
+          </div>
+          <div class="shop-item">
+            <span>📜 Portal Scroll<br><small>Teleportasi kembali ke kota</small></span>
+            <button onclick="buyInventoryItem('hometown_portal', 30)">Beli (30 🪙)</button>
+          </div>
+          <div class="shop-item">
+            <span>💎 Health Crystal<br><small>Regen HP besar</small></span>
+            <button onclick="buyInventoryItem('health_crystal', 50)">Beli (50 🪙)</button>
+          </div>
+          <div class="shop-item" style="border: 2px solid #3498db;">
+            <span>🎁 Mystery Box<br><small>Gacha 1-3 Material Acak!</small></span>
+            <button onclick="buyMysteryBox(50)" style="background: #9b59b6;">Beli (50 🪙)</button>
+          </div>
+          <div class="shop-item" style="border: 2px solid #444;">
+            <span>🎒 Jual Semua Loot<br><small>Menukar isi tas ke Gold</small></span>
+            <button onclick="sellAllLoot()" style="background: #27ae60;">Jual</button>
+          </div>
         </div>
         <button style="margin-top:20px; padding:10px 20px; background:#e74c3c; color:white; border:none; border-radius:5px; font-size:18px; cursor:pointer;" onclick="closeShop()">Tutup Altar (Lanjut)</button>
       </div>
