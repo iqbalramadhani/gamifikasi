@@ -221,7 +221,7 @@ export function teleportTo(sceneName) {
     s.enemies.length = 0;
 
     // Spawn initial wave of tier-2 enemies in the desert
-    const initialSpawns = Math.min(30, 10 + s.player.level * 2);
+    const initialSpawns = Math.min(80, 40 + s.player.level * 3); // Lebih banyak musuh
     for (let i = 0; i < initialSpawns; i++) {
       if (typeof window.spawnEnemy2 === 'function') window.spawnEnemy2();
     }

@@ -941,8 +941,10 @@ export function updateBoss(dt) {
   const dist = Math.hypot(s.player.x - s.bossX, s.player.y - s.bossY);
   const angle = Math.atan2(s.player.y - s.bossY, s.player.x - s.bossX);
 
-  const spawnX = mapSize - 1000;
-  const spawnY = mapSize - 1000;
+  // Golem (Wilds) spawns in the far corner; the soldier (wilds2) in front of
+  // the pyramid. Scenes set bossSpawnX/Y per boss; fall back to the old corner.
+  const spawnX = s.bossSpawnX ?? (mapSize - 1000);
+  const spawnY = s.bossSpawnY ?? (mapSize - 1000);
   const distToSpawn = Math.hypot(s.bossX - spawnX, s.bossY - spawnY);
 
   if (distToSpawn > 350) {

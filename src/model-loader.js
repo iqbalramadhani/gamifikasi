@@ -21,6 +21,14 @@ export const loadedModels = {
   blob_green: null, blob_green_spiky: null, blob_mushnub: null,
   blob_pink: null, blob_yeti: null,
   fly_dragon: null, fly_ghost: null, fly_squidle: null,
+  // Kenney Mini Arena pack
+  arena_wall: null, arena_wall_corner: null, arena_wall_gate: null,
+  arena_border: null, arena_border_corner: null, arena_column: null,
+  arena_column_damaged: null, arena_stairs: null, arena_stairs_corner: null,
+  arena_floor_detail: null, arena_banner: null, arena_statue: null,
+  arena_trophy: null, arena_tree: null, arena_bricks: null,
+  arena_block: null, arena_weapon_rack: null, arena_weapon_sword: null,
+  arena_weapon_spear: null, arena_soldier: null,
 };
 
 const modelsToLoad = [
@@ -70,6 +78,27 @@ const modelsToLoad = [
   { key: 'fly_dragon',  url: '/monsterl1_10/Flying/glTF/Dragon.gltf' },
   { key: 'fly_ghost',   url: '/monsterl1_10/Flying/glTF/Ghost.gltf' },
   { key: 'fly_squidle', url: '/monsterl1_10/Flying/glTF/Squidle.gltf' },
+  // Kenney Mini Arena pack (map 2 — Scorched Dunes)
+  { key: 'arena_wall',           url: '/models/kenney_mini-arena/Models/GLB format/wall.glb' },
+  { key: 'arena_wall_corner',   url: '/models/kenney_mini-arena/Models/GLB format/wall-corner.glb' },
+  { key: 'arena_wall_gate',     url: '/models/kenney_mini-arena/Models/GLB format/wall-gate.glb' },
+  { key: 'arena_border',        url: '/models/kenney_mini-arena/Models/GLB format/border-straight.glb' },
+  { key: 'arena_border_corner', url: '/models/kenney_mini-arena/Models/GLB format/border-corner.glb' },
+  { key: 'arena_column',        url: '/models/kenney_mini-arena/Models/GLB format/column.glb' },
+  { key: 'arena_column_damaged',url: '/models/kenney_mini-arena/Models/GLB format/column-damaged.glb' },
+  { key: 'arena_stairs',        url: '/models/kenney_mini-arena/Models/GLB format/stairs.glb' },
+  { key: 'arena_stairs_corner', url: '/models/kenney_mini-arena/Models/GLB format/stairs-corner.glb' },
+  { key: 'arena_floor_detail',  url: '/models/kenney_mini-arena/Models/GLB format/floor-detail.glb' },
+  { key: 'arena_banner',        url: '/models/kenney_mini-arena/Models/GLB format/banner.glb' },
+  { key: 'arena_statue',        url: '/models/kenney_mini-arena/Models/GLB format/statue.glb' },
+  { key: 'arena_trophy',        url: '/models/kenney_mini-arena/Models/GLB format/trophy.glb' },
+  { key: 'arena_tree',          url: '/models/kenney_mini-arena/Models/GLB format/tree.glb' },
+  { key: 'arena_bricks',        url: '/models/kenney_mini-arena/Models/GLB format/bricks.glb' },
+  { key: 'arena_block',         url: '/models/kenney_mini-arena/Models/GLB format/block.glb' },
+  { key: 'arena_weapon_rack',   url: '/models/kenney_mini-arena/Models/GLB format/weapon-rack.glb' },
+  { key: 'arena_weapon_sword',  url: '/models/kenney_mini-arena/Models/GLB format/weapon-sword.glb' },
+  { key: 'arena_weapon_spear',  url: '/models/kenney_mini-arena/Models/GLB format/weapon-spear.glb' },
+  { key: 'arena_soldier',       url: '/models/kenney_mini-arena/Models/GLB format/character-soldier.glb' },
 ];
 
 const fbxModelsToLoad = [

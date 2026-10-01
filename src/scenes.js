@@ -6,7 +6,7 @@ import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { state } from './state.js';
 import { mapSize } from './constants.js';
 import { loadedModels } from './model-loader.js';
-import { spawnEnemy } from './combat.js';
+import { spawnEnemy, spawnEnemy2 } from './combat.js';
 import { scatterInteractables } from './landmarks.js';
 
 export function getTerrainHeight(x, y) {
@@ -1327,6 +1327,8 @@ export function initWildsNPCs() {
   s.bossActive = true;
   s.bossX = mapSize - 1000;
   s.bossY = mapSize - 1000;
+  s.bossSpawnX = s.bossX;
+  s.bossSpawnY = s.bossY;
   
   if (loadedModels.enemy) {
     const gltfBoss = SkeletonUtils.clone(loadedModels.enemy);
@@ -1422,11 +1424,14 @@ export function getTerrainHeightWilds2(x, y) {
 export function spawnAtFreePosWilds2() {
   const s = state;
   let x, y, valid = false;
+  const center = mapSize / 2;
   while (!valid) {
-    x = 50 + Math.random() * (mapSize - 100);
-    y = 50 + Math.random() * (mapSize - 100);
-    if (Math.hypot(x - mapSize / 2, y - mapSize / 2) < 500) continue;
-    if (Math.hypot(x - s.player.x, y - s.player.y) < 500) continue;
+    // Spawn musuh dalam radius 5000 dari tengah agar mudah ditemukan
+    x = center + (Math.random() - 0.5) * 10000;
+    y = center + (Math.random() - 0.5) * 10000;
+    if (x < 50 || x > mapSize - 50 || y < 50 || y > mapSize - 50) continue;
+    if (Math.hypot(x - center, y - center) < 500) continue;
+    if (Math.hypot(x - s.player.x, y - s.player.y) < 300) continue; // Jangan tepat di atas player
     if (s.obstaclesWilds2.some(o => Math.hypot(o.x - x, o.y - y) < o.r + 30)) continue;
     valid = true;
   }
@@ -1503,19 +1508,34 @@ export function initWilds2() {
   const sandstoneMat = new THREE.MeshLambertMaterial({ color: 0xd8c08a, map: stoneTex, flatShading: true });
   const goldMat = new THREE.MeshLambertMaterial({ color: 0xffd700, emissive: 0x886600, emissiveIntensity: 0.6 });
   const TOWERS = 11;
-  const BASE = 380;
+  // BASE = apothem of the tier-1 base circle: a radial-4 cylinder rotated 45°
+  // has its flat face at distance baseRadius * cos(45°) from the center, so
+  // set baseRadius = 200 / cos(45°) ≈ 283 to make the walls sit on the sand.
+  const BASE = 283;
   const STEP = 28;
+  // Buried plinth: a short wide base half-sunk in the sand so the tier corners
+  // never punch through the ground.
+  const plinth = new THREE.Mesh(
+    new THREE.CylinderGeometry(BASE + 40, BASE + 80, 30, 4),
+    sandstoneMat
+  );
+  plinth.position.y = -8; // mostly below ground, top face at y=22
+  plinth.castShadow = plinth.receiveShadow = true;
+  pyramidGroup.add(plinth);
+
+  let curY = 14; // stack tiers on top of the plinth
   for (let i = 0; i < TOWERS; i++) {
     const h = STEP + Math.max(0, (BASE - i * STEP - STEP)) * 0.06; // slight overhang at bottom
     const geo = new THREE.CylinderGeometry(Math.max(1, BASE - (i + 1) * STEP), BASE - i * STEP, h, 4, 1, false);
     const tier = new THREE.Mesh(geo, i === TOWERS - 1 ? goldMat : sandstoneMat);
-    tier.position.y = 14 + i * STEP + h / 2;
+    tier.position.y = curY + h / 2;
     tier.castShadow = tier.receiveShadow = true;
     pyramidGroup.add(tier);
+    curY += h;
   }
   // Central cap: small cone on top of last tier (like the original but smaller)
   const cap = new THREE.Mesh(new THREE.ConeGeometry(15, 22, 4), goldMat);
-  cap.position.y = 14 + TOWERS * STEP + 11;
+  cap.position.y = curY + 11;
   cap.castShadow = cap.receiveShadow = true;
   pyramidGroup.add(cap);
   pyramidGroup.rotation.y = Math.PI / 4; // Point a face toward map center
@@ -1524,25 +1544,26 @@ export function initWilds2() {
   s.obstaclesWilds2.push({ x: ms / 2, y: ms / 2, r: 160, h: 150 });
 
   // ── Scattered rocks / sand boulders around the pyramid ──
-  for (let i = 0; i < 80; i++) {
+  // Kenney Mini Arena props: sand blocks, brick piles, trophies, banners
+  const RING_PROPS = ['arena_block', 'arena_bricks', 'arena_trophy', 'arena_banner'];
+  for (let i = 0; i < 90; i++) {
     const angle = Math.random() * Math.PI * 2;
     const dist = 250 + Math.random() * 400;
     const rx = ms / 2 + Math.cos(angle) * dist;
     const ry = ms / 2 + Math.sin(angle) * dist;
     if (rx < 50 || rx > ms - 50 || ry < 50 || ry > ms - 50) continue;
-    const rr = 10 + Math.random() * 15;
-    let rockGroup;
-    if (Math.random() < 0.5 && loadedModels.rocks_high)
-      rockGroup = SkeletonUtils.clone(loadedModels.rocks_high);
-    else if (loadedModels.rocks_low)
-      rockGroup = SkeletonUtils.clone(loadedModels.rocks_low);
-    if (rockGroup) {
-      const sc = 20 + Math.random() * 15;
-      rockGroup.scale.set(sc, sc, sc);
-      rockGroup.position.set(rx, getTerrainHeightWilds2(rx, ry), ry);
-      rockGroup.rotation.y = Math.random() * Math.PI;
-      s.wilds2Group.add(rockGroup);
+
+    const key = RING_PROPS[Math.floor(Math.random() * RING_PROPS.length)];
+    const src = loadedModels[key];
+    if (src) {
+      const sc = 35 + Math.random() * 20; // Diperbesar (sebelumnya 15-25)
+      const m = SkeletonUtils.clone(src);
+      m.scale.set(sc, sc, sc);
+      m.position.set(rx, getTerrainHeightWilds2(rx, ry), ry);
+      m.rotation.y = Math.random() * Math.PI;
+      s.wilds2Group.add(m);
     } else {
+      const rr = 20 + Math.random() * 25; // Diperbesar
       const rock = new THREE.Mesh(
         new THREE.DodecahedronGeometry(rr, 0),
         new THREE.MeshLambertMaterial({ color: 0xb89a6a })
@@ -1551,6 +1572,7 @@ export function initWilds2() {
       rock.rotation.y = Math.random() * Math.PI;
       s.wilds2Group.add(rock);
     }
+    const rr = 25; // Collision radius diperbesar
     s.obstaclesWilds2.push({ x: rx, y: ry, r: rr * 0.8, h: rr });
   }
 
@@ -1574,22 +1596,24 @@ export function initWilds2() {
       if (s.obstaclesWilds2.some(o => Math.hypot(o.x - x, o.y - y) < o.r + 15)) continue;
 
       if (isRockCluster) {
-        const r = 15 + Math.random() * 25;
-        let rockGroup;
-        if (Math.random() < 0.5 && loadedModels.rocks_high)
-          rockGroup = SkeletonUtils.clone(loadedModels.rocks_high);
-        else if (loadedModels.rocks_low)
-          rockGroup = SkeletonUtils.clone(loadedModels.rocks_low);
-        else if (loadedModels.stones)
-          rockGroup = SkeletonUtils.clone(loadedModels.stones);
-
-        if (rockGroup) {
-          const sc = 30 + Math.random() * 10;
-          rockGroup.scale.set(sc, sc, sc);
-          rockGroup.position.set(x, getTerrainHeightWilds2(x, y), y);
-          rockGroup.rotation.y = Math.random() * Math.PI;
-          s.wilds2Group.add(rockGroup);
-        } else {
+        // Kenney Mini Arena props: blocks, bricks, trophies
+        const CLUSTER_PROPS = ['arena_block', 'arena_bricks', 'arena_trophy'];
+        let placed = false;
+        for (let a = 0; a < 3; a++) {
+          const key = CLUSTER_PROPS[Math.floor(Math.random() * CLUSTER_PROPS.length)];
+          const src = loadedModels[key];
+          if (!src) continue;
+          const sc = 45 + Math.random() * 20; // Diperbesar (sebelumnya 25-35)
+          const m = SkeletonUtils.clone(src);
+          m.scale.set(sc, sc, sc);
+          m.position.set(x, getTerrainHeightWilds2(x, y), y);
+          m.rotation.y = Math.random() * Math.PI;
+          s.wilds2Group.add(m);
+          placed = true;
+          break;
+        }
+        if (!placed) {
+          const r = 30 + Math.random() * 30; // Diperbesar
           const rock = new THREE.Mesh(
             new THREE.DodecahedronGeometry(r, 0),
             new THREE.MeshLambertMaterial({ color: 0xb89a6a })
@@ -1598,18 +1622,35 @@ export function initWilds2() {
           rock.rotation.y = Math.random() * Math.PI;
           s.wilds2Group.add(rock);
         }
-        s.obstaclesWilds2.push({ x, y, r: r * 0.8, h: r });
+        s.obstaclesWilds2.push({ x, y, r: 25, h: 30 }); // Collision diperbesar
       } else {
-        // Cactus-style / dead tree silhouettes (thin trunks)
-        const trunkH = 30 + Math.random() * 30;
-        const trunk = new THREE.Mesh(
-          new THREE.CylinderGeometry(4, 5, trunkH, 6),
-          new THREE.MeshLambertMaterial({ color: 0x6b5b3e })
-        );
-        trunk.position.set(x, trunkH / 2 + getTerrainHeightWilds2(x, y), y);
-        trunk.rotation.z = (Math.random() - 0.5) * 0.2;
-        s.wilds2Group.add(trunk);
-        s.obstaclesWilds2.push({ x, y, r: 10, h: 50 });
+        // Dead desert trees + scattered arena props (banners, trophies)
+        const TREE_PROPS = ['arena_tree', 'arena_banner', 'arena_trophy'];
+        let placed = false;
+        for (let a = 0; a < 3; a++) {
+          const key = TREE_PROPS[Math.floor(Math.random() * TREE_PROPS.length)];
+          const src = loadedModels[key];
+          if (!src) continue;
+          const sc = key === 'arena_tree' ? 25 + Math.random() * 15 : 20 + Math.random() * 10; // Diperbesar
+          const m = SkeletonUtils.clone(src);
+          m.scale.set(sc, sc, sc);
+          m.position.set(x, getTerrainHeightWilds2(x, y), y);
+          m.rotation.y = Math.random() * Math.PI;
+          s.wilds2Group.add(m);
+          placed = true;
+          break;
+        }
+        if (!placed) {
+          const trunkH = 60 + Math.random() * 40; // Diperbesar
+          const trunk = new THREE.Mesh(
+            new THREE.CylinderGeometry(8, 10, trunkH, 6),
+            new THREE.MeshLambertMaterial({ color: 0x6b5b3e })
+          );
+          trunk.position.set(x, trunkH / 2 + getTerrainHeightWilds2(x, y), y);
+          trunk.rotation.z = (Math.random() - 0.5) * 0.2;
+          s.wilds2Group.add(trunk);
+        }
+        s.obstaclesWilds2.push({ x, y, r: 20, h: 60 }); // Collision diperbesar
       }
     }
   }
@@ -1629,33 +1670,102 @@ export function initWilds2() {
     pool.rotation.x = -Math.PI / 2;
     pool.position.set(qx, 1 + getTerrainHeightWilds2(qx, qy), qy);
     s.wilds2Group.add(pool);
+    // Ring of floor details + bricks along the pool edge
+    const poolRing = ['arena_floor_detail', 'arena_bricks', 'arena_floor_detail', 'arena_bricks'];
+    for (let a = 0; a < 12; a++) {
+      const ang = (a / 12) * Math.PI * 2;
+      const px = qx + Math.cos(ang) * 85;
+      const py = qy + Math.sin(ang) * 85;
+      const key = poolRing[a % poolRing.length];
+      const src = loadedModels[key];
+      if (!src) continue;
+      const m = SkeletonUtils.clone(src);
+      const sc = key === 'arena_bricks' ? 25 : 35; // Diperbesar
+      m.scale.set(sc, sc, sc);
+      m.position.set(px, getTerrainHeightWilds2(px, py), py);
+      m.rotation.y = ang;
+      s.wilds2Group.add(m);
+    }
     s.obstaclesWilds2.push({ x: qx, y: qy, r: 80, h: 5 });
   }
 
-  // ── Border cliffs (same pattern as Wilds) ──
-  const borderSpacing = 150;
-  for (let i = 0; i <= ms; i += borderSpacing) {
-    [0, ms].forEach(z => {
-      if (loadedModels.rocks_high) {
-        const rockGroup = SkeletonUtils.clone(loadedModels.rocks_high);
-        rockGroup.scale.set(180, 250, 180);
-        rockGroup.position.set(i, -20, z);
-        rockGroup.rotation.y = Math.random() * Math.PI;
-        s.wilds2Group.add(rockGroup);
+  // ── Map border (Kenney Mini Arena walls + columns) ──
+  // Walls along each edge (gap in the middle for portals), corner columns,
+  // and decorative border pieces between wall segments.
+  const WALL_SCALE = 40; // wall model is 1 unit wide → 40 game units
+  const borderIn = 150;  // inset walls from the very edge
+  const edgeGap = ms / 2 - 400; // leave a gap near the center of each edge (portal zone)
+
+  const makeWall = (x, y, rotY) => {
+    const key = loadedModels.arena_wall ? 'arena_wall' : 'arena_wall_corner';
+    const src = loadedModels[key];
+    let m;
+    if (src) {
+      m = SkeletonUtils.clone(src);
+      m.scale.set(WALL_SCALE, WALL_SCALE, WALL_SCALE);
+      m.position.set(x, getTerrainHeightWilds2(x, y), y);
+      m.rotation.y = rotY;
+    } else {
+      m = new THREE.Mesh(
+        new THREE.BoxGeometry(WALL_SCALE * 1.2, WALL_SCALE, WALL_SCALE * 0.4),
+        new THREE.MeshLambertMaterial({ color: 0xd8c08a })
+      );
+      m.position.set(x, WALL_SCALE / 2 + getTerrainHeightWilds2(x, y), y);
+      m.rotation.y = rotY;
+    }
+    s.wilds2Group.add(m);
+    s.obstaclesWilds2.push({ x, y, r: 40, h: WALL_SCALE });
+  };
+
+  // North / South edges (along x, offset by borderIn), central gap for portals
+  const inGap = i => i > edgeGap && i < ms - edgeGap;
+  for (const z of [borderIn, ms - borderIn]) {
+    for (let i = 0; i <= ms; i += 150) {
+      if (inGap(i)) continue;
+      makeWall(i, z, 0);
+    }
+  }
+  // East / West edges (along z, offset by borderIn)
+  for (const x of [borderIn, ms - borderIn]) {
+    for (let i = 0; i <= ms; i += 150) {
+      if (inGap(i)) continue;
+      makeWall(x, i, Math.PI / 2);
+    }
+  }
+
+  // Corner columns
+  const cornerCol = loadedModels.arena_column;
+  for (const [cx, cy] of [[borderIn, borderIn], [ms - borderIn, borderIn], [borderIn, ms - borderIn], [ms - borderIn, ms - borderIn]]) {
+    let m;
+    if (cornerCol) {
+      m = SkeletonUtils.clone(cornerCol);
+      m.scale.set(50, 50, 50);
+      m.position.set(cx, getTerrainHeightWilds2(cx, cy), cy);
+      m.rotation.y = Math.random() * Math.PI;
+      s.wilds2Group.add(m);
+    }
+    s.obstaclesWilds2.push({ x: cx, y: cy, r: 40, h: 50 });
+  }
+
+  // Decorative border-straight pieces flanking the central gap on each edge
+  const borderPiece = loadedModels.arena_border;
+  if (borderPiece) {
+    for (const z of [borderIn, ms - borderIn]) {
+      for (const px of [edgeGap - 30, ms - edgeGap + 30]) {
+        const m = SkeletonUtils.clone(borderPiece);
+        m.scale.set(30, 30, 30);
+        m.position.set(px, getTerrainHeightWilds2(px, z), z);
+        m.rotation.y = Math.PI / 2;
+        s.wilds2Group.add(m);
       }
-      s.obstaclesWilds2.push({ x: i, y: z, r: 250, h: 250 });
-    });
-    if (i > 0 && i < ms) {
-      [0, ms].forEach(x => {
-        if (loadedModels.rocks_high) {
-          const rockGroup = SkeletonUtils.clone(loadedModels.rocks_high);
-          rockGroup.scale.set(180, 250, 180);
-          rockGroup.position.set(x, -20, i);
-          rockGroup.rotation.y = Math.random() * Math.PI;
-          s.wilds2Group.add(rockGroup);
-        }
-        s.obstaclesWilds2.push({ x: x, y: i, r: 250, h: 250 });
-      });
+    }
+    for (const x of [borderIn, ms - borderIn]) {
+      for (const pz of [edgeGap - 30, ms - edgeGap + 30]) {
+        const m = SkeletonUtils.clone(borderPiece);
+        m.scale.set(30, 30, 30);
+        m.position.set(x, getTerrainHeightWilds2(x, pz), pz);
+        s.wilds2Group.add(m);
+      }
     }
   }
 
@@ -1663,6 +1773,134 @@ export function initWilds2() {
   s.desertPortalWilds2 = createPortal(0xff8800);
   s.desertPortalWilds2.group.position.set(ms / 2 + 600, 30, ms / 2);
   s.wilds2Group.add(s.desertPortalWilds2.group);
+  // Banner poles flanking the portal
+  if (loadedModels.arena_banner) {
+    for (const off of [-180, 180]) {
+      const b = SkeletonUtils.clone(loadedModels.arena_banner);
+      b.scale.set(25, 25, 25);
+      const px = ms / 2 + 600 + off;
+      b.position.set(px, getTerrainHeightWilds2(px, ms / 2), ms / 2);
+      b.rotation.y = Math.PI / 2;
+      s.wilds2Group.add(b);
+    }
+  }
+
+  // ── Boss: the soldier of the Mini Arena (Kenney character-soldier) ──
+  // Guard of the dunes — stands between the player and the pyramid.
+  // The Golem (Wilds, map 1) is created in initWilds; when initWilds2 first
+  // runs, the player is on wilds2, so replace bossMesh/HpGroup with the
+  // soldier. The state fields (bossX/Y, bossHp, bossPhase, bossActive) keep
+  // pointing at whichever boss the player faces — combat.js's updateBoss
+  // handles both spawn points via s.bossSpawnX/s.bossSpawnY.
+  const bossCX = ms / 2;
+  const bossCY = ms / 2 + 150;
+
+  if (!s.bossActive) {
+    s.bossActive = true;
+    s.bossX = bossCX;
+    s.bossY = bossCY;
+    s.bossHp = 1500;
+    s.bossMaxHp = 1500;
+    s.bossPhase = 1;
+    s.bossSpawnX = bossCX;
+    s.bossSpawnY = bossCY;
+  } else {
+    // Golem active (map 1) — adopt its spawn point so updateBoss returns it
+    // home correctly when the player switches maps.
+    s.bossSpawnX = s.bossX;
+    s.bossSpawnY = s.bossY;
+  }
+
+  if (loadedModels.arena_soldier) {
+    const bossClone = SkeletonUtils.clone(loadedModels.arena_soldier);
+    bossClone.scale.set(60, 60, 60);
+    bossClone.position.y = 0; // feet on terrain (model bottom is at y=0)
+    s.bossMesh = new THREE.Group();
+    s.bossMesh.add(bossClone);
+  } else {
+    const bGeo = new THREE.BoxGeometry(60, 60, 60);
+    const bMat = new THREE.MeshLambertMaterial({ color: 0xc25030 });
+    s.bossMesh = new THREE.Mesh(bGeo, bMat);
+  }
+  s.bossMesh.position.set(bossCX, 30 + getTerrainHeightWilds2(bossCX, bossCY), bossCY);
+  s.wilds2Group.add(s.bossMesh);
+
+  s.bossHpGroup = new THREE.Group();
+  const hbg = new THREE.Mesh(new THREE.PlaneGeometry(120, 10), new THREE.MeshBasicMaterial({ color: 0x222222 }));
+  s.bossHpFg = new THREE.Mesh(new THREE.PlaneGeometry(120, 10), new THREE.MeshBasicMaterial({ color: 0xaa2222 }));
+  s.bossHpFg.position.z = 0.2;
+  s.bossHpGroup.add(hbg, s.bossHpFg);
+  s.bossHpGroup.position.set(bossCX, 150 + getTerrainHeightWilds2(bossCX, bossCY), bossCY);
+  s.wilds2Group.add(s.bossHpGroup);
+
+  // Stairs + columns framing the boss arena in front of the pyramid
+  const bossArenaProps = [
+    { key: 'arena_stairs', sc: 30, dx: -250, dy: 0, rot: Math.PI },
+    { key: 'arena_stairs', sc: 30, dx: 250, dy: 0, rot: 0 },
+    { key: 'arena_column', sc: 35, dx: -300, dy: -180, rot: 0 },
+    { key: 'arena_column', sc: 35, dx: 300, dy: -180, rot: 0 },
+    { key: 'arena_column_damaged', sc: 35, dx: -300, dy: 180, rot: 0 },
+    { key: 'arena_column_damaged', sc: 35, dx: 300, dy: 180, rot: 0 },
+    { key: 'arena_banner', sc: 22, dx: -180, dy: -120, rot: Math.PI * 0.75 },
+    { key: 'arena_banner', sc: 22, dx: 180, dy: -120, rot: Math.PI * 0.25 },
+  ];
+  for (const p of bossArenaProps) {
+    const src = loadedModels[p.key];
+    if (!src) continue;
+    const m = SkeletonUtils.clone(src);
+    m.scale.set(p.sc, p.sc, p.sc);
+    const px = bossCX + p.dx;
+    const py = bossCY + p.dy;
+    m.position.set(px, getTerrainHeightWilds2(px, py), py);
+    m.rotation.y = p.rot;
+    s.wilds2Group.add(m);
+  }
+  // Weapon racks guarding the boss
+  for (const p of [
+    { key: 'arena_weapon_rack', dx: -200, dy: 220 },
+    { key: 'arena_weapon_rack', dx: 200, dy: 220 },
+  ]) {
+    const src = loadedModels[p.key];
+    if (!src) continue;
+    const m = SkeletonUtils.clone(src);
+    m.scale.set(20, 20, 20);
+    const px = bossCX + p.dx;
+    const py = bossCY + p.dy;
+    m.position.set(px, getTerrainHeightWilds2(px, py), py);
+    m.rotation.y = Math.PI / 2;
+    s.wilds2Group.add(m);
+  }
+  // Trophy pedestals beside the pyramid
+  if (loadedModels.arena_trophy) {
+    for (let i = 0; i < 4; i++) {
+      const ang = (i / 4) * Math.PI * 2 + Math.PI / 4;
+      const px = ms / 2 + Math.cos(ang) * 500;
+      const py = ms / 2 + Math.sin(ang) * 500;
+      const m = SkeletonUtils.clone(loadedModels.arena_trophy);
+      m.scale.set(20, 20, 20);
+      m.position.set(px, getTerrainHeightWilds2(px, py), py);
+      m.rotation.y = Math.atan2(ms / 2 - px, ms / 2 - py);
+      s.wilds2Group.add(m);
+    }
+  }
+
+  // Spawn boss minions around the boss (tier-2 desert enemies)
+  const sBossMinions = [
+    [bossCX + 150, bossCY + 150],
+    [bossCX - 150, bossCY + 150],
+    [bossCX + 150, bossCY - 150],
+    [bossCX - 150, bossCY - 150],
+    [bossCX, bossCY + 250],
+    [bossCX, bossCY - 250],
+  ];
+  for (const [mx, my] of sBossMinions) {
+    s.obstaclesWilds2.push({ x: mx, y: my, r: 15, h: 30 });
+  }
+  setTimeout(() => {
+    for (const [mx, my] of sBossMinions) {
+      spawnEnemy2(mx, my, 0.7, true);
+    }
+  }, 1000);
 
   // Scatter interactables (chests, barrels, ruins)
   scatterInteractables(mapSize, s.wilds2Group, s.obstaclesWilds2, getTerrainHeightWilds2, 'wilds2');

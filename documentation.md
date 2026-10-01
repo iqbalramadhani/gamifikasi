@@ -33,6 +33,8 @@ Musuh di gurun memakai *tier-2* (`enemyTemplates2`) — campuran Blob (lebih kua
 
 > **Catatan teknis:** Setiap map punya *group* Three.js sendiri (`hometownGroup`, `wildsGroup`, `wilds2Group`). Saat pindah map, group lain disembunyikan; *obstacle set* collision dipilih otomatis sesuai `state.currentScene` di `helpers.js → blocked()`.
 
+> **Catatan teknis tambahan (gurun):** Lantai rumput utama (`state.mainFloor`, dibuat di `initSetup()`) disembunyikan saat masuk `wilds2` dan ditunjukkan lagi di map lain — toggling-nya ada di `main.js` (saat load) dan `environment.js → teleportTo()` (saat pindah peta), sehingga gurun hanya menampilkan lantai pasir milik `wilds2Group`. Tinggi medan pun terpisah: `getTerrainHeightWilds2()` untuk dune gurun, `getTerrainHeight()` untuk Wilds/hometown; player, musuh, dan boss memilih fungsi yang sesuai berdasarkan `state.currentScene` agar mengikuti kontur dune dan tidak mengambang. Piramida pusat dibangun dari tier `CylinderGeometry` radial-4 yang dirotasi 45° — karena itu radius-nya dihitung dari *apothem* (jarak pusat ke sisi rata), bukan ke puncak, agar dindingnya menempel ke pasir.
+
 ---
 
 ## 2. Sistem Pertarungan (Combat System)

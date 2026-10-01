@@ -54,6 +54,7 @@ export const enemyTemplates2 = [
   { hp: 14,  speed: 2.5, r: 20, damage: 30, typeStr: 'sc_dragon',   charKey: 'fly_dragon',  isFlying: true },
   { hp: 10,  speed: 2.8, r: 15, damage: 22, typeStr: 'sc_ghost',    charKey: 'fly_ghost',   isFlying: true },
   { hp: 8,   speed: 3.0, r: 12, damage: 15, typeStr: 'sc_squidle',  charKey: 'fly_squidle', isFlying: true },
+  { hp: 15,  speed: 2.0, r: 16, damage: 25, typeStr: 'sc_soldier',  charKey: 'arena_soldier' },
 ];
 
 export const lootTable = {
@@ -89,6 +90,7 @@ export const lootTable = {
   sc_dragon:  { id: 'sc_dragon_claw',   name: 'Dragon Claw',     value: 60, color: 0xff4400, icon: '🐲' },
   sc_ghost:   { id: 'sc_ghost_wisp',    name: 'Ghost Wisp',      value: 45, color: 0x99bbff, icon: '👻' },
   sc_squidle: { id: 'sc_squidle_fang',  name: 'Squidle Fang',    value: 30, color: 0x44aaaa, icon: '🦈' },
+  sc_soldier: { id: 'sc_soldier_badge', name: 'Soldier Badge',   value: 35, color: 0xcccccc, icon: '🛡️' },
 };
 
 export const consumableItems = {

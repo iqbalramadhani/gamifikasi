@@ -120,6 +120,8 @@ export const state = {
   bossX: 10000,
   bossY: 10500,
   bossPhase: 1,
+  bossSpawnX: 10000, // Home position per active boss (Golem: map corner, Soldier: pyramid)
+  bossSpawnY: 10500,
 
   // Weather / time
   dayTime: 0,
