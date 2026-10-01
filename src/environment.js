@@ -115,45 +115,86 @@ export function updateParticles(dt) {
     p.mesh.scale.setScalar(Math.max(0, p.life));
   }
 
-  // Animasi Weapon Aura — partikel menyebar melingkar di sekitar bilah pedang
+  // Animasi Weapon Aura — 3 layer: core wisps (helix), sparks (billboard), burst pool
   if (s.weaponAuraGroup && s.playerSwordMesh) {
-    const t = Date.now() * 0.004;
+    const tGlobal = Date.now() * 0.004;
     const swordWorld = new THREE.Vector3();
     s.playerSwordMesh.getWorldPosition(swordWorld);
-    
-    // (Menghapus offset x,y,z manual karena pedang bisa berputar ke segala arah)
-    
-    // Arah bilah pedang (coba -Z jika +Z malah ke belakang)
+
     const bladeDir = new THREE.Vector3(0, 0, -1);
     bladeDir.applyQuaternion(s.playerSwordMesh.getWorldQuaternion(new THREE.Quaternion()));
-    // Vektor tegak lurus kanan dan atas dari bilah
     const worldUp = new THREE.Vector3(0, 1, 0);
     const right = new THREE.Vector3().crossVectors(bladeDir, worldUp).normalize();
-    if (right.lengthSq() < 0.01) right.set(1, 0, 0); // fallback jika paralel
+    if (right.lengthSq() < 0.01) right.set(1, 0, 0);
     const perp = new THREE.Vector3().crossVectors(bladeDir, right).normalize();
-    
-    // Atur pergeseran awal dan panjang aura
-    const startOffset = -15; // Geser ke negatif agar aura menjangkau bagian gagang (karena pivot pedang ada di tengah)
-    const bladeLen = 38;     // Total panjang area aura
-    
-    s.weaponAuraGroup.children.forEach(p => {
+
+    const startOffset = -15;
+    const bladeLen = 38;
+    const dtN = dt * 60;
+
+    // Attack pulse: attackCooldown 90→0 decays over ~1.5 s
+    const atk  = Math.max(0, Math.min(1, s.player.attackCooldown / 90));
+    const sMul = 1 + 2.5 * atk;   // flow speed boost during attack
+    const rMul = 1 + 0.6 * atk;   // radius swell during attack
+
+    const _meshUp = new THREE.Vector3(0, 1, 0);
+    const _flowDir = new THREE.Vector3();
+
+    for (const p of s.weaponAuraGroup.children) {
       const u = p.userData;
-      // Mengurangi t agar partikel mengalir dari UJUNG (1.0) ke BAWAH (0.0)
-      u.t -= u.vt * (dt * 60) * 0.016;
-      if (u.t < -0.1) u.t = 1.1; // reset ke ujung jika sudah sampai bawah
-      const along = Math.max(u.t, 0.0);
-      
-      // Penyebaran melingkar di sekitar bilah (radius mengecil ke ujung)
-      const radius = u.r * (1 - along * 0.5);
-      const angle = t * u.angSpeed + u.animOffset;
-      const currentPos = startOffset + (along * bladeLen);
-      
+      u.t -= u.vt * dtN * sMul;
+      if (u.t < -0.2) u.t = 1.1;
+      const along = Math.max(u.t, 0);
+
+      // Blade profile: parabolic — narrow at hilt & tip, widest at mid-blade
+      const profile = 0.12 + 1.55 * 4 * along * (1 - along) * 0.25;
+      const radius  = u.r * profile * rMul;
+      // Helix: u.twist revolutions over blade length + time-driven spin
+      const angle   = u.t * u.twist * Math.PI * 2
+                    + tGlobal * u.angSpeed * sMul
+                    + u.animOffset;
+      const pos     = startOffset + along * bladeLen;
+
       p.position.set(
-        swordWorld.x + bladeDir.x * currentPos + right.x * Math.cos(angle) * radius + perp.x * Math.sin(angle) * radius,
-        swordWorld.y + bladeDir.y * currentPos + right.y * Math.cos(angle) * radius + perp.y * Math.sin(angle) * radius,
-        swordWorld.z + bladeDir.z * currentPos + right.z * Math.cos(angle) * radius + perp.z * Math.sin(angle) * radius
+        swordWorld.x + bladeDir.x*pos + right.x*Math.cos(angle)*radius + perp.x*Math.sin(angle)*radius,
+        swordWorld.y + bladeDir.y*pos + right.y*Math.cos(angle)*radius + perp.y*Math.sin(angle)*radius,
+        swordWorld.z + bladeDir.z*pos + right.z*Math.cos(angle)*radius + perp.z*Math.sin(angle)*radius,
       );
-    });
+
+      if (p.geometry.type === 'CylinderGeometry') {
+        // Core wisps: align tube axis to local flow direction
+        _flowDir.set(bladeDir.x, bladeDir.y, bladeDir.z)
+          .addScaledVector(right, Math.cos(angle) * 0.35)
+          .addScaledVector(perp,  Math.sin(angle) * 0.35)
+          .normalize();
+        p.quaternion.setFromUnitVectors(_meshUp, _flowDir);
+        p.material.opacity = 0.4 + 0.45 * atk + 0.08 * Math.sin(tGlobal * 6);
+      } else {
+        // Spark planes: billboard to camera
+        if (s.camera) p.quaternion.copy(s.camera.quaternion);
+        p.material.opacity = u.baseOp * (1 + 1.2 * atk);
+      }
+    }
+
+    // Attack burst pool
+    if (s.auraBursts) {
+      for (const b of s.auraBursts.children) {
+        const bu = b.userData;
+        if (bu.life <= 0) continue;
+        bu.life -= dt;
+        if (bu.life <= 0) { b.visible = false; continue; }
+        const prog   = 1 - bu.life / bu.maxLife;
+        const radial = bu.spd * prog * 8;
+        const bPos   = startOffset + 0.9 * bladeLen;
+        b.position.set(
+          swordWorld.x + bladeDir.x*bPos + right.x*Math.cos(bu.ang)*radial + perp.x*Math.sin(bu.ang)*radial,
+          swordWorld.y + bladeDir.y*bPos + right.y*Math.cos(bu.ang)*radial + perp.y*Math.sin(bu.ang)*radial,
+          swordWorld.z + bladeDir.z*bPos + right.z*Math.cos(bu.ang)*radial + perp.z*Math.sin(bu.ang)*radial,
+        );
+        b.material.opacity = (bu.life / bu.maxLife) * 0.8;
+        b.scale.setScalar(1.4 - 0.4 * prog);
+      }
+    }
   }
 }
 

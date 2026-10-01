@@ -26,13 +26,32 @@
       </div>
       
       <div class="hud-right">
+        <button class="nav-btn nav-btn-map" onclick="openFullMap()">🗺️ Peta (M)</button>
         <button class="nav-btn nav-btn-inventory" onclick="openInventory()">🎒 Tas</button>
         <button class="nav-btn nav-btn-stats" onclick="openStats()">📊 Stats <span id="stat-notif" style="display:none; background:red; padding:1px 5px; border-radius:50%; font-size:11px;">!</span></button>
         <button class="nav-btn nav-btn-quest" onclick="openQuestBoard()">📜 Misi (J)</button>
         <button class="nav-btn nav-btn-menu" onclick="openSettings()">⚙️ Menu</button>
       </div>
+    </div>
 
-      <canvas id="minimap" width="150" height="150"></canvas>
+    <!-- Minimap HUD Container with Location, Compass N, Coordinates, and Zoom buttons -->
+    <div id="minimap-container" title="Klik untuk membuka Peta Dunia (M)">
+      <div id="minimap-header">
+        <span id="minimap-location">🏰 Hometown</span>
+        <span class="minimap-compass-n">N</span>
+      </div>
+      <div class="minimap-canvas-wrapper" onclick="openFullMap()">
+        <canvas id="minimap" width="160" height="160"></canvas>
+        <div class="minimap-overlay-btns">
+          <button class="mm-btn" onclick="event.stopPropagation(); zoomMinimapIn();" title="Perbesar Minimap">+</button>
+          <button class="mm-btn" onclick="event.stopPropagation(); zoomMinimapOut();" title="Perkecil Minimap">−</button>
+          <button class="mm-btn" onclick="event.stopPropagation(); openFullMap();" title="Buka Peta Penuh (M)">⛶</button>
+        </div>
+      </div>
+      <div id="minimap-footer">
+        <span id="minimap-coords">X: 500, Y: 800</span>
+        <span id="minimap-hint">Peta (M)</span>
+      </div>
     </div>
     
     <div id="message">Panah: Gerak | Z: Dash | X: Spin | Spasi: Tebas Pedang</div>
@@ -230,20 +249,45 @@
     </div>
     
     <!-- Full Map Modal -->
-    <div id="full-map-modal" class="modal" style="display: none; background: rgba(10,20,30,0.95); border: 2px solid #34495e; align-items:center; justify-content:center; z-index: 3000;">
-      <div class="modal-content" style="color: #ddd; width: 650px; padding: 20px;">
-        <h2 style="color:#2ecc71; margin-bottom: 5px; text-align: center;">🗺️ Peta Dunia (M)</h2>
-        <div style="display: flex; gap: 15px; justify-content: center; margin-bottom: 15px; font-size: 14px;">
-           <span style="color:white;">⚪ Pemain</span>
-           <span style="color:#00ffff;">🔵 Portal Desa</span>
-           <span style="color:#ff00ff;">🟣 Portal Hutan</span>
-           <span style="color:#ff0000;">🔴 BOS (The Golden Golem)</span>
-           <span style="color:#ffcc00;">🟡 NPC/Toko</span>
+    <div id="full-map-modal" class="modal" style="display: none; background: rgba(6,10,16,0.92); backdrop-filter: blur(10px); align-items:center; justify-content:center; z-index: 3000;">
+      <div class="modal-content" style="color: #ddd; width: 680px; max-width: 95vw; padding: 18px; background: #161e27; border: 2px solid #f1c40f; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.85);">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334455; padding-bottom: 8px; margin-bottom: 10px;">
+          <div>
+            <h2 style="color:#f1c40f; margin: 0; font-size: 20px; display: inline-flex; align-items: center; gap: 8px;">
+              🗺️ Peta Dunia: <span id="fullmap-zone-name" style="color:#2ecc71;">Hometown</span>
+            </h2>
+            <div style="font-size: 12px; color: #8899aa; margin-top: 3px;">
+              📍 Posisi Anda: <span id="fullmap-player-coords" style="color:#fff; font-family: monospace;">X: 500, Y: 800</span>
+            </div>
+          </div>
+          <button onclick="closeFullMap()" style="background: none; border: none; color: #aaa; font-size: 26px; cursor: pointer; line-height: 1;">&times;</button>
         </div>
-        <div style="background: rgba(0,0,0,0.8); border: 2px solid #555; display: flex; justify-content: center; padding: 10px;">
-           <canvas id="fullmap-canvas" width="600" height="600" style="background: #1a3a1a;"></canvas>
+
+        <div style="display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-bottom: 10px;">
+           <span class="map-legend-chip">⚪ Pemain (Arah Hadap)</span>
+           <span class="map-legend-chip"><span style="color:#00ffff;">🔵</span> Portal Desa</span>
+           <span class="map-legend-chip"><span style="color:#ff00ff;">🟣</span> Portal Hutan</span>
+           <span class="map-legend-chip"><span style="color:#ff8800;">🟠</span> Portal Gurun</span>
+           <span class="map-legend-chip"><span style="color:#ff4444;">🔴</span> Boss Golem</span>
+           <span class="map-legend-chip"><span style="color:#ffcc00;">🟡</span> Toko / NPC</span>
+           <span class="map-legend-chip"><span style="color:#ffd700;">★</span> Monster Elit</span>
+           <span class="map-legend-chip">📦 Peti Harta</span>
+           <span class="map-legend-chip"><span style="color:#00ff88;">🎯</span> Waypoint</span>
         </div>
-        <button class="ui-btn" onclick="closeFullMap()" style="margin-top: 15px; background: #c0392b; width: 100%;">Tutup Peta</button>
+
+        <div style="background: rgba(0,0,0,0.9); border: 2px solid #3a4755; border-radius: 8px; display: flex; justify-content: center; padding: 8px; position: relative;">
+           <canvas id="fullmap-canvas" width="600" height="600" style="background: #1a3a1a; border-radius: 6px; max-width: 100%; height: auto; cursor: crosshair;"></canvas>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-size: 13px;">
+          <div id="fullmap-waypoint-status" style="color: #2ecc71; font-weight: bold; font-size: 12px;">
+            💡 Klik di mana saja pada peta untuk menandai rute jalan otomatis (auto-walk)
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button class="ui-btn" id="btn-cancel-waypoint" onclick="clearAutoWalkTargetUI(); drawFullMap();" style="display: none; padding: 7px 12px; background: #e67e22; font-size: 12px; font-weight: bold;">❌ Batal Rute</button>
+            <button class="ui-btn" onclick="closeFullMap()" style="padding: 7px 16px; background: #c0392b; font-size: 12px; font-weight: bold;">Tutup (M)</button>
+          </div>
+        </div>
       </div>
     </div>
     

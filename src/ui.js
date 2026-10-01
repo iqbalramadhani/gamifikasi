@@ -100,109 +100,291 @@ export function updateUI(force = false) {
 
 // ─── Minimap ───────────────────────────────────────────────────────────────────
 
+let minimapZoomIndex = 1; // 0: Dekat (700), 1: Normal (1400), 2: Jauh (2600)
+const MINIMAP_ZOOMS = [700, 1400, 2600];
+
+export function zoomMinimapIn() {
+  if (minimapZoomIndex > 0) {
+    minimapZoomIndex--;
+    drawMinimap();
+  }
+}
+
+export function zoomMinimapOut() {
+  if (minimapZoomIndex < MINIMAP_ZOOMS.length - 1) {
+    minimapZoomIndex++;
+    drawMinimap();
+  }
+}
+
+window.zoomMinimapIn = zoomMinimapIn;
+window.zoomMinimapOut = zoomMinimapOut;
+
 export function drawMinimap() {
   const mm = document.getElementById('minimap');
   if (!mm) return;
   const ctx = mm.getContext('2d');
-  ctx.clearRect(0, 0, 150, 150);
+  const mw = mm.width || 160;
+  const mh = mm.height || 160;
+  ctx.clearRect(0, 0, mw, mh);
 
   const s = state;
-  const cx = 75, cy = 75;          // center = player
-  const range = 1500;               // world units shown at canvas edge
-  const scale = 150 / (range * 2);  // map units → px, player-centered
-  // World (x,z) → minimap px, offset so player sits at center
+  const cx = mw / 2, cy = mh / 2; // player center
+  const range = MINIMAP_ZOOMS[minimapZoomIndex];
+  const scale = mw / (range * 2);
+
   const mx = x => cx + (x - s.player.x) * scale;
   const mz = z => cy + (z - s.player.y) * scale;
 
-  // Background — hometown is green, The Wilds is dark forest green,
-  // Scorched Dunes (wilds2) is sandy/tan.
-  ctx.fillStyle =
-    s.currentScene === 'hometown' ? '#2d4f30'
-    : s.currentScene === 'wilds2' ? '#c2a36b'
-    : '#1a3a1a';
-  ctx.fillRect(0, 0, 150, 150);
-
-  // Altar (center of wilds) — only shown when actually in the Wilds, since
-  // the same coordinates point to the pyramid in wilds2.
-  if (s.currentScene !== 'wilds2') {
-    ctx.fillStyle = '#ffd700';
-    ctx.fillRect(mx(mapSize / 2) - 3, mz(mapSize / 2) - 3, 6, 6);
+  // Update header and footer text elements if present
+  const locEl = document.getElementById('minimap-location');
+  if (locEl) {
+    if (s.currentScene === 'hometown') locEl.textContent = '🏰 Hometown';
+    else if (s.currentScene === 'wilds2') locEl.textContent = '🏜️ Scorched Dunes';
+    else locEl.textContent = '🌲 The Wilds';
+  }
+  const coordsEl = document.getElementById('minimap-coords');
+  if (coordsEl) {
+    coordsEl.textContent = `X: ${Math.round(s.player.x)}, Y: ${Math.round(s.player.y)}`;
   }
 
-  // Portals
-  if (s.hometownPortal) {
-    ctx.fillStyle = '#00ffff';
-    ctx.fillRect(mx(s.hometownPortal.position.x) - 3, mz(s.hometownPortal.position.z) - 3, 6, 6);
+  // 1. Background terrain tint
+  if (s.currentScene === 'hometown') {
+    ctx.fillStyle = '#1c3620';
+  } else if (s.currentScene === 'wilds2') {
+    ctx.fillStyle = '#947238';
+  } else {
+    ctx.fillStyle = '#122515';
   }
-  if (s.wildsPortal) {
-    ctx.fillStyle = '#ff00ff';
-    ctx.fillRect(mx(s.wildsPortal.position.x) - 3, mz(s.wildsPortal.position.z) - 3, 6, 6);
-  }
-  // Desert portals — orange
-  if (s.desertPortalWilds && s.currentScene !== 'wilds2') {
-    ctx.fillStyle = '#ff8800';
-    ctx.fillRect(mx(s.desertPortalWilds.position.x) - 3, mz(s.desertPortalWilds.position.z) - 3, 6, 6);
-  }
-  if (s.desertPortalWilds2 && s.currentScene === 'wilds2') {
-    ctx.fillStyle = '#ff8800';
-    ctx.fillRect(mx(s.desertPortalWilds2.position.x) - 3, mz(s.desertPortalWilds2.position.z) - 3, 6, 6);
-  }
+  ctx.fillRect(0, 0, mw, mh);
 
-  // Nearby enemies (max 15 for performance)
-  const nearby = s.enemies
-    .filter(e => Math.hypot(e.x - s.player.x, e.y - s.player.y) < range)
-    .sort((a, b) => Math.hypot(a.x - s.player.x, a.y - s.player.y) - Math.hypot(b.x - s.player.x, b.y - s.player.y))
-    .slice(0, 15);
-  ctx.fillStyle = '#ff4444';
-  nearby.forEach(e => ctx.fillRect(mx(e.x) - 1.5, mz(e.y) - 1.5, 3, 3));
-
-  // Boss
-  if (s.bossActive) {
-    ctx.fillStyle = '#ff0000';
-    ctx.fillRect(mx(s.bossX) - 5, mz(s.bossY) - 5, 10, 10);
-  }
-
-  // NPCs (shop, healer, blacksmith)
-  const npcColor = '#ffcc00';
-  [s.shopNPC, s.healerNPC, s.blacksmithNPC].forEach(npc => {
-    if (npc && npc.position) {
-      ctx.fillStyle = npcColor;
-      ctx.fillRect(mx(npc.position.x) - 2, mz(npc.position.z) - 2, 4, 4);
-    }
-  });
-
-  // Auto-walk waypoint
-  if (s.autoWalkTarget) {
-    ctx.fillStyle = '#00ff88';
+  // 2. Biome specific landmarks
+  if (s.currentScene === 'hometown') {
+    // Hometown central stone plaza (radius 250)
+    const plazaR = Math.max(8, 250 * scale);
+    ctx.fillStyle = '#2d3b2f';
     ctx.beginPath();
-    ctx.arc(mx(s.autoWalkTarget.x), mz(s.autoWalkTarget.y), 5, 0, Math.PI * 2);
+    ctx.arc(mx(500), mz(500), plazaR, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(0, 255, 136, 0.5)';
+    ctx.strokeStyle = '#3d4d3f';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Central fountain
+    ctx.fillStyle = '#2980b9';
+    ctx.beginPath();
+    ctx.arc(mx(500), mz(500), Math.max(2, 28 * scale), 0, Math.PI * 2);
+    ctx.fill();
+
+    // Paths connecting to buildings and portals
+    ctx.strokeStyle = 'rgba(180, 160, 120, 0.22)';
+    ctx.lineWidth = Math.max(2, 24 * scale);
+    ctx.beginPath();
+    ctx.moveTo(mx(500), mz(500)); ctx.lineTo(mx(500), mz(900)); // to portal
+    ctx.moveTo(mx(500), mz(500)); ctx.lineTo(mx(300), mz(300)); // to shop
+    ctx.moveTo(mx(500), mz(500)); ctx.lineTo(mx(700), mz(300)); // to healer
+    ctx.moveTo(mx(500), mz(500)); ctx.lineTo(mx(300), mz(700)); // to blacksmith
+    ctx.stroke();
+  } else if (s.currentScene === 'wilds') {
+    // Altar in Wilds center (10000, 10000)
+    const ax = mx(mapSize / 2), az = mz(mapSize / 2);
+    ctx.fillStyle = '#d4af37';
+    ctx.fillRect(ax - 4, az - 4, 8, 8);
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(ax - 5, az - 5, 10, 10);
+  } else if (s.currentScene === 'wilds2') {
+    // Stepped pyramid in Wilds2 center (10000, 10000)
+    const px = mx(mapSize / 2), pz = mz(mapSize / 2);
+    ctx.fillStyle = '#b38600';
+    ctx.fillRect(px - 9, pz - 9, 18, 18);
+    ctx.fillStyle = '#d4af37';
+    ctx.fillRect(px - 5, pz - 5, 10, 10);
+    ctx.fillStyle = '#ffe066';
+    ctx.fillRect(px - 2, pz - 2, 4, 4);
+  }
+
+  // 3. Radar Range Rings & Crosshairs
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(cx, cy, mw * 0.25, 0, Math.PI * 2);
+  ctx.arc(cx, cy, mw * 0.44, 0, Math.PI * 2);
+  ctx.moveTo(cx, 4); ctx.lineTo(cx, mh - 4);
+  ctx.moveTo(4, cy); ctx.lineTo(mw - 4, cy);
+  ctx.stroke();
+
+  // 4. Portals
+  if (s.currentScene === 'hometown' && s.hometownPortal) {
+    const hpx = mx(s.hometownPortal.position.x);
+    const hpz = mz(s.hometownPortal.position.z);
+    ctx.fillStyle = '#00ffff';
+    ctx.beginPath();
+    ctx.arc(hpx, hpz, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0, 255, 255, 0.5)';
     ctx.lineWidth = 2;
     ctx.stroke();
   }
+  if (s.currentScene === 'wilds') {
+    if (s.wildsPortal) {
+      const wpx = mx(s.wildsPortal.position.x);
+      const wpz = mz(s.wildsPortal.position.z);
+      ctx.fillStyle = '#ff00ff';
+      ctx.beginPath();
+      ctx.arc(wpx, wpz, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (s.desertPortalWilds) {
+      const dpx = mx(s.desertPortalWilds.position.x);
+      const dpz = mz(s.desertPortalWilds.position.z);
+      ctx.fillStyle = '#ff8800';
+      ctx.beginPath();
+      ctx.arc(dpx, dpz, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  if (s.currentScene === 'wilds2' && s.desertPortalWilds2) {
+    const dpx = mx(s.desertPortalWilds2.position.x);
+    const dpz = mz(s.desertPortalWilds2.position.z);
+    ctx.fillStyle = '#ff8800';
+    ctx.beginPath();
+    ctx.arc(dpx, dpz, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
-  // Player (centered, always)
-  const px = cx, py = cy;
-  ctx.fillStyle = '#ffffff';
+  // 5. NPCs (Hometown only)
+  if (s.currentScene === 'hometown') {
+    const npcs = [s.shopNPC, s.healerNPC, s.blacksmithNPC];
+    npcs.forEach(npc => {
+      if (npc && npc.position) {
+        const nx = mx(npc.position.x), nz = mz(npc.position.z);
+        ctx.fillStyle = '#ffcc00';
+        ctx.beginPath();
+        ctx.arc(nx, nz, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#332200';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+    });
+  }
+
+  // 6. Unlooted Treasure Chests (within range)
+  if (s.interactables && s.interactables.length) {
+    s.interactables.forEach(it => {
+      if (it.type === 'chest' && !it.looted && it.scene === s.currentScene) {
+        if (Math.hypot(it.x - s.player.x, it.y - s.player.y) <= range) {
+          const ix = mx(it.x), iz = mz(it.y);
+          ctx.fillStyle = '#ffd700';
+          ctx.fillRect(ix - 3, iz - 2.5, 6, 5);
+          ctx.strokeStyle = '#4a3200';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(ix - 3, iz - 2.5, 6, 5);
+        }
+      }
+    });
+  }
+
+  // 7. Enemies (Regular & Elite)
+  if (s.enemies && s.enemies.length) {
+    const nearbyEnemies = s.enemies
+      .filter(e => Math.hypot(e.x - s.player.x, e.y - s.player.y) <= range)
+      .slice(0, 25);
+
+    nearbyEnemies.forEach(e => {
+      const ex = mx(e.x), ez = mz(e.y);
+      if (e.isElite) {
+        // Glowing Golden Elite Star / Diamond
+        ctx.fillStyle = '#ffd700';
+        ctx.beginPath();
+        ctx.arc(ex, ez, 4.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#ff0055';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        // Inner star highlight
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(ex - 1, ez - 1, 2, 2);
+      } else {
+        // Regular enemy red dot
+        ctx.fillStyle = '#ff3344';
+        ctx.beginPath();
+        ctx.arc(ex, ez, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#550000';
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+      }
+    });
+  }
+
+  // 8. Boss
+  if (s.bossActive && s.currentScene !== 'hometown') {
+    const bx = mx(s.bossX), bz = mz(s.bossY);
+    ctx.fillStyle = '#ff0033';
+    ctx.fillRect(bx - 5, bz - 5, 10, 10);
+    ctx.strokeStyle = '#ffea00';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(bx - 6, bz - 6, 12, 12);
+  }
+
+  // 9. Auto-Walk Waypoint & Path
+  if (s.autoWalkTarget) {
+    const wx = mx(s.autoWalkTarget.x);
+    const wz = mz(s.autoWalkTarget.y);
+
+    // Dashed tracking line
+    ctx.setLineDash([4, 3]);
+    ctx.strokeStyle = 'rgba(0, 255, 136, 0.7)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(wx, wz);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Waypoint icon
+    ctx.fillStyle = '#00ff88';
+    ctx.beginPath();
+    ctx.arc(wx, wz, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+
+  // 10. Player (Centered at cx, cy)
+  const norm = Math.hypot(s.player.facingX, s.player.facingY) || 1;
+  const fX = s.player.facingX / norm;
+  const fY = s.player.facingY / norm;
+  const faceAngle = Math.atan2(fY, fX);
+
+  // Vision flashlight cone
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.16)';
   ctx.beginPath();
-  ctx.arc(px, py, 4, 0, Math.PI * 2);
+  ctx.moveTo(cx, cy);
+  ctx.arc(cx, cy, 26, faceAngle - 0.42, faceAngle + 0.42);
+  ctx.closePath();
   ctx.fill();
 
-  // Direction indicator
-  const dirLen = 8;
-  const dirAngle = Math.atan2(s.player.facingX, s.player.facingY);
+  // Player arrow pointer
+  ctx.fillStyle = '#2980b9';
   ctx.strokeStyle = '#ffffff';
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.moveTo(px, py);
-  ctx.lineTo(px + Math.sin(dirAngle) * dirLen, py - Math.cos(dirAngle) * dirLen);
+  ctx.moveTo(cx + fX * 9, cy + fY * 9);
+  ctx.lineTo(cx - fX * 5 - fY * 5, cy - fY * 5 + fX * 5);
+  ctx.lineTo(cx - fX * 2.5, cy - fY * 2.5);
+  ctx.lineTo(cx - fX * 5 + fY * 5, cy - fY * 5 - fX * 5);
+  ctx.closePath();
+  ctx.fill();
   ctx.stroke();
 
-  // Border
-  ctx.strokeStyle = '#555';
+  // Outer border
+  ctx.strokeStyle = '#3a4a58';
   ctx.lineWidth = 1;
-  ctx.strokeRect(0, 0, 150, 150);
+  ctx.strokeRect(0, 0, mw, mh);
 }
 
 // ─── Interaction check ────────────────────────────────────────────────────────
@@ -611,6 +793,19 @@ export function buyBoots() {
   }
 }
 
+function makeSparkTexture() {
+  const c = document.createElement('canvas');
+  c.width = 32; c.height = 96;
+  const ctx = c.getContext('2d');
+  const g = ctx.createLinearGradient(0, 0, 96, 0);
+  g.addColorStop(0,   'rgba(255,255,255,0)');
+  g.addColorStop(0.5, 'rgba(255,255,255,0.45)');
+  g.addColorStop(1,   'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 96, 32);
+  return new THREE.CanvasTexture(c);
+}
+
 window.equipWeapon = (idx) => {
   const s = state;
   if (!s.ownedWeapons.includes(idx)) return;
@@ -618,42 +813,88 @@ window.equipWeapon = (idx) => {
   s.currentWeapon = idx;
   const wNext = weaponList[idx];
   s.player.attackDamage += (wNext.damage - prevDmg);
-  
-  // Gunakan skala awal yang disimpan agar proporsi kustom terjaga
+
   if (s.playerSwordMesh) {
     const bs = s.swordBaseScale || { x: 100, y: 180, z: 320 };
     const visualTier = Math.min(idx, 3);
     const factor = 1 + visualTier * 0.15;
     s.playerSwordMesh.scale.set(bs.x * factor, bs.y * factor, bs.z * factor);
-    
-    // Hapus perubahan material sepenuhnya — partikel aura ditaruh di scene (world space)
-    // agar tidak terpengaruh rotasi/skala pedang
+
     if (s.weaponAuraLight) {
       s.playerSwordMesh.remove(s.weaponAuraLight);
       s.weaponAuraLight = null;
     }
-    // Hapus aura lama jika ada
     if (s.weaponAuraGroup) {
       s.scene.remove(s.weaponAuraGroup);
       s.weaponAuraGroup = null;
     }
-    // Buat group baru di scene (world space)
+    if (s.auraBursts) {
+      s.scene.remove(s.auraBursts);
+      s.auraBursts = null;
+    }
+
     s.weaponAuraGroup = new THREE.Group();
     s.scene.add(s.weaponAuraGroup);
-    
-    const auraMat = new THREE.MeshBasicMaterial({
-      color: wNext.color, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false
+
+    const coreGeo = new THREE.CylinderGeometry(0.12, 0.28, 6, 5, 1, true);
+    const sparkGeo = new THREE.PlaneGeometry(0.5, 1.6, 1, 3);
+    const burstGeo = new THREE.SphereGeometry(0.5, 4, 4);
+    const sparkTex = makeSparkTexture();
+
+    // Layer 1 — core wisps (40, shared material)
+    const coreMat = new THREE.MeshBasicMaterial({
+      color: wNext.color, transparent: true, opacity: 0.55,
+      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
     });
-    for (let i = 0; i < 100 + visualTier * 5; i++) {
-      const p = new THREE.Mesh(new THREE.SphereGeometry(0.25 + visualTier * 0.05, 6, 6), auraMat);
+    for (let i = 0; i < 40; i++) {
+      const p = new THREE.Mesh(coreGeo, coreMat);
       p.userData = {
-        t: Math.random(),                      // posisi di sepanjang bilah (0=pangkal, 1=ujung)
-        vt: 0.005 + Math.random() * 0.008,     // kecepatan naik ke ujung pedang
-        r: 1.5 + Math.random() * 2.5,          // radius melingkar di sekitar bilah
-        angSpeed: 0.5 + Math.random() * 1.5,   // kecepatan putaran
-        animOffset: Math.random() * Math.PI * 2
+        t: Math.random(),
+        vt: 0.004 + Math.random() * 0.006,
+        r: 1.0 + Math.random() * 1.2,
+        angSpeed: 0.5 + Math.random() * 1.0,
+        twist: 1.5 + Math.random(),
+        animOffset: Math.random() * Math.PI * 2,
       };
       s.weaponAuraGroup.add(p);
+    }
+
+    // Layer 2 — sparks (60, individual materials for per-mesh tint/opacity)
+    for (let i = 0; i < 60; i++) {
+      const isWhiteTint = i < 15;
+      const c = isWhiteTint
+        ? new THREE.Color(wNext.color).lerp(new THREE.Color(0xffffff), 0.3)
+        : wNext.color;
+      const baseOp = 0.25 + Math.random() * 0.2;
+      const mat = new THREE.MeshBasicMaterial({
+        color: c, map: sparkTex, transparent: true, opacity: baseOp,
+        blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+      });
+      const p = new THREE.Mesh(sparkGeo, mat);
+      p.userData = {
+        t: Math.random(),
+        vt: 0.002 + Math.random() * 0.004,
+        r: 2.2 + Math.random() * 2.3,
+        angSpeed: 0.3 + Math.random() * 0.6,
+        twist: 1.0 + Math.random() * 1.5,
+        animOffset: Math.random() * Math.PI * 2,
+        baseOp,
+      };
+      s.weaponAuraGroup.add(p);
+    }
+
+    // Layer 3 — attack burst pool (20, separate group, hidden when idle)
+    s.auraBursts = new THREE.Group();
+    s.scene.add(s.auraBursts);
+    const bMat = new THREE.MeshBasicMaterial({
+      color: wNext.color, transparent: true, opacity: 0,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    for (let i = 0; i < 20; i++) {
+      const b = new THREE.Mesh(burstGeo, bMat);
+      b.visible = false;
+      b.userData = { life: 0, maxLife: 30, spd: 2.2 + Math.random() * 2.0, ang: 0 };
+      s.auraBursts.add(b);
     }
   }
   updateInventoryUI();
@@ -1401,112 +1642,489 @@ export function clearAutoWalkTargetUI() {
   }
   if (typeof drawMinimap === 'function') drawMinimap();
 }
+window.clearAutoWalkTargetUI = clearAutoWalkTargetUI;
+window.clearWaypoint = clearAutoWalkTargetUI;
 
 export function drawFullMap() {
   const canvas = document.getElementById('fullmap-canvas');
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
-
   const mapWidth = 600;
   const mapHeight = 600;
   ctx.clearRect(0, 0, mapWidth, mapHeight);
 
-  // Background
-  ctx.fillStyle = '#1a3a1a';
-  ctx.fillRect(0, 0, mapWidth, mapHeight);
-
-  const scale = mapWidth / mapSize;
   const s = state;
 
-  // Altar (Center)
-  ctx.fillStyle = '#ffd700';
-  ctx.fillRect((mapSize / 2) * scale - 4, (mapSize / 2) * scale - 4, 8, 8);
-
-  // Portals
-  if (s.hometownPortal) {
-    ctx.fillStyle = '#00ffff'; // Desa
-    ctx.beginPath();
-    ctx.arc(s.hometownPortal.position.x * scale, s.hometownPortal.position.z * scale, 6, 0, Math.PI * 2);
-    ctx.fill();
+  // 1. Update Header and Footer status DOM elements
+  const zoneNameEl = document.getElementById('fullmap-zone-name');
+  if (zoneNameEl) {
+    if (s.currentScene === 'hometown') zoneNameEl.textContent = '🏰 Hometown (Desa)';
+    else if (s.currentScene === 'wilds2') zoneNameEl.textContent = '🏜️ Scorched Dunes (Gurun Pasir)';
+    else zoneNameEl.textContent = '🌲 The Wilds (Hutan Mistis)';
   }
-  if (s.wildsPortal) {
-    ctx.fillStyle = '#ff00ff'; // Hutan
-    ctx.beginPath();
-    ctx.arc(s.wildsPortal.position.x * scale, s.wildsPortal.position.z * scale, 6, 0, Math.PI * 2);
-    ctx.fill();
+  const coordsEl = document.getElementById('fullmap-player-coords');
+  if (coordsEl) {
+    coordsEl.textContent = `X: ${Math.round(s.player.x)}, Y: ${Math.round(s.player.y)}`;
   }
-
-  // Boss
-  if (s.bossActive || (s.bossX && s.bossY)) {
-    ctx.fillStyle = '#ff0000';
-    ctx.fillRect(s.bossX * scale - 8, s.bossY * scale - 8, 16, 16);
-  }
-
-  // NPCs
-  const npcColor = '#ffcc00';
-  [s.shopNPC, s.healerNPC, s.blacksmithNPC].forEach(npc => {
-    if (npc && npc.position) {
-      ctx.fillStyle = npcColor;
-      ctx.beginPath();
-      ctx.arc(npc.position.x * scale, npc.position.z * scale, 5, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  });
-
-  // Player
-  ctx.fillStyle = '#ffffff';
-  const px = s.player.x * scale;
-  const py = s.player.y * scale;
-  ctx.beginPath();
-  ctx.arc(px, py, 6, 0, Math.PI * 2);
-  ctx.fill();
-  
-    // Auto-walk waypoint
+  const wpStatusEl = document.getElementById('fullmap-waypoint-status');
+  const wpCancelBtn = document.getElementById('btn-cancel-waypoint');
   if (s.autoWalkTarget) {
-    const wx = s.autoWalkTarget.x * scale;
-    const wy = s.autoWalkTarget.y * scale;
+    const dist = Math.round(Math.hypot(s.autoWalkTarget.x - s.player.x, s.autoWalkTarget.y - s.player.y));
+    if (wpStatusEl) wpStatusEl.innerHTML = `🎯 <span style="color:#00ff88;">Menuju Tujuan (${dist}m)</span> — Berjalan otomatis saat peta ditutup`;
+    if (wpCancelBtn) wpCancelBtn.style.display = 'inline-block';
+  } else {
+    if (wpStatusEl) wpStatusEl.textContent = '💡 Klik di mana saja pada peta untuk menandai rute jalan otomatis (auto-walk)';
+    if (wpCancelBtn) wpCancelBtn.style.display = 'none';
+  }
+
+  // 2. Coordinate Transformation based on Scene
+  let toX, toY;
+  if (s.currentScene === 'hometown') {
+    // Hometown bounds: -100 to 1100 (span 1200)
+    const minX = -100, minY = -100, span = 1200;
+    toX = x => ((x - minX) / span) * mapWidth;
+    toY = y => ((y - minY) / span) * mapHeight;
+  } else {
+    // Wilds / Wilds2: 0 to mapSize (20000)
+    const scale = mapWidth / mapSize;
+    toX = x => x * scale;
+    toY = y => y * scale;
+  }
+
+  // 3. Map Background & Visual Cartography
+  if (s.currentScene === 'hometown') {
+    // Lush village grass background
+    ctx.fillStyle = '#162e1a';
+    ctx.fillRect(0, 0, mapWidth, mapHeight);
+
+    // Village outer boundary wall
+    ctx.strokeStyle = '#4a5b48';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(toX(-70), toY(-70), (1140 / 1200) * mapWidth, (1140 / 1200) * mapHeight);
+
+    // Grid pattern
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+    ctx.lineWidth = 1;
+    for (let g = 0; g <= mapWidth; g += 60) {
+      ctx.beginPath(); ctx.moveTo(g, 0); ctx.lineTo(g, mapHeight); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, g); ctx.lineTo(mapWidth, g); ctx.stroke();
+    }
+
+    // Dirt paths connecting plaza to houses and portal
+    const px0 = toX(500), py0 = toY(500);
+    ctx.strokeStyle = '#3d3023';
+    ctx.lineWidth = 14;
+    ctx.beginPath();
+    ctx.moveTo(px0, py0); ctx.lineTo(toX(500), toY(900)); // to Portal
+    ctx.moveTo(px0, py0); ctx.lineTo(toX(300), toY(300)); // to Shop
+    ctx.moveTo(px0, py0); ctx.lineTo(toX(700), toY(300)); // to Healer
+    ctx.moveTo(px0, py0); ctx.lineTo(toX(300), toY(700)); // to Blacksmith
+    ctx.moveTo(px0, py0); ctx.lineTo(toX(660), toY(200)); // to Training dummy
+    ctx.stroke();
+
+    // Cobblestone Plaza (radius 250 in world units)
+    const plazaRadius = (250 / 1200) * mapWidth;
+    ctx.fillStyle = '#323c34';
+    ctx.beginPath();
+    ctx.arc(px0, py0, plazaRadius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#4e5a50';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Central Fountain
+    ctx.fillStyle = '#2980b9';
+    ctx.beginPath();
+    ctx.arc(px0, py0, (40 / 1200) * mapWidth, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#bdc3c7';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Village Houses (Stylized Roofs)
+    const houses = [
+      { x: 200, y: 200, w: 90, h: 70, label: 'Rumah' },
+      { x: 800, y: 800, w: 90, h: 70, label: 'Rumah' },
+      { x: 200, y: 800, w: 80, h: 80, label: 'Lumbung' },
+      { x: 850, y: 350, w: 90, h: 70, label: 'Gudang' },
+    ];
+    houses.forEach(h => {
+      const hx = toX(h.x), hy = toY(h.y);
+      const hw = (h.w / 1200) * mapWidth;
+      const hh = (h.h / 1200) * mapHeight;
+      ctx.fillStyle = '#4a2e1b';
+      ctx.fillRect(hx - hw / 2, hy - hh / 2, hw, hh);
+      ctx.strokeStyle = '#7f4f24';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(hx - hw / 2, hy - hh / 2, hw, hh);
+      ctx.fillStyle = '#dcdcdc';
+      ctx.font = '10px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(h.label, hx, hy + 3);
+    });
+
+    // Training Dummy Area
+    const tdx = toX(660), tdy = toY(200);
+    ctx.fillStyle = '#d35400';
+    ctx.beginPath();
+    ctx.arc(tdx, tdy, 7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('🎯 Latihan', tdx, tdy - 11);
+
+  } else if (s.currentScene === 'wilds') {
+    // Deep Forest Background
+    ctx.fillStyle = '#0f2113';
+    ctx.fillRect(0, 0, mapWidth, mapHeight);
+
+    // Decorative Forest Danger Grid
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+    ctx.lineWidth = 1;
+    for (let g = 0; g <= mapWidth; g += 60) {
+      ctx.beginPath(); ctx.moveTo(g, 0); ctx.lineTo(g, mapHeight); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, g); ctx.lineTo(mapWidth, g); ctx.stroke();
+    }
+
+    // Sacred Altar Ruins (Center: 10000, 10000)
+    const ax = toX(mapSize / 2), ay = toY(mapSize / 2);
+    ctx.fillStyle = 'rgba(212, 175, 55, 0.15)';
+    ctx.beginPath();
+    ctx.arc(ax, ay, 40, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#d4af37';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.fillStyle = '#d4af37';
+    ctx.fillRect(ax - 7, ay - 7, 14, 14);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('🏛️ Altar Kuno', ax, ay - 14);
+
+  } else if (s.currentScene === 'wilds2') {
+    // Scorched Dunes Desert Background
+    ctx.fillStyle = '#805d26';
+    ctx.fillRect(0, 0, mapWidth, mapHeight);
+
+    // Subtle dune wave lines & Grid
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.lineWidth = 1;
+    for (let g = 0; g <= mapWidth; g += 60) {
+      ctx.beginPath(); ctx.moveTo(g, 0); ctx.lineTo(g, mapHeight); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, g); ctx.lineTo(mapWidth, g); ctx.stroke();
+    }
+
+    // Great Stepped Pyramid at Center (10000, 10000)
+    const px = toX(mapSize / 2), py = toY(mapSize / 2);
+    // Outer terrace
+    ctx.fillStyle = '#5c4117';
+    ctx.fillRect(px - 32, py - 32, 64, 64);
+    // Middle terrace
+    ctx.fillStyle = '#9e732d';
+    ctx.fillRect(px - 22, py - 22, 44, 44);
+    // Inner terrace
+    ctx.fillStyle = '#cca047';
+    ctx.fillRect(px - 12, py - 12, 24, 24);
+    // Apex
+    ctx.fillStyle = '#ffd700';
+    ctx.fillRect(px - 5, py - 5, 10, 10);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('🔺 Piramida Berapi', px, py - 38);
+  }
+
+  // 4. Portals
+  if (s.currentScene === 'hometown' && s.hometownPortal) {
+    const hpx = toX(s.hometownPortal.position.x);
+    const hpy = toY(s.hometownPortal.position.z);
+    ctx.fillStyle = '#00ffff';
+    ctx.beginPath();
+    ctx.arc(hpx, hpy, 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = '#00ffff';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('🌀 Portal ke Hutan', hpx, hpy + 18);
+  }
+
+  if (s.currentScene === 'wilds') {
+    if (s.wildsPortal) {
+      const wpx = toX(s.wildsPortal.position.x);
+      const wpy = toY(s.wildsPortal.position.z);
+      ctx.fillStyle = '#ff00ff';
+      ctx.beginPath();
+      ctx.arc(wpx, wpy, 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.fillStyle = '#ff77ff';
+      ctx.font = 'bold 10px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('🌀 Ke Desa', wpx, wpy + 16);
+    }
+    if (s.desertPortalWilds) {
+      const dpx = toX(s.desertPortalWilds.position.x);
+      const dpy = toY(s.desertPortalWilds.position.z);
+      ctx.fillStyle = '#ff8800';
+      ctx.beginPath();
+      ctx.arc(dpx, dpy, 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.fillStyle = '#ffaa44';
+      ctx.font = 'bold 10px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('🔥 Ke Gurun (Lv.10+)', dpx, dpy + 16);
+    }
+  }
+
+  if (s.currentScene === 'wilds2' && s.desertPortalWilds2) {
+    const dpx = toX(s.desertPortalWilds2.position.x);
+    const dpy = toY(s.desertPortalWilds2.position.z);
+    ctx.fillStyle = '#ff8800';
+    ctx.beginPath();
+    ctx.arc(dpx, dpy, 7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.fillStyle = '#ffaa44';
+    ctx.font = 'bold 10px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('🌀 Ke Hutan', dpx, dpy + 16);
+  }
+
+  // 5. NPCs (Hometown only)
+  if (s.currentScene === 'hometown') {
+    const npcs = [
+      { npc: s.shopNPC, label: '🛒 Toko', color: '#f1c40f' },
+      { npc: s.healerNPC, label: '❤️ Tabib', color: '#e74c3c' },
+      { npc: s.blacksmithNPC, label: '🔨 Pandai Besi', color: '#e67e22' }
+    ];
+    npcs.forEach(({ npc, label, color }) => {
+      if (npc && npc.position) {
+        const nx = toX(npc.position.x), ny = toY(npc.position.z);
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(nx, ny, 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.fillStyle = '#f1f2f6';
+        ctx.font = 'bold 11px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(label, nx, ny - 10);
+      }
+    });
+  }
+
+  // 6. Unlooted Treasure Chests
+  if (s.interactables && s.interactables.length) {
+    s.interactables.forEach(it => {
+      if (it.type === 'chest' && !it.looted && it.scene === s.currentScene) {
+        const cx = toX(it.x), cy = toY(it.y);
+        ctx.fillStyle = '#ffd700';
+        ctx.fillRect(cx - 4, cy - 3, 8, 6);
+        ctx.strokeStyle = '#4a3200';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(cx - 4, cy - 3, 8, 6);
+      }
+    });
+  }
+
+  // 7. Elite Monsters on Full Map
+  if (s.enemies && s.enemies.length) {
+    s.enemies.forEach(e => {
+      if (e.isElite) {
+        const ex = toX(e.x), ey = toY(e.y);
+        // Golden glowing star icon
+        ctx.fillStyle = '#ffd700';
+        ctx.beginPath();
+        ctx.arc(ex, ey, 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#ff0055';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 10px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('★ [Elit]', ex, ey - 9);
+      }
+    });
+  }
+
+  // 8. Boss
+  if (s.bossActive && s.currentScene !== 'hometown') {
+    const bx = toX(s.bossX), by = toY(s.bossY);
+    // Danger radius circle
+    ctx.strokeStyle = 'rgba(255, 0, 50, 0.3)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(bx, by, 30, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.fillStyle = '#ff0033';
+    ctx.fillRect(bx - 9, by - 9, 18, 18);
+    ctx.strokeStyle = '#ffd700';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(bx - 10, by - 10, 20, 20);
+
+    ctx.fillStyle = '#ff4d4d';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'center';
+    const bTitle = s.currentScene === 'wilds2' ? '👑 Arena Champion' : '👑 Golden Golem';
+    ctx.fillText(bTitle, bx, by - 14);
+  }
+
+  // 9. Auto-Walk Waypoint & Path
+  if (s.autoWalkTarget) {
+    const wx = toX(s.autoWalkTarget.x);
+    const wy = toY(s.autoWalkTarget.y);
+    const px = toX(s.player.x);
+    const py = toY(s.player.y);
+
+    // Dashed path line
+    ctx.setLineDash([6, 4]);
     ctx.strokeStyle = '#00ff88';
     ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(wx, wy, 10, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.fillStyle = '#00ff88';
-    ctx.beginPath();
-    ctx.arc(wx, wy, 4, 0, Math.PI * 2);
-    ctx.fill();
-    // Dashed line from player to waypoint
-    ctx.setLineDash([6, 4]);
-    ctx.strokeStyle = 'rgba(0,255,136,0.5)';
-    ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(px, py);
     ctx.lineTo(wx, wy);
     ctx.stroke();
     ctx.setLineDash([]);
+
+    // Target beacon rings
+    ctx.strokeStyle = 'rgba(0, 255, 136, 0.4)';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(wx, wy, 14, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.fillStyle = '#00ff88';
+    ctx.beginPath();
+    ctx.arc(wx, wy, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Distance tag above waypoint
+    const distMeters = Math.round(Math.hypot(s.autoWalkTarget.x - s.player.x, s.autoWalkTarget.y - s.player.y));
+    ctx.fillStyle = '#00ff88';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(`🎯 ${distMeters}m`, wx, wy - 14);
   }
 
-  // Click instruction
-  ctx.fillStyle = 'rgba(255,255,255,0.5)';
-  ctx.font = '12px sans-serif';
-  ctx.fillText('Klik peta untuk menandai tujuan auto-walk', 10, mapHeight - 10);
+  // 10. Player (Position & Direction Cone)
+  const px = toX(s.player.x);
+  const py = toY(s.player.y);
+
+  const norm = Math.hypot(s.player.facingX, s.player.facingY) || 1;
+  const fX = s.player.facingX / norm;
+  const fY = s.player.facingY / norm;
+  const faceAngle = Math.atan2(fY, fX);
+
+  // Vision cone
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.18)';
+  ctx.beginPath();
+  ctx.moveTo(px, py);
+  ctx.arc(px, py, 32, faceAngle - 0.45, faceAngle + 0.45);
+  ctx.closePath();
+  ctx.fill();
+
+  // Player Arrow
+  ctx.fillStyle = '#ffffff';
+  ctx.strokeStyle = '#2980b9';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(px + fX * 11, py + fY * 11);
+  ctx.lineTo(px - fX * 6 - fY * 6, py - fY * 6 + fX * 6);
+  ctx.lineTo(px - fX * 3, py - fY * 3);
+  ctx.lineTo(px - fX * 6 + fY * 6, py - fY * 6 - fX * 6);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  // "Anda" Label
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 11px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('📍 Anda', px, py - 12);
+
+  // 11. Scale Bar in Bottom Left
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+  ctx.fillRect(10, mapHeight - 34, 110, 24);
+  ctx.strokeStyle = '#666';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(10, mapHeight - 34, 110, 24);
+  ctx.fillStyle = '#ccc';
+  ctx.font = '10px monospace';
+  ctx.textAlign = 'center';
+  const scaleText = s.currentScene === 'hometown' ? '── 200m ──' : '── 2000m ──';
+  ctx.fillText(scaleText, 65, mapHeight - 18);
+
+  // 12. Compass Rose in Top Right
+  const crX = mapWidth - 36, crY = 36;
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.beginPath();
+  ctx.arc(crX, crY, 18, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#f1c40f';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  ctx.fillStyle = '#e74c3c';
+  ctx.font = 'bold 12px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('N', crX, crY - 6);
+  ctx.fillStyle = '#bbb';
+  ctx.font = '9px sans-serif';
+  ctx.fillText('S', crX, crY + 14);
+  ctx.fillText('W', crX - 11, crY + 3);
+  ctx.fillText('E', crX + 11, crY + 3);
 }
+
+export function handleFullMapClick(e) {
+  const canvas = document.getElementById('fullmap-canvas');
+  if (!canvas) return;
+  const s = state;
+  if (!s.isGameStarted || s.gameOver) return;
+
+  const rect = canvas.getBoundingClientRect();
+  const clickPxX = (e.clientX - rect.left) * (canvas.width / rect.width);
+  const clickPxY = (e.clientY - rect.top) * (canvas.height / rect.height);
+
+  let targetX, targetY;
+  if (s.currentScene === 'hometown') {
+    const minX = -100, minY = -100, span = 1200;
+    targetX = minX + (clickPxX / canvas.width) * span;
+    targetY = minY + (clickPxY / canvas.height) * span;
+  } else {
+    targetX = (clickPxX / canvas.width) * mapSize;
+    targetY = (clickPxY / canvas.height) * mapSize;
+  }
+
+  setAutoWalkTarget(targetX, targetY);
+  drawFullMap();
+}
+window.handleFullMapClick = handleFullMapClick;
 
 // Wire full-map canvas click to set auto-walk target
 {
   const canvas = document.getElementById('fullmap-canvas');
   if (canvas) {
-    canvas.addEventListener('click', e => {
-      const s = state;
-      if (!s.isGameStarted || s.gameOver) return;
-
-      const rect = canvas.getBoundingClientRect();
-      const scale = 600 / mapSize; // same scale used in drawFullMap
-
-      const clickX = (e.clientX - rect.left) / scale;
-      const clickY = (e.clientY - rect.top) / scale;
-
-      setAutoWalkTarget(clickX, clickY);
-      drawFullMap();
-    });
+    canvas.addEventListener('click', handleFullMapClick);
   }
 }

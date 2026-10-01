@@ -612,6 +612,15 @@ export function attack() {
   s.player.attackCooldown = 90;
   s.player.attackHitDelay = [10];
   playSound('dash');
+
+  // Trigger aura burst
+  if (s.auraBursts) {
+    for (const b of s.auraBursts.children) {
+      b.visible = true;
+      b.userData.life = 30;
+      b.userData.ang  = Math.random() * Math.PI * 2;
+    }
+  }
 }
 
 function applyEliteOnHit(e, dmgValue) {

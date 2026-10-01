@@ -146,6 +146,7 @@ export const state = {
   blacksmithNPC: null,
   autoWalkTarget: null,
   waypointMesh: null,
+  auraBursts: null,
 
   // BGM flag
   bgmStarted: false,

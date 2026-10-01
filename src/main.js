@@ -23,7 +23,8 @@ import {
   openInventory, closeInventory, updateInventoryUI, sellAllLoot,
   openTutorial, closeTutorial, useConsumable,
   autoUsePotions, updateAutoUseSettings,
-  openFullMap, closeFullMap,
+  openFullMap, closeFullMap, drawFullMap,
+  zoomMinimapIn, zoomMinimapOut, clearAutoWalkTargetUI,
 } from './ui.js';
 import { updateWeather, updateParticles, updatePet, teleportTo } from './environment.js';
 window.teleportTo = teleportTo;
@@ -84,6 +85,11 @@ window.closeTutorial = closeTutorial;
 window.useConsumable = useConsumable;
 window.openFullMap = openFullMap;
 window.closeFullMap = closeFullMap;
+window.drawFullMap = drawFullMap;
+window.zoomMinimapIn = zoomMinimapIn;
+window.zoomMinimapOut = zoomMinimapOut;
+window.clearAutoWalkTargetUI = clearAutoWalkTargetUI;
+window.clearWaypoint = clearAutoWalkTargetUI;
 window.playerBodyMat = null;
 window.playerBladeMat = null;
 
