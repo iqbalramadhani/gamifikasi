@@ -1179,6 +1179,38 @@ export function useConsumable(id) {
   updateInventoryUI();
 }
 
+// ─── Auto-Use Potion (berdasarkan threshold yang di-set user) ─────────────────
+// Dipanggil tiap frame dari main.js. Both potion tetap bisa dipakai manual.
+export function autoUsePotions() {
+  const s = state;
+  if (s.gameOver || s.isPaused || !s.isGameStarted) return;
+
+  const hpPct = (s.player.hp / s.player.maxHp) * 100;
+  if (hpPct <= s.autoHealThreshold) {
+    if (typeof window.usePotion === 'function') window.usePotion();
+  }
+
+  const spPct = (s.player.stamina / s.player.maxStamina) * 100;
+  if (spPct <= s.autoSPThreshold) {
+    useConsumable('stamina_potion');
+  }
+}
+
+export function updateAutoUseSettings() {
+  const hEl = document.getElementById('set-auto-health');
+  const sEl = document.getElementById('set-auto-sp');
+  if (hEl) {
+    state.autoHealThreshold = +hEl.value;
+    const hVal = document.getElementById('val-auto-health');
+    if (hVal) hVal.innerText = hEl.value;
+  }
+  if (sEl) {
+    state.autoSPThreshold = +sEl.value;
+    const sVal = document.getElementById('val-auto-sp');
+    if (sVal) sVal.innerText = sEl.value;
+  }
+}
+
 export function sellItem(id, sellPrice) {
   const s = state;
   if (!s.inventory || !s.inventory[id] || s.inventory[id] <= 0) return;

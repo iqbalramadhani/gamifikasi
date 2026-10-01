@@ -22,6 +22,7 @@ import {
   openQuestBoard, acceptQuest, claimQuest, closeQuestBoard, updateQuestUI,
   openInventory, closeInventory, updateInventoryUI, sellAllLoot,
   openTutorial, closeTutorial, useConsumable,
+  autoUsePotions, updateAutoUseSettings,
   openFullMap, closeFullMap,
 } from './ui.js';
 import { updateWeather, updateParticles, updatePet, teleportTo } from './environment.js';
@@ -152,8 +153,28 @@ window.togglePause = () => {
   document.getElementById('pause-menu').style.display = state.isPaused ? 'flex' : 'none';
 };
 
-window.openSettings = () => { document.getElementById('settings-menu').style.display = 'flex'; };
+window.openSettings = () => {
+  syncAutoUseSliders();
+  document.getElementById('settings-menu').style.display = 'flex';
+};
 window.closeSettings = () => { document.getElementById('settings-menu').style.display = 'none'; };
+window.updateAutoUseSettings = updateAutoUseSettings;
+
+// Sync slider + label ke nilai state terakhir (mis. setelah load save)
+function syncAutoUseSliders() {
+  const hEl = document.getElementById('set-auto-health');
+  const sEl = document.getElementById('set-auto-sp');
+  if (hEl) {
+    hEl.value = state.autoHealThreshold;
+    const hVal = document.getElementById('val-auto-health');
+    if (hVal) hVal.innerText = state.autoHealThreshold;
+  }
+  if (sEl) {
+    sEl.value = state.autoSPThreshold;
+    const sVal = document.getElementById('val-auto-sp');
+    if (sVal) sVal.innerText = state.autoSPThreshold;
+  }
+}
 window.updateCameraSettings = () => {
   state.cameraOffsetY = parseInt(document.getElementById('cam-y').value);
   state.cameraOffsetZ = parseInt(document.getElementById('cam-z').value);
@@ -319,6 +340,7 @@ function gameLoop(timestamp) {
     updateParticles(dt);
     updatePet(dt);
     checkItems();
+    autoUsePotions();
     updateUI();
     autoSaveTimer += dt;
     if (autoSaveTimer >= AUTO_SAVE_INTERVAL) {

@@ -57,6 +57,8 @@ export function saveGame(isAuto = false) {
     critMultiplier: s.critMultiplier,
     questStage: s.questStage,
     questCompleted: s.questCompleted,
+    autoHealThreshold: s.autoHealThreshold,
+    autoSPThreshold: s.autoSPThreshold,
   };
 
   fetch('http://localhost:3001/api/save', {
@@ -237,6 +239,8 @@ export function loadGame() {
       s.questCompleted = d.questCompleted ?? [];
       s.critChance = d.critChance ?? 0.05;
       s.critMultiplier = d.critMultiplier ?? 2.0;
+      s.autoHealThreshold = d.autoHealThreshold ?? 50;
+      s.autoSPThreshold = d.autoSPThreshold ?? 30;
       s.questStage = d.questStage ?? 0;
       s.questCompleted = d.questCompleted ?? [];
 

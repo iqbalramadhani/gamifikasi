@@ -39,6 +39,8 @@ export const state = {
   isPaused: false,
   isGameStarted: false,
   gameOver: false,
+  autoHealThreshold: 50, // auto-heal saat HP <= 50%
+  autoSPThreshold: 30,   // auto-SP saat Stamina <= 30%
   shopOpen: false,
   blacksmithOpen: false,
   shopCooldown: 0,

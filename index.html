@@ -89,6 +89,17 @@
           <label>Look Angle (Y): <span id="val-cam-look">10</span></label><br>
           <input type="range" id="cam-look" min="-50" max="100" value="10" oninput="updateCameraSettings()" style="width: 100%;">
         </div>
+        <div style="border-top: 1px solid #444; padding-top: 15px;">
+          <h3 style="color: #f1c40f; margin: 0 0 10px; font-size: 15px;">⚙️ Auto-Use Potion</h3>
+          <div style="margin-bottom: 15px;">
+            <label>🧪 Auto-Heal saat HP ≤ <span id="val-auto-health">50</span>%</label><br>
+            <input type="range" id="set-auto-health" min="0" max="100" value="50" step="5" oninput="updateAutoUseSettings()" style="width: 100%;">
+          </div>
+          <div style="margin-bottom: 15px;">
+            <label>⚡ Auto-SP saat Stamina ≤ <span id="val-auto-sp">30</span>%</label><br>
+            <input type="range" id="set-auto-sp" min="0" max="100" value="30" step="5" oninput="updateAutoUseSettings()" style="width: 100%;">
+          </div>
+        </div>
         <button class="ui-btn" onclick="closeSettings()" style="margin-top:15px; width: 100%; padding: 10px; background: #e74c3c;">Tutup</button>
       </div>
     </div>

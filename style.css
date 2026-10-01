@@ -5,24 +5,81 @@ body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000;
 /* Navbar HUD */
 #hud {
   position: absolute; top: 0; left: 0; width: 100%; 
-  background: rgba(0, 0, 0, 0.75); padding: 10px 20px; box-sizing: border-box;
-  display: flex; gap: 15px; flex-wrap: wrap; align-items: center; z-index: 10;
-  border-bottom: 2px solid #555;
+  background: linear-gradient(180deg, rgba(15, 20, 25, 0.92) 0%, rgba(10, 15, 20, 0.8) 100%);
+  padding: 8px 18px; box-sizing: border-box;
+  display: flex; justify-content: space-between; align-items: center; z-index: 10;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(8px);
+}
+.hud-left {
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+}
+.hud-right {
+  display: flex; gap: 8px; align-items: center;
 }
 #minimap {
-  position: absolute; right: 20px; top: 70px; 
+  position: absolute; right: 20px; top: 62px; 
   width: 150px; height: 150px; 
   background: rgba(0,20,0,0.6); 
   border: 2px solid #f1c40f; border-radius: 10px; z-index: 10;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.6);
 }
-.title-nav { font-weight: bold; font-size: 20px; color: #f1c40f; margin-right: auto; }
+.title-nav {
+  font-weight: 800; font-size: 16px; color: #f1c40f; letter-spacing: 0.5px;
+  margin-right: 6px; text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+}
 .badge {
-  background: rgba(255, 255, 255, 0.2);
-  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 5px 10px;
   border-radius: 6px;
   font-weight: bold;
-  font-size: 14px;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.1);
 }
+.badge-hp { background: rgba(192, 57, 43, 0.35); border-color: rgba(231, 76, 60, 0.5); }
+.badge-sp { background: rgba(243, 156, 18, 0.25); border-color: rgba(241, 196, 15, 0.4); }
+.badge-lv { background: rgba(41, 128, 185, 0.35); border-color: rgba(52, 152, 219, 0.5); }
+.badge-gold { background: rgba(212, 172, 13, 0.3); border-color: rgba(241, 196, 15, 0.5); }
+.badge-potion { background: rgba(192, 57, 43, 0.45); border-color: rgba(231, 76, 60, 0.6); }
+.badge-bounty { background: rgba(142, 68, 173, 0.45); border-color: rgba(155, 89, 182, 0.6); }
+
+.stamina-bar-container {
+  width: 70px; height: 5px; background: rgba(0,0,0,0.5); border-radius: 3px; overflow: hidden; margin-left: 3px;
+}
+#stamina-bar {
+  width: 100%; height: 100%; background: #f1c40f; transition: width 0.1s;
+}
+
+.nav-btn {
+  padding: 6px 14px;
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 6px;
+  font-weight: bold;
+  font-size: 13px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+}
+.nav-btn:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.2);
+}
+.nav-btn:active {
+  transform: translateY(1px);
+}
+.nav-btn-inventory { background: linear-gradient(135deg, #d35400, #e67e22); border-color: #f39c12; box-shadow: 0 2px 8px rgba(230,126,34,0.3); }
+.nav-btn-stats { background: linear-gradient(135deg, #7d3c98, #9b59b6); border-color: #af7ac5; box-shadow: 0 2px 8px rgba(155,89,182,0.3); }
+.nav-btn-quest { background: linear-gradient(135deg, #d68910, #f39c12); border-color: #f1c40f; box-shadow: 0 2px 8px rgba(243,156,18,0.3); }
+.nav-btn-menu { background: linear-gradient(135deg, #2c3e50, #34495e); border-color: #5d6d7e; box-shadow: 0 2px 8px rgba(52,73,94,0.3); }
 
 /* Game Canvas Container */
 #game {
