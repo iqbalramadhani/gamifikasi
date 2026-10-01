@@ -29,6 +29,10 @@ export function saveGame(isAuto = false) {
     currentArmor: s.currentArmor,
     currentHelmet: s.currentHelmet,
     currentBoots: s.currentBoots,
+    ownedWeapons: JSON.stringify(s.ownedWeapons ?? [0]),
+    ownedArmors: JSON.stringify(s.ownedArmors ?? [0]),
+    ownedHelmets: JSON.stringify(s.ownedHelmets ?? [0]),
+    ownedBoots: JSON.stringify(s.ownedBoots ?? [0]),
     level: s.player.level,
     exp: s.player.exp,
     nextExp: s.player.nextExp,
@@ -117,18 +121,38 @@ export function loadGame() {
         s.inventory = {};
       }
 
-      // Rebuild owned weapons and armors based on current
-      s.ownedWeapons = [];
-      for (let i = 0; i <= s.currentWeapon; i++) s.ownedWeapons.push(i);
+      // Restore owned weapon/armor/helmet/boots arrays (prefer saved list, fallback to current)
+      try {
+        s.ownedWeapons = d.ownedWeapons ? JSON.parse(d.ownedWeapons) : null;
+      } catch(e) { s.ownedWeapons = null; }
+      if (!s.ownedWeapons || !Array.isArray(s.ownedWeapons)) {
+        s.ownedWeapons = [];
+        for (let i = 0; i <= s.currentWeapon; i++) s.ownedWeapons.push(i);
+      }
 
-      s.ownedArmors = [];
-      for (let i = 0; i <= s.currentArmor; i++) s.ownedArmors.push(i);
+      try {
+        s.ownedArmors = d.ownedArmors ? JSON.parse(d.ownedArmors) : null;
+      } catch(e) { s.ownedArmors = null; }
+      if (!s.ownedArmors || !Array.isArray(s.ownedArmors)) {
+        s.ownedArmors = [];
+        for (let i = 0; i <= s.currentArmor; i++) s.ownedArmors.push(i);
+      }
 
-      s.ownedHelmets = [];
-      for (let i = 0; i <= s.currentHelmet; i++) s.ownedHelmets.push(i);
+      try {
+        s.ownedHelmets = d.ownedHelmets ? JSON.parse(d.ownedHelmets) : null;
+      } catch(e) { s.ownedHelmets = null; }
+      if (!s.ownedHelmets || !Array.isArray(s.ownedHelmets)) {
+        s.ownedHelmets = [];
+        for (let i = 0; i <= s.currentHelmet; i++) s.ownedHelmets.push(i);
+      }
 
-      s.ownedBoots = [];
-      for (let i = 0; i <= s.currentBoots; i++) s.ownedBoots.push(i);
+      try {
+        s.ownedBoots = d.ownedBoots ? JSON.parse(d.ownedBoots) : null;
+      } catch(e) { s.ownedBoots = null; }
+      if (!s.ownedBoots || !Array.isArray(s.ownedBoots)) {
+        s.ownedBoots = [];
+        for (let i = 0; i <= s.currentBoots; i++) s.ownedBoots.push(i);
+      }
 
       if (d.camera_y != null) {
         s.cameraOffsetY = d.camera_y;
@@ -199,6 +223,13 @@ export function loadGame() {
 
       console.log('✅ Progres termuat dari Database!', d);
       if (typeof window.updateUI === 'function') window.updateUI();
+      // Trigger aura senjata setelah load — jika model belum siap, tandai untuk dipanggil nanti
+      if (s.playerSwordMesh && typeof window.equipWeapon === 'function') {
+        window.equipWeapon(s.currentWeapon);
+      } else {
+        // Simpan flag, dipanggil oleh startGame setelah model selesai
+        s._pendingEquipWeapon = s.currentWeapon;
+      }
     })
     .catch(err => console.log('Belum ada save data atau Server Backend mati:', err));
 }

@@ -114,6 +114,47 @@ export function updateParticles(dt) {
     p.mesh.material.opacity = p.life;
     p.mesh.scale.setScalar(Math.max(0, p.life));
   }
+
+  // Animasi Weapon Aura — partikel menyebar melingkar di sekitar bilah pedang
+  if (s.weaponAuraGroup && s.playerSwordMesh) {
+    const t = Date.now() * 0.004;
+    const swordWorld = new THREE.Vector3();
+    s.playerSwordMesh.getWorldPosition(swordWorld);
+    
+    // (Menghapus offset x,y,z manual karena pedang bisa berputar ke segala arah)
+    
+    // Arah bilah pedang (coba -Z jika +Z malah ke belakang)
+    const bladeDir = new THREE.Vector3(0, 0, -1);
+    bladeDir.applyQuaternion(s.playerSwordMesh.getWorldQuaternion(new THREE.Quaternion()));
+    // Vektor tegak lurus kanan dan atas dari bilah
+    const worldUp = new THREE.Vector3(0, 1, 0);
+    const right = new THREE.Vector3().crossVectors(bladeDir, worldUp).normalize();
+    if (right.lengthSq() < 0.01) right.set(1, 0, 0); // fallback jika paralel
+    const perp = new THREE.Vector3().crossVectors(bladeDir, right).normalize();
+    
+    // Atur pergeseran awal dan panjang aura
+    const startOffset = -15; // Geser ke negatif agar aura menjangkau bagian gagang (karena pivot pedang ada di tengah)
+    const bladeLen = 38;     // Total panjang area aura
+    
+    s.weaponAuraGroup.children.forEach(p => {
+      const u = p.userData;
+      // Mengurangi t agar partikel mengalir dari UJUNG (1.0) ke BAWAH (0.0)
+      u.t -= u.vt * (dt * 60) * 0.016;
+      if (u.t < -0.1) u.t = 1.1; // reset ke ujung jika sudah sampai bawah
+      const along = Math.max(u.t, 0.0);
+      
+      // Penyebaran melingkar di sekitar bilah (radius mengecil ke ujung)
+      const radius = u.r * (1 - along * 0.5);
+      const angle = t * u.angSpeed + u.animOffset;
+      const currentPos = startOffset + (along * bladeLen);
+      
+      p.position.set(
+        swordWorld.x + bladeDir.x * currentPos + right.x * Math.cos(angle) * radius + perp.x * Math.sin(angle) * radius,
+        swordWorld.y + bladeDir.y * currentPos + right.y * Math.cos(angle) * radius + perp.y * Math.sin(angle) * radius,
+        swordWorld.z + bladeDir.z * currentPos + right.z * Math.cos(angle) * radius + perp.z * Math.sin(angle) * radius
+      );
+    });
+  }
 }
 
 // ─── Pet (fairy companion) ────────────────────────────────────────────────────

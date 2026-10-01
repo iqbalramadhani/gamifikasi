@@ -17,7 +17,7 @@ import {
 import {
   updateUI, checkInteractions,
   openShop, closeShop, buyPotion, buyInventoryItem, buyMysteryBox,
-  openBlacksmith, closeBlacksmith, updateBlacksmithUI, buyWeapon, buyArmor,
+  openBlacksmith, closeBlacksmith, updateBlacksmithUI, buyWeapon, buyArmor, buyHelmet, buyBoots,
   levelUp, openStats, closeStats, addStat,
   openQuestBoard, acceptQuest, claimQuest, closeQuestBoard, updateQuestUI,
   openInventory, closeInventory, sellAllLoot,
@@ -63,6 +63,8 @@ window.openBlacksmith = openBlacksmith;
 window.closeBlacksmith = closeBlacksmith;
 window.buyWeapon = buyWeapon;
 window.buyArmor = buyArmor;
+window.buyHelmet = buyHelmet;
+window.buyBoots = buyBoots;
 window.openStats = openStats;
 window.closeStats = closeStats;
 window.addStat = addStat;
@@ -121,6 +123,13 @@ window.startGame = async () => {
     if (state.wilds2Group) state.wilds2Group.visible = false;
     if (state.hometownGroup) state.hometownGroup.visible = true;
     if (state.mainFloor) state.mainFloor.visible = true;
+  }
+
+  // Setelah semua model siap, aktifkan aura senjata jika ada pending dari loadGame
+  if (state._pendingEquipWeapon !== undefined && state.playerSwordMesh) {
+    const idx = state._pendingEquipWeapon;
+    state._pendingEquipWeapon = undefined;
+    if (typeof window.equipWeapon === 'function') window.equipWeapon(idx);
   }
 
   gameLoop();
@@ -251,8 +260,10 @@ function gameLoop(timestamp) {
     if (state.player.isSpinning > 0) {
       state.player.isSpinning -= dt;
       state.player.spinAngle += 0.5 * dt;
+      state.player.spinHitDelay = Math.max(0, state.player.spinHitDelay - dt);
     } else {
       state.player.spinAngle = 0;
+      state.player.spinHitDelay = 0;
     }
 
     updateProjectiles(dt);

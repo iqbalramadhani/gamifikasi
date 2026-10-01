@@ -105,6 +105,7 @@ const fbxModelsToLoad = [
   { key: 'sword_idle', url: '/animations/sword_idle.fbx' },
   { key: 'sword_run', url: '/animations/sword_run.fbx' },
   { key: 'sword_slash', url: '/animations/sword_slash.fbx' },
+  { key: 'sword_slash_3', url: '/animations/sword_slash_3.fbx' },
   { key: 'player_model', url: '/models/player_model.fbx' },
   { key: 'idle_anim', url: '/models/idle.fbx' },
   { key: 'run_anim', url: '/models/run.fbx' },

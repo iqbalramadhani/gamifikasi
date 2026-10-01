@@ -842,6 +842,13 @@ export function initEntities() {
         s.playerActions.attack.clampWhenFinished = true;
       }
     }
+
+    // sword_slash_3 → animasi skill spin (tombol X)
+    if (loadedModels.sword_slash_3 && loadedModels.sword_slash_3.animations && loadedModels.sword_slash_3.animations.length > 0) {
+      s.playerActions.spin = s.playerMixer.clipAction(loadedModels.sword_slash_3.animations[0]);
+      s.playerActions.spin.setLoop(THREE.LoopOnce);
+      s.playerActions.spin.clampWhenFinished = true;
+    }
     
     if (s.playerActions.idle) {
       s.playerActions.idle.play();
@@ -863,10 +870,12 @@ export function initEntities() {
       // ui.js will handle cloning and coloring it.
 
       if (rightHand) {
-        gltfSword.scale.set(250, 250, 250);
+        gltfSword.scale.set(100, 180, 320);
+        // Simpan skala awal agar tidak tertimpa saat ganti senjata
+        s.swordBaseScale = { x: 100, y: 180, z: 320 };
         gltfSword.position.set(43, 8, -20);
         gltfSword.rotation.set(Math.PI, Math.PI / 3, 0); 
-        gltfSword.rotateX(Math.PI); // Ini rumus pasti untuk memutar objek 180 derajat persis di tempatnya
+        gltfSword.rotateX(Math.PI);
         rightHand.add(gltfSword);
       } else {
         gltfSword.scale.set(15, 15, 15);

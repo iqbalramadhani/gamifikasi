@@ -181,11 +181,16 @@ export function move(dt) {
 
   let dx = 0, dy = 0;
 
-  if (s.player.attackHitDelay > 0) {
-    s.player.attackHitDelay -= dt;
-    if (s.player.attackHitDelay <= 0) {
+  if (s.player.attackHitDelay.length > 0) {
+    s.player.attackHitDelay[0] -= dt;
+    if (s.player.attackHitDelay[0] <= 0) {
+      s.player.attackHitDelay.shift();
       doMeleeHit();
     }
+  }
+
+  if (s.player.spinHitDelay === 0 && s.player.isSpinning > 0) {
+    doSpinHit();
   }
   if (s.keys.arrowup) dy += 1;
   if (s.keys.arrowdown) dy -= 1;
@@ -216,46 +221,10 @@ export function move(dt) {
     if (s.keys.x && s.player.spinCooldown <= 0 && s.player.stamina >= 50) {
       s.player.stamina -= 50;
       s.player.spinCooldown = 300;
-      s.player.isSpinning = 30;
+      s.player.isSpinning = 100; // durasi animasi sword_slash_3 (100 frame)
+      s.player.spinHitDelay = 50; // damage mendarat di tengah animasi
       s.cameraShake = Math.max(s.cameraShake || 0, 8);
       playSound('spin');
-      for (let i = s.enemies.length - 1; i >= 0; i--) {
-        const e = s.enemies[i];
-        if (Math.hypot(e.x - s.player.x, e.y - s.player.y) < s.player.r + e.r + 100) {
-          const spinCrit = calcCritDamage(s.player.attackDamage * 3);
-          e.hp -= spinCrit.value;
-          e.slowTimer = 90;
-          e.stunTimer = 20;
-          // knockback removed
-          const spinColor = spinCrit.isCrit ? '#ffff00' : '#ff4444';
-          const spinLabel = spinCrit.isCrit ? `CRIT! -${spinCrit.value}` : `-${spinCrit.value}`;
-          spawnDamageText(e.x, e.mesh.position.y + 35, e.y, spinLabel, spinColor);
-          if (e.hp <= 0) killEnemy(i);
-          else {
-            if (spinCrit.isCrit) spawnParticles(e.x, e.y, 0xffff00, 8, 'hit');
-            else spawnParticles(e.x, e.y, 0xffaa00, 5, 'hit');
-          }
-        }
-      }
-      
-      // Spin hit interactables
-      if (s.interactables) {
-        for (let i = s.interactables.length - 1; i >= 0; i--) {
-          const it = s.interactables[i];
-          if (it.scene !== s.currentScene || it.isVFX) continue;
-          if (Math.hypot(it.x - s.player.x, it.y - s.player.y) < s.player.r + 40) {
-             triggerInteractable(it, i);
-          }
-        }
-      }
-      if (s.bossActive && Math.hypot(s.bossX - s.player.x, s.bossY - s.player.y) < s.player.r + 150) {
-        const bossSpinCrit = calcCritDamage(s.player.attackDamage * 3);
-        s.bossHp -= bossSpinCrit.value;
-        playSound('hit');
-        const bsColor = bossSpinCrit.isCrit ? '#ffff00' : '#ff4444';
-        const bsLabel = bossSpinCrit.isCrit ? `CRIT! -${bossSpinCrit.value}` : `-${bossSpinCrit.value}`;
-        spawnDamageText(s.bossX, 50, s.bossY, bsLabel, bsColor);
-      }
     }
 
     let currentSpeed = s.player.defending ? s.player.speed * 0.4 : s.player.speed;
@@ -290,7 +259,9 @@ function animatePlayer(walking) {
 
   if (s.playerMixer) {
     let targetAction = s.playerActions.idle;
-    if (isAttacking && s.playerActions.attack) {
+    if (isAttacking && s.player.isSpinning > 0 && s.playerActions.spin) {
+      targetAction = s.playerActions.spin;
+    } else if (isAttacking && s.playerActions.attack) {
       targetAction = s.playerActions.attack;
     } else if (walking && s.playerActions.run) {
       targetAction = s.playerActions.run;
@@ -372,9 +343,57 @@ function animatePlayer(walking) {
 export function attack() {
   const s = state;
   if (s.player.attackCooldown > 0 || s.gameOver || s.isPaused || !s.isGameStarted) return;
-  s.player.attackCooldown = 90; // 1.5s total cooldown
-  s.player.attackHitDelay = 10; // Trigger damage early (halfway through the swing)
-  playSound('dash'); // Swoosh sound for swing starts immediately
+  s.player.attackCooldown = 90;
+  s.player.attackHitDelay = [10];
+  playSound('dash');
+}
+
+function doSpinHit() {
+  const s = state;
+  let hitSomething = false;
+  for (let i = s.enemies.length - 1; i >= 0; i--) {
+    const e = s.enemies[i];
+    if (Math.hypot(e.x - s.player.x, e.y - s.player.y) < s.player.r + e.r + 100) {
+      const spinCrit = calcCritDamage(s.player.attackDamage * 3);
+      e.hp -= spinCrit.value;
+      e.slowTimer = 90;
+      e.stunTimer = 20;
+      hitSomething = true;
+      const spinColor = spinCrit.isCrit ? '#ffff00' : '#ff4444';
+      const spinLabel = spinCrit.isCrit ? `CRIT! -${spinCrit.value}` : `-${spinCrit.value}`;
+      spawnDamageText(e.x, e.mesh.position.y + 35, e.y, spinLabel, spinColor);
+      if (e.hp <= 0) killEnemy(i);
+      else {
+        if (spinCrit.isCrit) spawnParticles(e.x, e.y, 0xffff00, 8, 'hit');
+        else spawnParticles(e.x, e.y, 0xffaa00, 5, 'hit');
+      }
+    }
+  }
+
+  if (s.interactables) {
+    for (let i = s.interactables.length - 1; i >= 0; i--) {
+      const it = s.interactables[i];
+      if (it.scene !== s.currentScene || it.isVFX) continue;
+      if (Math.hypot(it.x - s.player.x, it.y - s.player.y) < s.player.r + 40) {
+        hitSomething = true;
+        triggerInteractable(it, i);
+      }
+    }
+  }
+
+  if (s.bossActive && Math.hypot(s.bossX - s.player.x, s.bossY - s.player.y) < s.player.r + 150) {
+    const bossSpinCrit = calcCritDamage(s.player.attackDamage * 3);
+    s.bossHp -= bossSpinCrit.value;
+    hitSomething = true;
+    const bsColor = bossSpinCrit.isCrit ? '#ffff00' : '#ff4444';
+    const bsLabel = bossSpinCrit.isCrit ? `CRIT! -${bossSpinCrit.value}` : `-${bossSpinCrit.value}`;
+    spawnDamageText(s.bossX, 50, s.bossY, bsLabel, bsColor);
+  }
+
+  if (hitSomething) {
+    playSound('hit');
+    s.cameraShake = Math.max(s.cameraShake || 0, 12);
+  }
 }
 
 function doMeleeHit() {
@@ -436,15 +455,15 @@ function doMeleeHit() {
 
   if (hitSomething) {
     playSound('hit');
-    s.cameraShake = Math.max(s.cameraShake || 0, 8); // Screen shake on hit
+    s.cameraShake = Math.max(s.cameraShake || 0, 8);
   }
-  
+
   // Epic Slash Effect Mesh
   const angle = Math.atan2(s.player.facingY, s.player.facingX);
   const px = s.player.x + Math.cos(angle) * 40;
   const pz = s.player.y + Math.sin(angle) * 40;
-  
-  const slashGeo = new THREE.BoxGeometry(10, 2, 180); // Wide blade of energy
+
+  const slashGeo = new THREE.BoxGeometry(10, 2, 180);
   const slashMat = new THREE.MeshBasicMaterial({ color: 0xffd700, transparent: true, opacity: 0.9 });
   const slashMesh = new THREE.Mesh(slashGeo, slashMat);
   

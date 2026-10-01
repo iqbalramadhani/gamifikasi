@@ -570,22 +570,42 @@ window.equipWeapon = (idx) => {
   const wNext = weaponList[idx];
   s.player.attackDamage += (wNext.damage - prevDmg);
   
-  if (typeof s.playerBladeMat !== 'undefined' && s.playerBladeMat) s.playerBladeMat.color.setHex(wNext.color);
+  // Gunakan skala awal yang disimpan agar proporsi kustom terjaga
   if (s.playerSwordMesh) {
-    const baseScale = s.gltfPlayerRef ? 250 : 15;
-    // Cap visual scaling
+    const bs = s.swordBaseScale || { x: 100, y: 180, z: 320 };
     const visualTier = Math.min(idx, 3);
-    const newScale = baseScale + visualTier * (baseScale * 0.3);
-    s.playerSwordMesh.scale.set(newScale, newScale, newScale);
+    const factor = 1 + visualTier * 0.15;
+    s.playerSwordMesh.scale.set(bs.x * factor, bs.y * factor, bs.z * factor);
     
-    s.playerSwordMesh.traverse(child => {
-      if (child.isMesh && child.material) {
-        child.material = child.material.clone();
-        child.material.color.setHex(wNext.color);
-        child.material.emissive.setHex(wNext.color);
-        child.material.emissiveIntensity = visualTier * 0.3;
-      }
+    // Hapus perubahan material sepenuhnya — partikel aura ditaruh di scene (world space)
+    // agar tidak terpengaruh rotasi/skala pedang
+    if (s.weaponAuraLight) {
+      s.playerSwordMesh.remove(s.weaponAuraLight);
+      s.weaponAuraLight = null;
+    }
+    // Hapus aura lama jika ada
+    if (s.weaponAuraGroup) {
+      s.scene.remove(s.weaponAuraGroup);
+      s.weaponAuraGroup = null;
+    }
+    // Buat group baru di scene (world space)
+    s.weaponAuraGroup = new THREE.Group();
+    s.scene.add(s.weaponAuraGroup);
+    
+    const auraMat = new THREE.MeshBasicMaterial({
+      color: wNext.color, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false
     });
+    for (let i = 0; i < 100 + visualTier * 5; i++) {
+      const p = new THREE.Mesh(new THREE.SphereGeometry(0.25 + visualTier * 0.05, 6, 6), auraMat);
+      p.userData = {
+        t: Math.random(),                      // posisi di sepanjang bilah (0=pangkal, 1=ujung)
+        vt: 0.005 + Math.random() * 0.008,     // kecepatan naik ke ujung pedang
+        r: 1.5 + Math.random() * 2.5,          // radius melingkar di sekitar bilah
+        angSpeed: 0.5 + Math.random() * 1.5,   // kecepatan putaran
+        animOffset: Math.random() * Math.PI * 2
+      };
+      s.weaponAuraGroup.add(p);
+    }
   }
   updateInventoryUI();
 };
@@ -617,25 +637,7 @@ window.equipArmor = (idx) => {
   s.player.maxHp += hpDiff;
   s.player.hp += hpDiff; // Heal or take away the difference
   
-  if (typeof s.playerBodyMat !== 'undefined' && s.playerBodyMat) s.playerBodyMat.color.setHex(aNext.color);
-  if (s.gltfPlayerRef) {
-    s.gltfPlayerRef.traverse(child => {
-      if (child.isMesh && child.material) {
-        child.material = child.material.clone();
-        child.material.color.setHex(aNext.color);
-      }
-    });
-  }
-
-  if (!s.playerAuraLight && s.playerMesh) {
-    s.playerAuraLight = new THREE.PointLight(aNext.color, 1 + idx * 0.5, 100 + idx * 20);
-    s.playerAuraLight.position.y = 15;
-    s.playerMesh.add(s.playerAuraLight);
-  } else if (s.playerAuraLight) {
-    s.playerAuraLight.color.setHex(aNext.color);
-    s.playerAuraLight.intensity = 1 + idx * 0.5;
-    s.playerAuraLight.distance = 100 + idx * 20;
-  }
+  // Tidak ada efek visual khusus untuk armor — hanya stat HP yang berubah
   updateInventoryUI();
 };
 
