@@ -582,7 +582,7 @@ export function triggerInteractable(it, index) {
       );
       dropMesh.position.set(it.x + (Math.random()-0.5)*20, 5, it.y + (Math.random()-0.5)*20);
       s.scene.add(dropMesh);
-      s.lootDrops.push({ x: dropMesh.position.x, y: dropMesh.position.z, taken: false, type: 'loot', item: {id: 'gold', name: 'Gold', value: 10}, mesh: dropMesh });
+      s.lootDrops.push({ x: dropMesh.position.x, y: dropMesh.position.z, taken: false, type: 'gold', item: {id: 'gold', name: 'Gold', value: 10}, mesh: dropMesh });
     }
     // Spawn potion
     const potMesh = new THREE.Mesh(
@@ -628,7 +628,11 @@ export function usePotion() {
     playSound('coin');
     spawnParticles(s.player.x, s.player.y, 0x00ff00, 10, 'heal');
     const btn = document.getElementById('btn-potion');
-    if (btn) btn.textContent = `🧪 Heal (C) [${s.potions}]`;
+    if (btn) {
+      btn.textContent = `🧪 Heal (C) [${s.potions}]`;
+      btn.style.opacity = s.potions > 0 ? '1.0' : '0.5';
+    }
+    if (typeof window.updateUI === 'function') window.updateUI(true);
   }
 }
 

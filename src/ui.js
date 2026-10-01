@@ -9,19 +9,20 @@ import { updatePortalAnimations } from './scenes.js';
 // ─── UI throttled update ──────────────────────────────────────────────────────
 
 let uiThrottle = 0;
-let lastHp = -1, lastGold = -1;
+let lastHp = -1, lastGold = -1, lastPotions = -1;
 
-export function updateUI() {
+export function updateUI(force = false) {
   checkItems();
   updateQuestUI();
 
   uiThrottle++;
-  if (uiThrottle % 6 !== 0) return; // Throttle to ~10 fps for DOM writes
+  if (!force && uiThrottle % 6 !== 0) return; // Throttle to ~10 fps for DOM writes
 
   const s = state;
   const curHp = Math.ceil(s.player.hp);
-  if (lastHp !== curHp) {
-    document.getElementById('hp').textContent = `${curHp}/${s.player.maxHp}`;
+  if (force || lastHp !== curHp) {
+    const hpEl = document.getElementById('hp');
+    if (hpEl) hpEl.textContent = `${curHp}/${s.player.maxHp}`;
     lastHp = curHp;
   }
   
@@ -36,9 +37,17 @@ export function updateUI() {
   if (staminaTextEl) staminaTextEl.textContent = `${curStamina}/${s.player.maxStamina}`;
   if (staminaBarEl) staminaBarEl.style.width = `${Math.max(0, (curStamina / s.player.maxStamina) * 100)}%`;
 
-  if (lastGold !== s.gold) {
-    document.getElementById('gold').textContent = s.gold;
+  if (force || lastGold !== s.gold) {
+    const goldEl = document.getElementById('gold');
+    if (goldEl) goldEl.textContent = s.gold;
     lastGold = s.gold;
+  }
+
+  const btnPotion = document.getElementById('btn-potion');
+  if (btnPotion && (force || lastPotions !== s.potions)) {
+    btnPotion.textContent = `🧪 Heal (C) [${s.potions}]`;
+    btnPotion.style.opacity = s.potions > 0 ? '1.0' : '0.5';
+    lastPotions = s.potions;
   }
 
   const expEl = document.getElementById('exp');
@@ -866,8 +875,18 @@ export function updateInventoryUI() {
   let hasItems = false;
   
   if (!s.inventory) s.inventory = {};
+
+  // Migrasi jika ada gold lama di inventory langsung ke data gold pemain
+  if (s.inventory.gold) {
+    s.gold = (s.gold || 0) + (s.inventory.gold * 10);
+    delete s.inventory.gold;
+    const goldEl = document.getElementById('gold');
+    if (goldEl) goldEl.textContent = s.gold;
+    if (typeof window.saveGame === 'function') window.saveGame(true);
+  }
   
   for (const [id, count] of Object.entries(s.inventory)) {
+    if (id === 'gold') continue;
     if (count > 0) {
       hasItems = true;
       const lootDef = Object.values(lootTable).find(l => l.id === id);
@@ -1150,6 +1169,11 @@ export function sellAllLoot() {
   let totalEarned = 0;
   for (const [id, count] of Object.entries(s.inventory)) {
     if (count > 0) {
+      if (id === 'gold') {
+        totalEarned += count * 10;
+        delete s.inventory[id];
+        continue;
+      }
       const lootDef = Object.values(lootTable).find(l => l.id === id);
       if (lootDef) {
         totalEarned += lootDef.value * count;

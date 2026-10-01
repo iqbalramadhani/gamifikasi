@@ -109,6 +109,11 @@ export function loadGame() {
       s.player.nextExp = d.nextExp ?? s.player.nextExp;
       s.gold = d.gold ?? 0;
       s.potions = d.potions ?? 0;
+      const btnPotion = document.getElementById('btn-potion');
+      if (btnPotion) {
+        btnPotion.textContent = `🧪 Heal (C) [${s.potions}]`;
+        btnPotion.style.opacity = s.potions > 0 ? '1.0' : '0.5';
+      }
       s.crystalCount = d.crystalCount ?? 0;
       s.currentWeapon = d.currentWeapon ?? 0;
       s.currentArmor = d.currentArmor ?? 0;
@@ -119,6 +124,12 @@ export function loadGame() {
         if (d.inventory) s.inventory = JSON.parse(d.inventory);
       } catch (e) {
         s.inventory = {};
+      }
+
+      // Migrasi jika ada gold lama yang tersimpan di inventory
+      if (s.inventory && s.inventory.gold) {
+        s.gold = (s.gold || 0) + (s.inventory.gold * 10);
+        delete s.inventory.gold;
       }
 
       // Restore owned weapon/armor/helmet/boots arrays (prefer saved list, fallback to current)
@@ -222,7 +233,7 @@ export function loadGame() {
       }
 
       console.log('✅ Progres termuat dari Database!', d);
-      if (typeof window.updateUI === 'function') window.updateUI();
+      if (typeof window.updateUI === 'function') window.updateUI(true);
       // Trigger aura senjata setelah load — jika model belum siap, tandai untuk dipanggil nanti
       if (s.playerSwordMesh && typeof window.equipWeapon === 'function') {
         window.equipWeapon(s.currentWeapon);

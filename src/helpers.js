@@ -59,6 +59,18 @@ export function checkItems() {
           const msgEl = document.getElementById('message');
           if (msgEl) msgEl.textContent = `🧪 Potion didapat! (${s.potions} tersisa)`;
           spawnDamageText(drop.x, 30, drop.y, '+1 Potion', '#ff4444');
+        } else if (drop.type === 'gold' || drop.item?.id === 'gold') {
+          const goldAmount = drop.item?.value || 10;
+          s.gold = (s.gold || 0) + goldAmount;
+          const msgEl = document.getElementById('message');
+          if (msgEl) msgEl.textContent = `🪙 +${goldAmount} Gold didapat!`;
+          spawnDamageText(drop.x, 30, drop.y, `+${goldAmount} Gold`, '#ffd700');
+          const goldEl = document.getElementById('gold');
+          if (goldEl) goldEl.textContent = s.gold;
+          const shopGoldEl = document.getElementById('shop-gold');
+          if (shopGoldEl) shopGoldEl.textContent = s.gold;
+          const blacksmithGoldEl = document.getElementById('blacksmith-gold');
+          if (blacksmithGoldEl) blacksmithGoldEl.textContent = s.gold;
         } else {
           if (!s.inventory) s.inventory = {};
           if (!s.inventory[drop.item.id]) s.inventory[drop.item.id] = 0;

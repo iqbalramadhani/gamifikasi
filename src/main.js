@@ -132,6 +132,14 @@ window.startGame = async () => {
     if (typeof window.equipWeapon === 'function') window.equipWeapon(idx);
   }
 
+  // Sinkronkan UI awal (termasuk tombol heal / potion)
+  const btnPotion = document.getElementById('btn-potion');
+  if (btnPotion) {
+    btnPotion.textContent = `🧪 Heal (C) [${state.potions}]`;
+    btnPotion.style.opacity = state.potions > 0 ? '1.0' : '0.5';
+  }
+  if (typeof updateUI === 'function') updateUI(true);
+
   gameLoop();
 };
 
