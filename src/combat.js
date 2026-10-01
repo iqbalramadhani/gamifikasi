@@ -353,11 +353,58 @@ export function move(dt) {
     const targetY = s.autoWalkTarget.y;
     const distToTarget = Math.hypot(targetX - s.player.x, targetY - s.player.y);
 
-    if (distToTarget <= 12 || blocked(targetX, targetY, s.player.r)) {
+    if (distToTarget <= 12) {
       clearAutoWalkTarget();
     } else {
-      dx = (targetX - s.player.x) / distToTarget;
-      dy = (targetY - s.player.y) / distToTarget;
+      // Base direction toward target
+      let adx = (targetX - s.player.x) / distToTarget;
+      let ady = (targetY - s.player.y) / distToTarget;
+
+      // Look-ahead sampling: cast several candidate directions ahead of the
+      // player and pick the free one that best points toward the target.
+      // This routes around obstacles well before contact, not after.
+      const LOOKAHEAD = 60;   // how far ahead to sample
+      const SAMPLES = 12;     // how many directions to try
+      const straightAngle = Math.atan2(ady, adx);
+
+      // First check: is the straight path clear?
+      if (!blocked(s.player.x + adx * LOOKAHEAD, s.player.y + ady * LOOKAHEAD, s.player.r)) {
+        // Straight path is clear — go directly to target
+      } else {
+        // Straight path is blocked — sample ±90° around it and pick the
+        // free candidate with the best alignment to the target direction.
+        let bestAngle = straightAngle;
+        let bestScore = -Infinity;
+
+        for (let i = 0; i < SAMPLES; i++) {
+          const spread = Math.PI; // ±90°
+          const angle = straightAngle - spread / 2 + (spread / (SAMPLES - 1)) * i;
+          const sx = Math.cos(angle), sy = Math.sin(angle);
+          const px = s.player.x + sx * LOOKAHEAD;
+          const py = s.player.y + sy * LOOKAHEAD;
+
+          if (blocked(px, py, s.player.r)) continue;
+
+          let dAngle = angle - straightAngle;
+          while (dAngle >  Math.PI) dAngle -= 2 * Math.PI;
+          while (dAngle < -Math.PI) dAngle += 2 * Math.PI;
+          // Prefer candidates closer to straight; break ties by favouring the
+          // side that also reduces distance to target.
+          const score = 1 - Math.abs(dAngle) / (Math.PI / 2);
+
+          if (score > bestScore) { bestScore = score; bestAngle = angle; }
+        }
+
+        adx = Math.cos(bestAngle);
+        ady = Math.sin(bestAngle);
+      }
+
+      // Re-normalise to avoid drift
+      const bl = Math.hypot(adx, ady) || 1;
+      adx /= bl; ady /= bl;
+
+      dx = adx;
+      dy = ady;
     }
   }
 
