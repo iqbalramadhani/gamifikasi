@@ -8,7 +8,7 @@ import * as THREE from 'three';
 // Subsystem modules
 import { state } from './state.js';
 import { loadAllModels, loadedModels } from './model-loader.js';
-import { initSetup, initMap, initHometown, initEntities, initNPCs, initWildsNPCs, initWilds2, getTerrainHeight } from './scenes.js';
+import { initSetup, initMap, initHometown, initEntities, initNPCs, initWildsNPCs, initWilds2, getTerrainHeight, getTerrainHeightWilds2 } from './scenes.js';
 import { spawnBoss, spawnParticles, checkItems } from './helpers.js';
 import { spawnEnemy, spawnEnemy2, usePotion } from './combat.js';
 import {
@@ -106,6 +106,7 @@ window.startGame = async () => {
     if (state.hometownGroup) state.hometownGroup.visible = false;
     if (state.wilds2Group) state.wilds2Group.visible = false;
     if (state.wildsGroup) state.wildsGroup.visible = true;
+    if (state.mainFloor) state.mainFloor.visible = true;
   } else if (state.currentScene === 'wilds2') {
     if (!state.wilds2Loaded) {
       initWilds2();
@@ -114,10 +115,12 @@ window.startGame = async () => {
     if (state.hometownGroup) state.hometownGroup.visible = false;
     if (state.wildsGroup) state.wildsGroup.visible = false;
     if (state.wilds2Group) state.wilds2Group.visible = true;
+    if (state.mainFloor) state.mainFloor.visible = false; // desert: hide grass floor
   } else {
     if (state.wildsGroup) state.wildsGroup.visible = false;
     if (state.wilds2Group) state.wilds2Group.visible = false;
     if (state.hometownGroup) state.hometownGroup.visible = true;
+    if (state.mainFloor) state.mainFloor.visible = true;
   }
 
   gameLoop();
@@ -293,7 +296,9 @@ function gameLoop(timestamp) {
   // ── Smooth player mesh follow ──────────────────────────────────────────────
   const breathOffset = state.playerMixer ? 0 : Math.sin(state.playerIdleBreath) * 0.8;
   const isMoving = state.player.facingX !== 0 || state.player.facingY !== 0;
-  const terrainY = getTerrainHeight(state.player.x, state.player.y);
+  const terrainY = state.currentScene === 'wilds2'
+    ? getTerrainHeightWilds2(state.player.x, state.player.y)
+    : getTerrainHeight(state.player.x, state.player.y);
   const basePlayerY = 15 + state.player.height + terrainY;
   const targetPlayerY = (isMoving && !state.playerMixer)
     ? basePlayerY + Math.abs(Math.sin(state.player.walkCycle * 2)) * 1.5

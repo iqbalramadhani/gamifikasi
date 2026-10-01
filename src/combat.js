@@ -4,7 +4,7 @@ import { state } from './state.js';
 import { mapSize, weaponList, armorList, enemyTemplates, enemyTemplates2, WILDS2_MIN_LEVEL, lootTable, consumableItems, statusEffects } from './constants.js';
 import { loadedModels } from './model-loader.js';
 import { blocked, spawnParticles, spawnDamageText } from './helpers.js';
-import { spawnAtFreePos, spawnAtFreePosWilds2, getTerrainHeight } from './scenes.js';
+import { spawnAtFreePos, spawnAtFreePosWilds2, getTerrainHeight, getTerrainHeightWilds2 } from './scenes.js';
 import { playSound } from './audio.js';
 
 // ─── Critical hit helper ──────────────────────────────────────────────────────
@@ -233,6 +233,17 @@ export function move(dt) {
           }
         }
       }
+      
+      // Spin hit interactables
+      if (s.interactables) {
+        for (let i = s.interactables.length - 1; i >= 0; i--) {
+          const it = s.interactables[i];
+          if (it.scene !== s.currentScene || it.isVFX) continue;
+          if (Math.hypot(it.x - s.player.x, it.y - s.player.y) < s.player.r + 40) {
+             triggerInteractable(it, i);
+          }
+        }
+      }
       if (s.bossActive && Math.hypot(s.bossX - s.player.x, s.bossY - s.player.y) < s.player.r + 150) {
         const bossSpinCrit = calcCritDamage(s.player.attackDamage * 3);
         s.bossHp -= bossSpinCrit.value;
@@ -393,6 +404,20 @@ function doMeleeHit() {
     }
   }
 
+  // Check interactables
+  if (s.interactables) {
+    for (let i = s.interactables.length - 1; i >= 0; i--) {
+      const it = s.interactables[i];
+      if (it.scene !== s.currentScene || it.isVFX) continue;
+      
+      const dist = Math.hypot(it.x - s.player.x, it.y - s.player.y);
+      if (dist < s.player.r + 30) {
+        hitSomething = true;
+        triggerInteractable(it, i);
+      }
+    }
+  }
+
   if (s.bossActive) {
     const dist = Math.hypot(s.bossX - s.player.x, s.bossY - s.player.y);
     if (dist < s.player.r + 150) {
@@ -435,6 +460,63 @@ function doMeleeHit() {
 
   // Show dust kickup
   spawnParticles(px, pz, 0xffffff, 8, 'dust');
+}
+
+export function triggerInteractable(it, index) {
+  const s = state;
+  it.hp -= s.player.attackDamage;
+  if (it.hp > 0) return;
+  
+  if (it.type === 'chest' && !it.looted) {
+    it.looted = true;
+    const lid = it.mesh.children[1];
+    if (lid) lid.rotation.x = -Math.PI / 2.5; // Buka tutup peti
+    playSound('coin');
+    spawnParticles(it.x, it.y, 0xffff00, 15, 'heal');
+    spawnDamageText(it.x, 40, it.y, `Harta Terbuka!`, '#ffff00');
+    
+    // Spawn gold
+    for(let j=0; j<4; j++) {
+      const dropMesh = new THREE.Mesh(
+        new THREE.OctahedronGeometry(4, 0),
+        new THREE.MeshLambertMaterial({ color: 0xffd700 })
+      );
+      dropMesh.position.set(it.x + (Math.random()-0.5)*20, 5, it.y + (Math.random()-0.5)*20);
+      s.scene.add(dropMesh);
+      s.lootDrops.push({ x: dropMesh.position.x, y: dropMesh.position.z, taken: false, type: 'loot', item: {id: 'gold', name: 'Gold', value: 10}, mesh: dropMesh });
+    }
+    // Spawn potion
+    const potMesh = new THREE.Mesh(
+      new THREE.CylinderGeometry(2, 2, 6, 8),
+      new THREE.MeshLambertMaterial({ color: 0xff0000 })
+    );
+    potMesh.position.set(it.x, 3, it.y + 10);
+    s.scene.add(potMesh);
+    s.lootDrops.push({ x: it.x, y: it.y + 10, taken: false, type: 'potion', mesh: potMesh });
+    
+  } else if (it.type === 'barrel' && !it.exploded) {
+    it.exploded = true;
+    playSound('hit');
+    spawnParticles(it.x, it.y, 0xffaa00, 30, 'death'); // Ledakan api
+    s.cameraShake = Math.max(s.cameraShake || 0, 20);
+    
+    // Damage player
+    if (Math.hypot(s.player.x - it.x, s.player.y - it.y) < 80) {
+      s.player.hp = Math.max(0, s.player.hp - 30);
+      spawnDamageText(s.player.x, 30, s.player.y, `-30`, '#ff0000');
+    }
+    // Damage enemies
+    for (let e of s.enemies) {
+      if (Math.hypot(e.x - it.x, e.y - it.y) < 100) {
+        e.hp -= 150;
+        e.stunTimer = 60;
+        spawnDamageText(e.x, e.mesh.position.y + 35, e.y, `-150`, '#ff0000');
+      }
+    }
+    
+    s.scene.remove(it.mesh);
+    s.interactables.splice(index, 1);
+  }
 }
 
 // ─── Potion ───────────────────────────────────────────────────────────────────
@@ -781,7 +863,8 @@ export function updateEnemies(dt) {
 
     const speedScalar = Math.hypot(e.dx, e.dy);
     let hoverBob = e.isFlying ? Math.sin(Date.now() / 300 + e.x) * 5 : 0;
-    let meshYTarget = e.meshY + hoverBob + getTerrainHeight(e.x, e.y);
+    let meshYTarget = e.meshY + hoverBob + (s.currentScene === 'wilds2'
+      ? getTerrainHeightWilds2(e.x, e.y) : getTerrainHeight(e.x, e.y));
     
     if (e.actionState === 'attack') {
       const attackProgress = (30 - e.attackAnimTimer) / 30;
@@ -942,7 +1025,9 @@ export function updateBoss(dt) {
   // Smooth position interpolation after logic
   s.bossMesh.position.x += (s.bossX - s.bossMesh.position.x) * Math.min(dt * 6, 1);
   s.bossMesh.position.z += (s.bossY - s.bossMesh.position.z) * Math.min(dt * 6, 1);
-  const bossTerrainY = getTerrainHeight(s.bossX, s.bossY);
+  const bossTerrainY = s.currentScene === 'wilds2'
+    ? getTerrainHeightWilds2(s.bossX, s.bossY)
+    : getTerrainHeight(s.bossX, s.bossY);
   s.bossMesh.position.y += (30 + bossTerrainY - s.bossMesh.position.y) * Math.min(dt * 6, 1);
   s.bossMesh.rotation.x = Math.sin(Date.now() / 300) * 0.1;
 

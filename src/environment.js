@@ -66,6 +66,34 @@ export function updateWeather(dt) {
       s.rainParticles.material.opacity = 0;
     }
   }
+
+  // Ambient Particles (Fireflies, Leaves, Sand)
+  if (!s.ambientTimer) s.ambientTimer = 0;
+  s.ambientTimer += dt;
+  if (s.ambientTimer > 5) {
+    s.ambientTimer = 0;
+    if (s.currentScene === 'wilds') {
+      if (s.dayTime > 0.4) {
+        if (Math.random() < 0.5) spawnParticles(s.player.x + (Math.random()-0.5)*800, s.player.y + (Math.random()-0.5)*800, 0x88ff88, 1, 'heal'); // Firefly
+      } else {
+        if (Math.random() < 0.3) spawnParticles(s.player.x + (Math.random()-0.5)*800, s.player.y + (Math.random()-0.5)*800, 0x228b22, 1, 'dust'); // Leaf
+      }
+    } else if (s.currentScene === 'wilds2') {
+      if (Math.random() < 0.5) spawnParticles(s.player.x + (Math.random()-0.5)*800, s.player.y + (Math.random()-0.5)*800, 0xd2b48c, 1, 'dust'); // Sand
+    }
+  }
+
+  // Animate interactables VFX (Mystic Ruins core)
+  if (s.interactables) {
+    const time = Date.now() * 0.002;
+    for (const it of s.interactables) {
+      if (it.isVFX && it.type === 'ruin_core' && it.scene === s.currentScene) {
+        it.mesh.position.y = 30 + Math.sin(time + it.x) * 5;
+        it.mesh.rotation.y = time;
+        it.mesh.rotation.x = time * 0.5;
+      }
+    }
+  }
 }
 
 // ─── Particles update ─────────────────────────────────────────────────────────
@@ -151,6 +179,7 @@ export function teleportTo(sceneName) {
     if (s.hometownGroup) s.hometownGroup.visible = false;
     if (s.wilds2Group) s.wilds2Group.visible = false;
     if (s.wildsGroup) s.wildsGroup.visible = true;
+    if (s.mainFloor) s.mainFloor.visible = true;
 
     s.player.x = Math.floor(mapSize / 2);
     s.player.y = Math.floor(mapSize / 2) + 100;
@@ -179,9 +208,10 @@ export function teleportTo(sceneName) {
     if (s.hometownGroup) s.hometownGroup.visible = false;
     if (s.wildsGroup) s.wildsGroup.visible = false;
     if (s.wilds2Group) s.wilds2Group.visible = true;
+    if (s.mainFloor) s.mainFloor.visible = false; // desert: hide grass floor
 
     s.player.x = Math.floor(mapSize / 2);
-    s.player.y = Math.floor(mapSize / 2) + 150;
+    s.player.y = Math.floor(mapSize / 2) + 250;
 
     // Clear existing enemies
     s.enemies.forEach(e => {
@@ -201,7 +231,8 @@ export function teleportTo(sceneName) {
     if (s.wildsGroup) s.wildsGroup.visible = false;
     if (s.wilds2Group) s.wilds2Group.visible = false;
     if (s.hometownGroup) s.hometownGroup.visible = true;
-    
+    if (s.mainFloor) s.mainFloor.visible = true;
+
     s.player.x = 500;
     s.player.y = 800;
     document.getElementById('message').textContent = 'Kembali ke Safe Haven.';

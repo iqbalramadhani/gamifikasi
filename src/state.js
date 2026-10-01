@@ -104,6 +104,7 @@ export const state = {
   projectiles: [],
   particles: [],
   lootDrops: [],
+  interactables: [],
   
   inventory: {},
 

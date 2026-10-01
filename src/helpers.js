@@ -25,6 +25,9 @@ export function blocked(x, y, r = state.player.r) {
       : s.obstaclesWilds;
   for (let i = 0; i < obs.length; i++) {
     const o = obs[i];
+    // Abaikan objek kecil (setinggi lutut karakter atau lebih rendah)
+    if (o.h !== undefined && o.h <= 20) continue;
+
     if (Math.abs(o.x - x) > o.r + r || Math.abs(o.y - y) > o.r + r) continue;
     const dx = o.x - x, dy = o.y - y;
     if (dx * dx + dy * dy < (o.r + r) * (o.r + r)) return true;

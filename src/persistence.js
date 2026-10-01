@@ -147,6 +147,16 @@ export function loadGame() {
         s.currentScene = 'wilds';
       }
 
+      // Bebaskan player jika stuck di dalam pyramid map 2 (wilds2)
+      if (s.currentScene === 'wilds2') {
+        const dx = s.player.x - 10000;
+        const dy = s.player.y - 10000;
+        if (Math.hypot(dx, dy) < 170) {
+          s.player.x = 10000;
+          s.player.y = 10250;
+        }
+      }
+
       s.player.statPoints = d.statPoints ?? s.player.statPoints;
       s.player.stats.str = d.stat_str ?? s.player.stats.str;
       s.player.stats.agi = d.stat_agi ?? s.player.stats.agi;

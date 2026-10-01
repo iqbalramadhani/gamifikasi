@@ -7,6 +7,7 @@ import { state } from './state.js';
 import { mapSize } from './constants.js';
 import { loadedModels } from './model-loader.js';
 import { spawnEnemy } from './combat.js';
+import { scatterInteractables } from './landmarks.js';
 
 export function getTerrainHeight(x, y) {
   // Area kota (Hometown) harus sepenuhnya datar
@@ -132,6 +133,7 @@ export function initSetup() {
   floor.position.set(mapSize / 2, 0, mapSize / 2);
   floor.receiveShadow = true;
   s.scene.add(floor);
+  s.mainFloor = floor;
 
   // Fog menyatu dengan langit
   s.scene.fog = new THREE.FogExp2(0x87CEEB, 0.0002);
@@ -177,7 +179,7 @@ export function initMap() {
   altarGroup.add(altarBase, altarPillar);
   altarGroup.position.set(ms / 2, 0, ms / 2);
   s.wildsGroup.add(altarGroup);
-  s.obstaclesWilds.push({ x: ms / 2, y: ms / 2, r: 40 });
+  s.obstaclesWilds.push({ x: ms / 2, y: ms / 2, r: 40, h: 40 });
 
   // Extra rocks scattered around altar area
   for (let i = 0; i < 80; i++) {
@@ -208,7 +210,7 @@ export function initMap() {
       rock.rotation.y = Math.random() * Math.PI;
       s.wildsGroup.add(rock);
     }
-    s.obstaclesWilds.push({ x: rx, y: ry, r: rr * 0.8 });
+    s.obstaclesWilds.push({ x: rx, y: ry, r: rr * 0.8, h: rr });
   }
 
   // Forest / mountain clusters
@@ -260,7 +262,7 @@ export function initMap() {
             rock.rotation.y = Math.random() * Math.PI;
             s.wildsGroup.add(rock);
           }
-          s.obstaclesWilds.push({ x, y, r: r * 0.8 });
+          s.obstaclesWilds.push({ x, y, r: r * 0.8, h: r });
         } else {
           const log = new THREE.Mesh(
             new THREE.CylinderGeometry(8, 8, 50, 8),
@@ -270,7 +272,7 @@ export function initMap() {
           log.rotation.y = Math.random() * Math.PI;
           log.position.set(x, 7 + getTerrainHeight(x, y), y);
           s.wildsGroup.add(log);
-          s.obstaclesWilds.push({ x, y, r: 25 });
+          s.obstaclesWilds.push({ x, y, r: 25, h: 16 });
         }
       } else {
         if (rand < 0.75) {
@@ -299,7 +301,7 @@ export function initMap() {
           }
           treeGroup.position.set(x, getTerrainHeight(x, y), y);
           s.wildsGroup.add(treeGroup);
-          s.obstaclesWilds.push({ x, y, r: 12 });
+          s.obstaclesWilds.push({ x, y, r: 12, h: 60 });
         } else {
           const r = 12 + Math.random() * 12;
           let plantMesh;
@@ -315,7 +317,7 @@ export function initMap() {
             plantMesh.position.set(x, r - 2 + getTerrainHeight(x, y), y);
           }
           s.wildsGroup.add(plantMesh);
-          s.obstaclesWilds.push({ x, y, r: r * 0.7 });
+          s.obstaclesWilds.push({ x, y, r: r * 0.7, h: r });
         }
       }
     }
@@ -335,7 +337,7 @@ export function initMap() {
       tent.rotation.y = Math.random() * Math.PI * 2;
       tent.position.set(tx, getTerrainHeight(tx, ty), ty);
       s.wildsGroup.add(tent);
-      s.obstaclesWilds.push({ x: tx, y: ty, r: 25 });
+      s.obstaclesWilds.push({ x: tx, y: ty, r: 25, h: 30 });
     }
   }
 
@@ -352,7 +354,7 @@ export function initMap() {
         rockGroup.rotation.y = Math.random() * Math.PI;
         s.wildsGroup.add(rockGroup);
       }
-      s.obstaclesWilds.push({ x: i, y: z, r: 250 }); // Obstacle diperbesar
+      s.obstaclesWilds.push({ x: i, y: z, r: 250, h: 250 }); // Obstacle diperbesar
     });
     // Left and right edges (x = 0 and x = ms)
     if (i > 0 && i < ms) {
@@ -365,10 +367,13 @@ export function initMap() {
           rockGroup.rotation.y = Math.random() * Math.PI;
           s.wildsGroup.add(rockGroup);
         }
-        s.obstaclesWilds.push({ x: x, y: i, r: 250 });
+        s.obstaclesWilds.push({ x: x, y: i, r: 250, h: 250 });
       });
     }
   }
+
+  // Scatter interactables (chests, barrels, ruins)
+  scatterInteractables(mapSize, s.wildsGroup, s.obstaclesWilds, getTerrainHeight, 'wilds');
 }
 
 // ─── Hometown generation ──────────────────────────────────────────────────────
@@ -460,7 +465,7 @@ export function initHometown() {
   );
   pillar.position.set(hx, 15, hy);
   s.hometownGroup.add(pillar);
-  s.obstaclesHometown.push({ x: hx, y: hy, r: 35 });
+  s.obstaclesHometown.push({ x: hx, y: hy, r: 35, h: 30 });
 
   // Extra decorations: stones, plants, and fence segments around plaza
   function placeDecoration(x, z, r) {
@@ -486,7 +491,7 @@ export function initHometown() {
       rock.position.set(x, (r || 10) + getTerrainHeight(x, z), z);
       s.hometownGroup.add(rock);
     }
-    s.obstaclesHometown.push({ x, y: z, r: (r || 10) * 0.7 });
+    s.obstaclesHometown.push({ x, y: z, r: (r || 10) * 0.7, h: (r || 10) });
   }
   for (let i = 0; i < 25; i++) {
     const angle = Math.random() * Math.PI * 2;
@@ -578,7 +583,7 @@ export function initHometown() {
     hGroup.position.set(hx + p.x, 0, hy + p.z);
     hGroup.rotation.y = p.r;
     s.hometownGroup.add(hGroup);
-    s.obstaclesHometown.push({ x: hx + p.x, y: hy + p.z, r: 45 });
+    s.obstaclesHometown.push({ x: hx + p.x, y: hy + p.z, r: 45, h: 100 });
   });
 
   // Pagar persegi di sekeliling tiap bangunan (2 sisi saja)
@@ -614,7 +619,7 @@ export function initHometown() {
     target.position.set(hx + 160, 0, hy - 300);
     target.rotation.y = Math.PI / 4;
     s.hometownGroup.add(target);
-    s.obstaclesHometown.push({ x: hx + 160, y: hy - 300, r: 15 });
+    s.obstaclesHometown.push({ x: hx + 160, y: hy - 300, r: 15, h: 30 });
   }
 
   // Extra fence segments along plaza perimeter
@@ -633,7 +638,7 @@ export function initHometown() {
       fence.rotation.y = fp.ry;
       fence.position.set(fp.x, 0, fp.z);
       s.hometownGroup.add(fence);
-      s.obstaclesHometown.push({ x: fp.x, y: fp.z, r: 15 });
+      s.obstaclesHometown.push({ x: fp.x, y: fp.z, r: 15, h: 20 });
     }
   }
 
@@ -650,7 +655,7 @@ export function initHometown() {
       eGroup.position.set(eb.x, 0, eb.z);
       eGroup.rotation.y = Math.random() * Math.PI * 2;
       s.hometownGroup.add(eGroup);
-      s.obstaclesHometown.push({ x: eb.x, y: eb.z, r: 40 });
+      s.obstaclesHometown.push({ x: eb.x, y: eb.z, r: 40, h: 100 });
     }
   }
 
@@ -766,7 +771,7 @@ export function initHometown() {
   qbGroup.rotation.y = Math.PI;
   s.hometownGroup.add(qbGroup);
   s.questBoardPos = { x: hx, z: hy + 100 };
-  s.obstaclesHometown.push({ x: hx, y: hy + 100, r: 15 });
+  s.obstaclesHometown.push({ x: hx, y: hy + 100, r: 15, h: 30 });
 
   // Flag posts around plaza
   if (loadedModels.flag) {
@@ -781,7 +786,7 @@ export function initHometown() {
       flag.scale.set(20, 20, 20);
       flag.position.set(fp.x, 0, fp.z);
       s.hometownGroup.add(flag);
-      s.obstaclesHometown.push({ x: fp.x, y: fp.z, r: 8 });
+      s.obstaclesHometown.push({ x: fp.x, y: fp.z, r: 8, h: 30 });
     }
   }
 }
@@ -1090,59 +1095,124 @@ function scaleNPCToHeight(mesh, targetHeight) {
 
 function createPortal(color) {
   const group = new THREE.Group();
+  const baseOffset = -30; // Mengimbangi posisi Y=30 dari map generator agar portal menyentuh tanah
 
-  // Outer solid glowing ring
+  // 1. Cincin Rune Dasar (Di Tanah)
   const ringMat = new THREE.MeshStandardMaterial({
-    color,
-    emissive: color,
-    emissiveIntensity: 0.9,
-    metalness: 0.2,
-    roughness: 0.4,
-    side: THREE.DoubleSide,
+    color: color, emissive: color, emissiveIntensity: 2.0,
+    metalness: 0.8, roughness: 0.2, side: THREE.DoubleSide,
+    transparent: true, opacity: 0.9
   });
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(24, 2.5, 12, 48), ringMat);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(20, 1.5, 8, 32), ringMat);
   ring.rotation.x = -Math.PI / 2;
-  ring.name = 'ring';
+  ring.position.y = baseOffset + 1; 
   group.add(ring);
 
-  // Inner spinning portal disc (semi-transparent swirl surface)
-  const discMat = new THREE.MeshStandardMaterial({
-    color,
-    emissive: color,
-    emissiveIntensity: 0.8,
-    transparent: true,
-    opacity: 0.45,
-    side: THREE.DoubleSide,
+  // 2. Inti Cahaya Bercahaya (Di Tanah)
+  const discMat = new THREE.MeshBasicMaterial({
+    color: 0xffffff, transparent: true, opacity: 0.8,
+    side: THREE.DoubleSide, blending: THREE.AdditiveBlending
   });
-  const disc = new THREE.Mesh(new THREE.CircleGeometry(22, 32), discMat);
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(18, 32), discMat);
   disc.rotation.x = -Math.PI / 2;
-  disc.position.y = 0;
-  disc.name = 'disc';
+  disc.position.y = baseOffset + 1.2;
   group.add(disc);
 
-  // Vertical energy ribbons orbiting the portal
-  const ribbonMat = new THREE.MeshStandardMaterial({
-    color: 0xffffff,
-    emissive: 0xffffff,
-    emissiveIntensity: 0.9,
-    transparent: true,
-    opacity: 0.35,
-    side: THREE.DoubleSide,
+  // 3. Pilar Cahaya Vertikal
+  const beamMat = new THREE.MeshBasicMaterial({
+    color: color, transparent: true, opacity: 0.4,
+    side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false
   });
-  for (let i = 0; i < 3; i++) {
-    const ribbon = new THREE.Mesh(new THREE.TorusGeometry(30 + i * 5, 0.5, 8, 48), ribbonMat);
-    ribbon.rotation.x = Math.PI / 2;
-    ribbon.rotation.y = (Math.PI / 4) * i;
-    ribbon.name = 'ribbon';
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(16, 20, 200, 32, 1, true), beamMat);
+  beam.position.y = baseOffset + 100; // Tengah dari silinder tinggi 200
+  group.add(beam);
+  
+  // 4. Inti Pilar yang Terang
+  const coreMat = new THREE.MeshBasicMaterial({
+    color: 0xffffff, transparent: true, opacity: 0.6,
+    side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false
+  });
+  const core = new THREE.Mesh(new THREE.CylinderGeometry(6, 6, 200, 16, 1, true), coreMat);
+  core.position.y = baseOffset + 100;
+  group.add(core);
+
+  // 5. Cincin Energi Melayang
+  const ribbons = [];
+  for (let i = 0; i < 4; i++) {
+    const ribbonMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff, transparent: true, opacity: 0.8,
+      side: THREE.DoubleSide, blending: THREE.AdditiveBlending
+    });
+    const ribbon = new THREE.Mesh(new THREE.TorusGeometry(22 - i * 1.5, 0.8, 8, 32), ribbonMat);
+    ribbon.rotation.x = -Math.PI / 2;
+    ribbon.userData = { 
+      offsetY: i * 45, 
+      speed: 30 + i * 10,
+      scalePhase: i * Math.PI / 2,
+      baseOffset
+    };
     group.add(ribbon);
+    ribbons.push(ribbon);
   }
 
-  // Point light so the portal glows the surrounding ground
-  const light = new THREE.PointLight(color, 2.5, 300, 2);
-  light.position.y = 5;
+  // 6. Pencahayaan Portal
+  const light = new THREE.PointLight(color, 4.0, 300, 1.5);
+  light.position.y = baseOffset + 20;
   group.add(light);
 
-  return group;
+  const portal = {
+    group,
+    ring,
+    disc,
+    beam,
+    ribbons,
+    color,
+    get position() { return group.position; },
+  };
+  return portal;
+}
+
+// Update all portal animations each frame
+export function updatePortalAnimations() {
+  const s = state;
+  const t = performance.now() * 0.001;
+
+  const portals = [s.hometownPortal, s.wildsPortal, s.desertPortalWilds, s.desertPortalWilds2];
+  for (const p of portals) {
+    if (!p) continue;
+
+    // Pulse beam opacity & scale
+    if (p.beam) {
+      const pulse = 0.3 + Math.sin(t * 4) * 0.1;
+      p.beam.material.opacity = pulse;
+      p.beam.scale.set(1 + Math.sin(t * 6) * 0.05, 1, 1 + Math.cos(t * 6) * 0.05);
+    }
+    
+    // Rotate base ring
+    if (p.ring) {
+      p.ring.rotation.z = t * 1.5;
+    }
+    
+    // Animate the floating energy rings (ribbons)
+    if (p.ribbons) {
+      for (let i = 0; i < p.ribbons.length; i++) {
+        const r = p.ribbons[i];
+        // Move upward from baseOffset to baseOffset + 200 and loop
+        const heightPhase = (r.userData.offsetY + t * r.userData.speed) % 200;
+        r.position.y = r.userData.baseOffset + heightPhase;
+        
+        // Spin ring
+        r.rotation.z = -(t * 3.0 + i);
+        
+        // Pulse scale
+        const sScale = 1 + Math.sin(t * 5 + r.userData.scalePhase) * 0.15;
+        r.scale.set(sScale, sScale, sScale);
+        
+        // Fade out as it reaches the top
+        r.material.opacity = 1.0 - (heightPhase / 200);
+      }
+    }
+  }
 }
 
 export function initNPCs() {
@@ -1152,8 +1222,8 @@ export function initNPCs() {
 
   // Portal to Wilds
   s.hometownPortal = createPortal(0x00ffff);
-  s.hometownPortal.position.set(hx, 30, hy + 400);
-  s.hometownGroup.add(s.hometownPortal);
+  s.hometownPortal.group.position.set(hx, 30, hy + 400);
+  s.hometownGroup.add(s.hometownPortal.group);
 
   // Shop NPC
   if (loadedModels.char_b) {
@@ -1244,14 +1314,14 @@ export function initWildsNPCs() {
   const s = state;
   // Wilds return portal (near altar)
   s.wildsPortal = createPortal(0xff00ff);
-  s.wildsPortal.position.set(mapSize / 2, 30, mapSize / 2 + 60);
-  s.wildsGroup.add(s.wildsPortal);
+  s.wildsPortal.group.position.set(mapSize / 2, 30, mapSize / 2 + 60);
+  s.wildsGroup.add(s.wildsPortal.group);
 
   // Portal to Scorched Dunes (wilds2) — placed near altar, always created;
   // level gate is enforced in ui.js
   s.desertPortalWilds = createPortal(0xff8800);
-  s.desertPortalWilds.position.set(mapSize / 2, 30, mapSize / 2 + 400);
-  s.wildsGroup.add(s.desertPortalWilds);
+  s.desertPortalWilds.group.position.set(mapSize / 2, 30, mapSize / 2 + 400);
+  s.wildsGroup.add(s.desertPortalWilds.group);
 
   // BOSS (The Golden Golem)
   s.bossActive = true;
@@ -1338,15 +1408,14 @@ export function initWildsNPCs() {
 export function getTerrainHeightWilds2(x, y) {
   const cx = mapSize / 2, cz = mapSize / 2;
   const distFromCenter = Math.hypot(x - cx, y - cz);
-  // Pyramid flat zone
+  // Pyramid flat zone: ground stays flat at y=0 so the pyramid base touches it
   if (distFromCenter <= 350) return 0;
   const distanceFactor = Math.min(1, (distFromCenter - 350) / 300);
   // Smooth dunes (different frequency from the Wilds so it looks distinct)
   const wave = Math.sin(x * 0.0018) * Math.cos(y * 0.0025) * 22;
   const noise = Math.sin(x * 0.0042 + 1.3) * Math.sin(y * 0.0037) * 12;
-  // Central pyramid plateau rises
-  const plateau = Math.max(0, 40 - distFromCenter * 0.12);
-  return (wave + noise) * distanceFactor + plateau;
+  // Rolling dunes fade out toward the pyramid base (smooth blend)
+  return (wave + noise) * distanceFactor;
 }
 
 /** Wilds2 spawn finder (same pattern as spawnAtFreePos but uses obstaclesWilds2). */
@@ -1409,22 +1478,50 @@ export function initWilds2() {
   floor.receiveShadow = true;
   s.wilds2Group.add(floor);
 
-  // ── Central ancient pyramid (3 stacked tiers, sandstone + gold cap) ──
+  // ── Central ancient pyramid: 11 stepped tiers (step-pyramid), sandstone + gold cap ──
   const pyramidGroup = new THREE.Group();
-  const sandstoneMat = new THREE.MeshLambertMaterial({ color: 0xc2a36b });
-  const goldMat = new THREE.MeshLambertMaterial({ color: 0xffd700, emissive: 0x886600, emissiveIntensity: 0.5 });
-
-  const tier1 = new THREE.Mesh(new THREE.CylinderGeometry(40, 200, 80, 4), sandstoneMat);
-  tier1.position.y = 40;
-  const tier2 = new THREE.Mesh(new THREE.CylinderGeometry(40, 130, 60, 4), sandstoneMat);
-  tier2.position.y = 105;
-  const tier3 = new THREE.Mesh(new THREE.ConeGeometry(40, 50, 4), goldMat);
-  tier3.position.y = 160;
-  pyramidGroup.add(tier1, tier2, tier3);
+  // Procedural sandstone texture so each block reads as cut stone, not a flat color
+  const stoneTex = (() => {
+    const c = document.createElement('canvas');
+    c.width = c.height = 256;
+    const g = c.getContext('2d');
+    g.fillStyle = '#c2a36b';
+    g.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 3500; i++) {
+      g.fillStyle = Math.random() > 0.5 ? '#d4b57a' : '#a58a5c';
+      g.globalAlpha = Math.random() * 0.5 + 0.2;
+      g.fillRect(Math.random() * 256, Math.random() * 256, 2 + Math.random() * 4, 2 + Math.random() * 4);
+    }
+    // subtle block seams
+    g.globalAlpha = 0.25; g.strokeStyle = '#8a7150';
+    for (let yy = 0; yy < 256; yy += 16) { g.beginPath(); g.moveTo(0, yy); g.lineTo(256, yy); g.stroke(); }
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.repeat.set(3, 3);
+    return t;
+  })();
+  const sandstoneMat = new THREE.MeshLambertMaterial({ color: 0xd8c08a, map: stoneTex, flatShading: true });
+  const goldMat = new THREE.MeshLambertMaterial({ color: 0xffd700, emissive: 0x886600, emissiveIntensity: 0.6 });
+  const TOWERS = 11;
+  const BASE = 380;
+  const STEP = 28;
+  for (let i = 0; i < TOWERS; i++) {
+    const h = STEP + Math.max(0, (BASE - i * STEP - STEP)) * 0.06; // slight overhang at bottom
+    const geo = new THREE.CylinderGeometry(Math.max(1, BASE - (i + 1) * STEP), BASE - i * STEP, h, 4, 1, false);
+    const tier = new THREE.Mesh(geo, i === TOWERS - 1 ? goldMat : sandstoneMat);
+    tier.position.y = 14 + i * STEP + h / 2;
+    tier.castShadow = tier.receiveShadow = true;
+    pyramidGroup.add(tier);
+  }
+  // Central cap: small cone on top of last tier (like the original but smaller)
+  const cap = new THREE.Mesh(new THREE.ConeGeometry(15, 22, 4), goldMat);
+  cap.position.y = 14 + TOWERS * STEP + 11;
+  cap.castShadow = cap.receiveShadow = true;
+  pyramidGroup.add(cap);
   pyramidGroup.rotation.y = Math.PI / 4; // Point a face toward map center
   pyramidGroup.position.set(ms / 2, 0, ms / 2);
   s.wilds2Group.add(pyramidGroup);
-  s.obstaclesWilds2.push({ x: ms / 2, y: ms / 2, r: 160 });
+  s.obstaclesWilds2.push({ x: ms / 2, y: ms / 2, r: 160, h: 150 });
 
   // ── Scattered rocks / sand boulders around the pyramid ──
   for (let i = 0; i < 80; i++) {
@@ -1454,7 +1551,7 @@ export function initWilds2() {
       rock.rotation.y = Math.random() * Math.PI;
       s.wilds2Group.add(rock);
     }
-    s.obstaclesWilds2.push({ x: rx, y: ry, r: rr * 0.8 });
+    s.obstaclesWilds2.push({ x: rx, y: ry, r: rr * 0.8, h: rr });
   }
 
   // ── Desert rock clusters (reuse rocks models + sand-colored obsidian) ──
@@ -1501,7 +1598,7 @@ export function initWilds2() {
           rock.rotation.y = Math.random() * Math.PI;
           s.wilds2Group.add(rock);
         }
-        s.obstaclesWilds2.push({ x, y, r: r * 0.8 });
+        s.obstaclesWilds2.push({ x, y, r: r * 0.8, h: r });
       } else {
         // Cactus-style / dead tree silhouettes (thin trunks)
         const trunkH = 30 + Math.random() * 30;
@@ -1512,7 +1609,7 @@ export function initWilds2() {
         trunk.position.set(x, trunkH / 2 + getTerrainHeightWilds2(x, y), y);
         trunk.rotation.z = (Math.random() - 0.5) * 0.2;
         s.wilds2Group.add(trunk);
-        s.obstaclesWilds2.push({ x, y, r: 10 });
+        s.obstaclesWilds2.push({ x, y, r: 10, h: 50 });
       }
     }
   }
@@ -1532,7 +1629,7 @@ export function initWilds2() {
     pool.rotation.x = -Math.PI / 2;
     pool.position.set(qx, 1 + getTerrainHeightWilds2(qx, qy), qy);
     s.wilds2Group.add(pool);
-    s.obstaclesWilds2.push({ x: qx, y: qy, r: 80 });
+    s.obstaclesWilds2.push({ x: qx, y: qy, r: 80, h: 5 });
   }
 
   // ── Border cliffs (same pattern as Wilds) ──
@@ -1546,7 +1643,7 @@ export function initWilds2() {
         rockGroup.rotation.y = Math.random() * Math.PI;
         s.wilds2Group.add(rockGroup);
       }
-      s.obstaclesWilds2.push({ x: i, y: z, r: 250 });
+      s.obstaclesWilds2.push({ x: i, y: z, r: 250, h: 250 });
     });
     if (i > 0 && i < ms) {
       [0, ms].forEach(x => {
@@ -1557,13 +1654,16 @@ export function initWilds2() {
           rockGroup.rotation.y = Math.random() * Math.PI;
           s.wilds2Group.add(rockGroup);
         }
-        s.obstaclesWilds2.push({ x: x, y: i, r: 250 });
+        s.obstaclesWilds2.push({ x: x, y: i, r: 250, h: 250 });
       });
     }
   }
 
   // ── Portal back to The Wilds (orange glow portal, near pyramid) ──
   s.desertPortalWilds2 = createPortal(0xff8800);
-  s.desertPortalWilds2.position.set(ms / 2 + 600, 30, ms / 2);
-  s.wilds2Group.add(s.desertPortalWilds2);
+  s.desertPortalWilds2.group.position.set(ms / 2 + 600, 30, ms / 2);
+  s.wilds2Group.add(s.desertPortalWilds2.group);
+
+  // Scatter interactables (chests, barrels, ruins)
+  scatterInteractables(mapSize, s.wilds2Group, s.obstaclesWilds2, getTerrainHeightWilds2, 'wilds2');
 }
