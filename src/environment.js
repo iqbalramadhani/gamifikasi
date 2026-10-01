@@ -211,7 +211,7 @@ export function teleportTo(sceneName) {
     if (s.mainFloor) s.mainFloor.visible = false; // desert: hide grass floor
 
     s.player.x = Math.floor(mapSize / 2);
-    s.player.y = Math.floor(mapSize / 2) + 250;
+    s.player.y = Math.floor(mapSize / 2) + 800; // Pindahkan jauh ke depan piramida agar tidak tersangkut
 
     // Clear existing enemies
     s.enemies.forEach(e => {

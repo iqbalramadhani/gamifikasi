@@ -91,6 +91,13 @@ export function loadGame() {
       }
 
       s.player.hp = d.hp ?? s.player.hp;
+      if (s.player.hp <= 0) {
+        // Jika save game tersimpan saat mati (HP 0), pulihkan dan kirim ke kota
+        s.player.hp = s.player.maxHp || 100;
+        s.currentScene = 'hometown';
+        s.player.x = 500;
+        s.player.y = 500;
+      }
       s.player.maxHp = d.maxHp ?? s.player.maxHp;
       s.player.attackDamage = d.attackDamage ?? s.player.attackDamage;
       s.player.level = d.level ?? s.player.level;
@@ -151,9 +158,10 @@ export function loadGame() {
       if (s.currentScene === 'wilds2') {
         const dx = s.player.x - 10000;
         const dy = s.player.y - 10000;
-        if (Math.hypot(dx, dy) < 170) {
+        // Pengecekan kolisi piramida sudah 360, jadi gunakan 400 sebagai jarak aman
+        if (Math.hypot(dx, dy) < 400) {
           s.player.x = 10000;
-          s.player.y = 10250;
+          s.player.y = 10800; // Spawn aman jauh di depan piramida
         }
       }
 

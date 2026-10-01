@@ -174,16 +174,50 @@ export function spawnBoss() {
   if (s.bossActive) return;
   s.bossActive = true;
   playSound('boss_spawn');
-  document.getElementById('message').textContent =
-    '⚠️ THE GOLDEN GOLEM TELAH BANGKIT! Kalahkan dia untuk menang!';
-
-  const bGeo = new THREE.BoxGeometry(60, 60, 60);
-  const bMat = new THREE.MeshLambertMaterial({ color: 0xffd700 });
-  s.bossMesh = new THREE.Mesh(bGeo, bMat);
 
   s.bossX = mapSize / 2;
-  s.bossY = mapSize / 2;
-  s.bossMesh.position.set(s.bossX, 30, s.bossY);
+  
+  if (s.currentScene === 'wilds2') {
+    s.bossY = (mapSize / 2) + 1200; // Spawn sangat jauh di depan piramida agar tidak tumpang tindih visual
+    document.getElementById('message').textContent =
+      '⚠️ ARENA CHAMPION TELAH BANGKIT! Kalahkan dia untuk menang!';
+    
+    if (loadedModels.arena_soldier) {
+      const bModel = SkeletonUtils.clone(loadedModels.arena_soldier);
+      // Bos Arena yang sangat besar
+      bModel.scale.set(120, 120, 120);
+      
+      s.bossMesh = new THREE.Group();
+      s.bossMesh.add(bModel);
+      
+      // Tambahkan tombak ke grup bos utama agar skalanya tidak bertabrakan
+      if (loadedModels.arena_weapon_spear) {
+        const spear = SkeletonUtils.clone(loadedModels.arena_weapon_spear);
+        spear.scale.set(150, 150, 150); // Skala absolut
+        spear.position.set(50, 50, 40); // Geser ke kanan (X) dan atas (Y)
+        spear.rotation.x = Math.PI / 2; // Arahkan ke depan
+        spear.rotation.y = -Math.PI / 8;
+        s.bossMesh.add(spear);
+      }
+      
+      s.bossMesh.position.set(s.bossX, -5, s.bossY);
+    } else {
+      const bGeo = new THREE.BoxGeometry(60, 60, 60);
+      const bMat = new THREE.MeshLambertMaterial({ color: 0xcccccc });
+      s.bossMesh = new THREE.Mesh(bGeo, bMat);
+      s.bossMesh.position.set(s.bossX, 30, s.bossY);
+    }
+  } else {
+    s.bossY = mapSize / 2; // Default untuk Golden Golem
+    document.getElementById('message').textContent =
+      '⚠️ THE GOLDEN GOLEM TELAH BANGKIT! Kalahkan dia untuk menang!';
+      
+    const bGeo = new THREE.BoxGeometry(60, 60, 60);
+    const bMat = new THREE.MeshLambertMaterial({ color: 0xffd700 });
+    s.bossMesh = new THREE.Mesh(bGeo, bMat);
+    s.bossMesh.position.set(s.bossX, 30, s.bossY);
+  }
+
   s.scene.add(s.bossMesh);
 
   s.bossHpGroup = new THREE.Group();

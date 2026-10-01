@@ -9,7 +9,7 @@ import * as THREE from 'three';
 import { state } from './state.js';
 import { loadAllModels, loadedModels } from './model-loader.js';
 import { initSetup, initMap, initHometown, initEntities, initNPCs, initWildsNPCs, initWilds2, getTerrainHeight, getTerrainHeightWilds2 } from './scenes.js';
-import { spawnBoss, spawnParticles, checkItems } from './helpers.js';
+import { spawnBoss, spawnParticles, checkItems, blocked } from './helpers.js';
 import { spawnEnemy, spawnEnemy2, usePotion } from './combat.js';
 import {
   move, attack, updateProjectiles, updateEnemies, updateBoss,
@@ -236,6 +236,10 @@ function gameLoop(timestamp) {
         state.player.heightVelocity = 0;
       }
     }
+    // Anti-stuck: Jika pemain terjebak dalam obstacle (misal load dari save lama), dorong perlahan
+    if (blocked(state.player.x, state.player.y, state.player.r)) {
+      state.player.y += 10 * dt;
+    }
 
     move(dt);
     if (state.keys[' ']) attack();
@@ -253,7 +257,16 @@ function gameLoop(timestamp) {
 
     updateProjectiles(dt);
     updateEnemies(dt);
-    if (state.bossActive) updateBoss(dt);
+    if (state.bossActive) {
+      updateBoss(dt);
+    } else {
+      // Auto-spawn boss jika pemain mendekati lokasinya
+      if (state.currentScene === 'wilds') {
+        if (Math.hypot(state.player.x - 19000, state.player.y - 19000) < 800) spawnBoss();
+      } else if (state.currentScene === 'wilds2') {
+        if (Math.hypot(state.player.x - 10000, state.player.y - 10000) < 1200) spawnBoss();
+      }
+    }
 
     // Player status effects
     if (state.player.statusEffect && state.player.statusEffect.duration > 0) {

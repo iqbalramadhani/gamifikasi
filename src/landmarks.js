@@ -205,6 +205,7 @@ export function scatterInteractables(mapSize, group, obstaclesArr, heightFunc, s
   for (let i = 0; i < 30; i++) {
     const x = center + (Math.random() - 0.5) * spawnRadius;
     const y = center + (Math.random() - 0.5) * spawnRadius;
+    if (Math.hypot(x - center, y - center) < 1500) continue;
     if (obstaclesArr.some(o => Math.hypot(o.x - x, o.y - y) < o.r + 20)) continue;
     spawnTreasureChest(x, y, group, obstaclesArr, heightFunc, sceneType);
   }
@@ -212,6 +213,7 @@ export function scatterInteractables(mapSize, group, obstaclesArr, heightFunc, s
   for (let i = 0; i < 20; i++) {
     const cx = center + (Math.random() - 0.5) * spawnRadius;
     const cy = center + (Math.random() - 0.5) * spawnRadius;
+    if (Math.hypot(cx - center, cy - center) < 1500) continue;
     if (obstaclesArr.some(o => Math.hypot(o.x - cx, o.y - cy) < o.r + 50)) continue;
     
     const count = 1 + Math.floor(Math.random() * 3);
@@ -225,6 +227,7 @@ export function scatterInteractables(mapSize, group, obstaclesArr, heightFunc, s
   for (let i = 0; i < 8; i++) {
     const cx = center + (Math.random() - 0.5) * spawnRadius;
     const cy = center + (Math.random() - 0.5) * spawnRadius;
+    if (Math.hypot(cx - center, cy - center) < 1500) continue;
     if (obstaclesArr.some(o => Math.hypot(o.x - cx, o.y - cy) < o.r + 100)) continue;
     spawnMysticRuin(cx, cy, group, obstaclesArr, heightFunc, sceneType);
   }
@@ -234,6 +237,7 @@ export function scatterInteractables(mapSize, group, obstaclesArr, heightFunc, s
     for (let i = 0; i < 15; i++) { // Jumlah diperbanyak menjadi 15
       const cx = center + (Math.random() - 0.5) * spawnRadius;
       const cy = center + (Math.random() - 0.5) * spawnRadius;
+      if (Math.hypot(cx - center, cy - center) < 1500) continue;
       if (obstaclesArr.some(o => Math.hypot(o.x - cx, o.y - cy) < o.r + 200)) continue;
       spawnArenaRuin(cx, cy, group, obstaclesArr, heightFunc, sceneType);
     }

@@ -1430,7 +1430,7 @@ export function spawnAtFreePosWilds2() {
     x = center + (Math.random() - 0.5) * 10000;
     y = center + (Math.random() - 0.5) * 10000;
     if (x < 50 || x > mapSize - 50 || y < 50 || y > mapSize - 50) continue;
-    if (Math.hypot(x - center, y - center) < 500) continue;
+    if (Math.hypot(x - center, y - center) < 1000) continue; // Jangan spawn di atas/terlalu dekat piramida
     if (Math.hypot(x - s.player.x, y - s.player.y) < 300) continue; // Jangan tepat di atas player
     if (s.obstaclesWilds2.some(o => Math.hypot(o.x - x, o.y - y) < o.r + 30)) continue;
     valid = true;
@@ -1541,47 +1541,16 @@ export function initWilds2() {
   pyramidGroup.rotation.y = Math.PI / 4; // Point a face toward map center
   pyramidGroup.position.set(ms / 2, 0, ms / 2);
   s.wilds2Group.add(pyramidGroup);
-  s.obstaclesWilds2.push({ x: ms / 2, y: ms / 2, r: 160, h: 150 });
+  s.obstaclesWilds2.push({ x: ms / 2, y: ms / 2, r: 360, h: 200 }); // Collision radius diubah dari 160 ke 360 agar sesuai dengan ukuran dasar piramida
 
-  // ── Scattered rocks / sand boulders around the pyramid ──
-  // Kenney Mini Arena props: sand blocks, brick piles, trophies, banners
-  const RING_PROPS = ['arena_block', 'arena_bricks', 'arena_trophy', 'arena_banner'];
-  for (let i = 0; i < 90; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    const dist = 250 + Math.random() * 400;
-    const rx = ms / 2 + Math.cos(angle) * dist;
-    const ry = ms / 2 + Math.sin(angle) * dist;
-    if (rx < 50 || rx > ms - 50 || ry < 50 || ry > ms - 50) continue;
 
-    const key = RING_PROPS[Math.floor(Math.random() * RING_PROPS.length)];
-    const src = loadedModels[key];
-    if (src) {
-      const sc = 35 + Math.random() * 20; // Diperbesar (sebelumnya 15-25)
-      const m = SkeletonUtils.clone(src);
-      m.scale.set(sc, sc, sc);
-      m.position.set(rx, getTerrainHeightWilds2(rx, ry), ry);
-      m.rotation.y = Math.random() * Math.PI;
-      s.wilds2Group.add(m);
-    } else {
-      const rr = 20 + Math.random() * 25; // Diperbesar
-      const rock = new THREE.Mesh(
-        new THREE.DodecahedronGeometry(rr, 0),
-        new THREE.MeshLambertMaterial({ color: 0xb89a6a })
-      );
-      rock.position.set(rx, rr + getTerrainHeightWilds2(rx, ry), ry);
-      rock.rotation.y = Math.random() * Math.PI;
-      s.wilds2Group.add(rock);
-    }
-    const rr = 25; // Collision radius diperbesar
-    s.obstaclesWilds2.push({ x: rx, y: ry, r: rr * 0.8, h: rr });
-  }
 
   // ── Desert rock clusters (reuse rocks models + sand-colored obsidian) ──
   const numClusters = 150;
   for (let c = 0; c < numClusters; c++) {
     const cx = 200 + Math.random() * (ms - 400);
     const cy = 200 + Math.random() * (ms - 400);
-    if (Math.hypot(cx - ms / 2, cy - ms / 2) < 500) continue;
+    if (Math.hypot(cx - ms / 2, cy - ms / 2) < 1500) continue; // Area piramida dibersihkan
 
     const isRockCluster = Math.random() < 0.4;
     const clusterSize = 10 + Math.floor(Math.random() * 20);
@@ -1592,7 +1561,7 @@ export function initWilds2() {
       const x = cx + Math.cos(rAngle) * rDist;
       const y = cy + Math.sin(rAngle) * rDist;
       if (x < 50 || x > ms - 50 || y < 50 || y > ms - 50) continue;
-      if (Math.hypot(x - ms / 2, y - ms / 2) < 450) continue;
+      if (Math.hypot(x - ms / 2, y - ms / 2) < 1500) continue;
       if (s.obstaclesWilds2.some(o => Math.hypot(o.x - x, o.y - y) < o.r + 15)) continue;
 
       if (isRockCluster) {
@@ -1660,7 +1629,7 @@ export function initWilds2() {
   for (let q = 0; q < numQuicksand; q++) {
     const qx = 300 + Math.random() * (ms - 600);
     const qy = 300 + Math.random() * (ms - 600);
-    if (Math.hypot(qx - ms / 2, qy - ms / 2) < 500) continue;
+    if (Math.hypot(qx - ms / 2, qy - ms / 2) < 1500) continue;
     if (s.obstaclesWilds2.some(o => Math.hypot(o.x - qx, o.y - qy) < o.r + 80)) continue;
 
     const pool = new THREE.Mesh(
@@ -1793,7 +1762,7 @@ export function initWilds2() {
   // pointing at whichever boss the player faces — combat.js's updateBoss
   // handles both spawn points via s.bossSpawnX/s.bossSpawnY.
   const bossCX = ms / 2;
-  const bossCY = ms / 2 + 150;
+  const bossCY = ms / 2 + 1200;
 
   if (!s.bossActive) {
     s.bossActive = true;
@@ -1813,16 +1782,25 @@ export function initWilds2() {
 
   if (loadedModels.arena_soldier) {
     const bossClone = SkeletonUtils.clone(loadedModels.arena_soldier);
-    bossClone.scale.set(60, 60, 60);
+    bossClone.scale.set(120, 120, 120);
     bossClone.position.y = 0; // feet on terrain (model bottom is at y=0)
     s.bossMesh = new THREE.Group();
     s.bossMesh.add(bossClone);
+
+    if (loadedModels.arena_weapon_spear) {
+      const spear = SkeletonUtils.clone(loadedModels.arena_weapon_spear);
+      spear.scale.set(150, 150, 150); 
+      spear.position.set(50, 50, 40);
+      spear.rotation.x = Math.PI / 2; 
+      spear.rotation.y = -Math.PI / 8;
+      s.bossMesh.add(spear);
+    }
   } else {
     const bGeo = new THREE.BoxGeometry(60, 60, 60);
     const bMat = new THREE.MeshLambertMaterial({ color: 0xc25030 });
     s.bossMesh = new THREE.Mesh(bGeo, bMat);
   }
-  s.bossMesh.position.set(bossCX, 30 + getTerrainHeightWilds2(bossCX, bossCY), bossCY);
+  s.bossMesh.position.set(bossCX, -5 + getTerrainHeightWilds2(bossCX, bossCY), bossCY);
   s.wilds2Group.add(s.bossMesh);
 
   s.bossHpGroup = new THREE.Group();

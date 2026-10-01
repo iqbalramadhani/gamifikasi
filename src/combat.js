@@ -119,7 +119,11 @@ export function spawnEnemy2(ex, ey, scaleFactor = 1.0, isBossChild = false) {
   let mesh, eY;
   if (loadedModels[charKey]) {
     const gltfEnemy = SkeletonUtils.clone(loadedModels[charKey]);
-    gltfEnemy.scale.set(7 * scaleFactor, 7 * scaleFactor, 7 * scaleFactor);
+    if (charKey === 'arena_soldier') {
+      gltfEnemy.scale.set(25 * scaleFactor, 25 * scaleFactor, 25 * scaleFactor);
+    } else {
+      gltfEnemy.scale.set(7 * scaleFactor, 7 * scaleFactor, 7 * scaleFactor);
+    }
     gltfEnemy.position.y = -12;
     mesh = new THREE.Group();
     mesh.add(gltfEnemy);
@@ -841,7 +845,11 @@ export function updateEnemies(dt) {
       if (blocked(nx, ny, e.r)) {
         if (!blocked(nx, e.y, e.r)) e.x = nx;
         else if (!blocked(e.x, ny, e.r)) e.y = ny;
-        else if (distToPlayer >= 350) { e.dx *= -1; e.dy *= -1; }
+        else {
+          // Kalau tersangkut total, beri sedikit geseran acak agar bisa lepas dari sudut mati tembok
+          e.x += (Math.random() - 0.5) * 10;
+          e.y += (Math.random() - 0.5) * 10;
+        }
       } else {
         e.x = nx; e.y = ny;
       }
@@ -973,54 +981,103 @@ export function updateBoss(dt) {
       s.bossHp = s.bossMaxHp; // Reset health to drop aggro
     } else {
       const returnAngle = Math.atan2(spawnY - s.bossY, spawnX - s.bossX);
-      s.bossX += Math.cos(returnAngle) * 3 * dt;
-      s.bossY += Math.sin(returnAngle) * 3 * dt;
+      const nx = s.bossX + Math.cos(returnAngle) * 3 * dt;
+      const ny = s.bossY + Math.sin(returnAngle) * 3 * dt;
+      const bossRadius = 80;
+      if (!blocked(nx, ny, bossRadius)) {
+        s.bossX = nx; s.bossY = ny;
+      } else {
+        if (!blocked(nx, s.bossY, bossRadius)) s.bossX = nx;
+        else if (!blocked(s.bossX, ny, bossRadius)) s.bossY = ny;
+      }
       s.bossMesh.rotation.y = -returnAngle + Math.PI / 2;
     }
   } else if (isAggro) {
+    const isArenaBoss = s.currentScene === 'wilds2';
+    const moveSpeed = isArenaBoss ? 2.8 : 1.5;
+    
     if (dist > 80) {
-      s.bossX += Math.cos(angle) * 1.5 * dt;
-      s.bossY += Math.sin(angle) * 1.5 * dt;
+      const nx = s.bossX + Math.cos(angle) * moveSpeed * dt;
+      const ny = s.bossY + Math.sin(angle) * moveSpeed * dt;
+      const bossRadius = 80;
+      if (!blocked(nx, ny, bossRadius)) {
+        s.bossX = nx; s.bossY = ny;
+      } else {
+        if (!blocked(nx, s.bossY, bossRadius)) s.bossX = nx;
+        else if (!blocked(s.bossX, ny, bossRadius)) s.bossY = ny;
+      }
       s.bossMesh.rotation.y = -angle + Math.PI / 2;
     }
 
-    const attackCooldown = s.bossPhase === 2 ? 100 : 150;
-    const projectileChance = s.bossPhase === 2 ? 0.10 : 0.05;
-    const groundPoundDmg = s.bossPhase === 2 ? 25 : 20;
+    const attackCooldown = s.bossPhase === 2 ? 80 : 120;
     s.bossAttackTimer = (s.bossAttackTimer || 0) + dt;
-    if (s.bossAttackTimer > attackCooldown && dist < 120) {
-       s.bossAttackTimer = 0;
-       s.cameraShake = Math.max(s.cameraShake || 0, s.bossPhase === 2 ? 25 : 20);
-       spawnParticles(s.bossX, s.bossY, 0xffd700, 40, 'death');
-       playSound('hit');
-       if (dist < 100) {
+
+    if (isArenaBoss) {
+      // Arena Champion: Melee Spear Attack
+      if (s.bossAttackTimer > attackCooldown && dist < 160) {
+        s.bossAttackTimer = 0;
+        s.cameraShake = Math.max(s.cameraShake || 0, s.bossPhase === 2 ? 25 : 15);
+        playSound('hit');
+        
+        // Animasi serangan tusukan (simulasi dengan rotasi sesaat)
+        s.bossMesh.rotation.x = Math.PI / 8;
+        setTimeout(() => { if (s.bossMesh) s.bossMesh.rotation.x = 0; }, 200);
+
+        if (dist < 120) {
           if (!s.player.defending) {
-             s.player.hp -= groundPoundDmg;
-             spawnDamageText(s.player.x, 30, s.player.y, `-${groundPoundDmg}`, '#ff00ff');
-             const knockAngle = Math.atan2(s.player.y - s.bossY, s.player.x - s.bossX);
-             s.player.x += Math.cos(knockAngle) * 40;
-             s.player.y += Math.sin(knockAngle) * 40;
-             if (s.player.hp <= 0) triggerGameOver('Kamu dihancurkan hentakan The Golden Golem!');
+            const spearDmg = s.bossPhase === 2 ? 35 : 25;
+            s.player.hp -= spearDmg;
+            spawnDamageText(s.player.x, 30, s.player.y, `-${spearDmg}`, '#ff00ff');
+            const knockAngle = Math.atan2(s.player.y - s.bossY, s.player.x - s.bossX);
+            s.player.x += Math.cos(knockAngle) * 50;
+            s.player.y += Math.sin(knockAngle) * 50;
+            if (s.player.hp <= 0) triggerGameOver(`Kamu tertusuk tombak Arena Champion!`);
           } else {
-             const knockAngle = Math.atan2(s.player.y - s.bossY, s.player.x - s.bossX);
-             s.player.x += Math.cos(knockAngle) * 20;
-             s.player.y += Math.sin(knockAngle) * 20;
+            const knockAngle = Math.atan2(s.player.y - s.bossY, s.player.x - s.bossX);
+            s.player.x += Math.cos(knockAngle) * 20;
+            s.player.y += Math.sin(knockAngle) * 20;
           }
-       }
+        }
+      }
+    } else {
+      // Golden Golem: Ground Pound & Projectiles
+      const projectileChance = s.bossPhase === 2 ? 0.10 : 0.05;
+      const groundPoundDmg = s.bossPhase === 2 ? 25 : 20;
+      
+      if (s.bossAttackTimer > attackCooldown && dist < 120) {
+         s.bossAttackTimer = 0;
+         s.cameraShake = Math.max(s.cameraShake || 0, s.bossPhase === 2 ? 25 : 20);
+         spawnParticles(s.bossX, s.bossY, 0xffd700, 40, 'death');
+         playSound('hit');
+         if (dist < 100) {
+            if (!s.player.defending) {
+               s.player.hp -= groundPoundDmg;
+               spawnDamageText(s.player.x, 30, s.player.y, `-${groundPoundDmg}`, '#ff00ff');
+               const knockAngle = Math.atan2(s.player.y - s.bossY, s.player.x - s.bossX);
+               s.player.x += Math.cos(knockAngle) * 40;
+               s.player.y += Math.sin(knockAngle) * 40;
+               if (s.player.hp <= 0) triggerGameOver(`Kamu dihancurkan hentakan The Golden Golem!`);
+            } else {
+               const knockAngle = Math.atan2(s.player.y - s.bossY, s.player.x - s.bossX);
+               s.player.x += Math.cos(knockAngle) * 20;
+               s.player.y += Math.sin(knockAngle) * 20;
+            }
+         }
       } else if (Math.random() < projectileChance) {
-      const m = new THREE.Mesh(
-        new THREE.SphereGeometry(10, 8, 8),
-        new THREE.MeshBasicMaterial({ color: 0xff0000 })
-      );
-      m.position.set(s.bossX, 30, s.bossY);
-      s.scene.add(m);
-      const pAngle = angle + (Math.random() - 0.5);
-      s.projectiles.push({
-        x: s.bossX, y: s.bossY,
-        dx: Math.cos(pAngle) * 8, dy: Math.sin(pAngle) * 8,
-        mesh: m, isEnemy: true,
-      });
-      playSound('shoot');
+        const m = new THREE.Mesh(
+          new THREE.SphereGeometry(10, 8, 8),
+          new THREE.MeshBasicMaterial({ color: 0xff0000 })
+        );
+        m.position.set(s.bossX, 30, s.bossY);
+        s.scene.add(m);
+        const pAngle = angle + (Math.random() - 0.5);
+        s.projectiles.push({
+          x: s.bossX, y: s.bossY,
+          dx: Math.cos(pAngle) * 8, dy: Math.sin(pAngle) * 8,
+          mesh: m, isEnemy: true,
+        });
+        playSound('shoot');
+      }
     }
   }
 
@@ -1030,8 +1087,23 @@ export function updateBoss(dt) {
   const bossTerrainY = s.currentScene === 'wilds2'
     ? getTerrainHeightWilds2(s.bossX, s.bossY)
     : getTerrainHeight(s.bossX, s.bossY);
-  s.bossMesh.position.y += (30 + bossTerrainY - s.bossMesh.position.y) * Math.min(dt * 6, 1);
-  s.bossMesh.rotation.x = Math.sin(Date.now() / 300) * 0.1;
+  
+  const bossBaseY = s.currentScene === 'wilds2' ? -5 : 30; // -5 agar kaki menapak tanah
+
+  // Animasi langkah yang lebih hidup (Bobbing & Wobbling)
+  let walkBob = 0;
+  let walkWobble = 0;
+  if (isAggro && dist > 80) {
+    // Arena Champion bergerak lebih cepat jadi animasinya lebih cepat dan melompat tinggi
+    const walkSpeed = s.currentScene === 'wilds2' ? 120 : 250; 
+    const time = Date.now() / walkSpeed;
+    walkBob = Math.abs(Math.sin(time)) * (s.currentScene === 'wilds2' ? 15 : 6);
+    walkWobble = Math.sin(time) * 0.15;
+  }
+
+  s.bossMesh.position.y += (bossBaseY + bossTerrainY + walkBob - s.bossMesh.position.y) * Math.min(dt * 6, 1);
+  s.bossMesh.rotation.z = walkWobble;
+  s.bossMesh.rotation.x = Math.sin(Date.now() / 300) * 0.05;
 
   s.bossHpGroup.position.x += (s.bossX - s.bossHpGroup.position.x) * Math.min(dt * 6, 1);
   s.bossHpGroup.position.z += (s.bossY - s.bossHpGroup.position.z) * Math.min(dt * 6, 1);
@@ -1047,7 +1119,10 @@ export function updateBoss(dt) {
     if (!s.player.defending) {
       s.player.hp -= 1.0;
       playSound('hit');
-      if (s.player.hp <= 0) triggerGameOver('Kamu dihancurkan The Golden Golem!');
+      if (s.player.hp <= 0) {
+        const cause = s.currentScene === 'wilds2' ? 'Arena Champion!' : 'The Golden Golem!';
+        triggerGameOver(`Kamu dihancurkan ${cause}`);
+      }
       // Boss does not move
     }
   }
@@ -1060,7 +1135,8 @@ export function updateBoss(dt) {
     if (typeof window.saveGame === 'function') window.saveGame(true);
     playSound('coin');
     spawnParticles(s.bossX, s.bossY, 0xffd700, 100, 'death');
-    document.getElementById('message').textContent = '👑 The Golden Golem telah dikalahkan! Kamu mendapatkan senjata legendaris Excalibur!';
+    const name = s.currentScene === 'wilds2' ? 'Arena Champion' : 'The Golden Golem';
+    document.getElementById('message').textContent = `👑 ${name} telah dikalahkan! Kamu mendapatkan senjata legendaris Excalibur!`;
 
     if (!s.ownedWeapons.includes(4)) {
       s.ownedWeapons.push(4);
@@ -1084,6 +1160,14 @@ export function updateBoss(dt) {
 function triggerGameOver(msg) {
   const s = state;
   s.gameOver = true;
+  
+  // Sembuhkan pemain dan kembalikan ke Hometown sebelum di-save
+  s.player.hp = s.player.maxHp;
+  s.player.exp = Math.max(0, Math.floor(s.player.exp / 2));
+  s.currentScene = 'hometown';
+  s.player.x = 500;
+  s.player.y = 500;
+  
   if (typeof window.saveGame === 'function') window.saveGame(true);
   document.getElementById('message').textContent = `💀 ${msg}`;
   document.getElementById('lose').style.display = 'flex';
