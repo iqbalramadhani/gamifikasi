@@ -55,7 +55,7 @@ export const state = {
     level: 1, exp: 0, nextExp: 20, statPoints: 0,
     stats: { str: 1, agi: 1, vit: 1 },
     attackHitDelay: [],
-    spinHitDelay: 0,
+    tripleCooldown: 0, isTripling: 0, tripleHitDelay: [],
     height: 0, heightVelocity: 0, lastFootstep: 0,
   },
 

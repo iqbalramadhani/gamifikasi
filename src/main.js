@@ -256,14 +256,17 @@ function gameLoop(timestamp) {
     state.player.attackCooldown = Math.max(0, state.player.attackCooldown - dt);
     state.player.dashCooldown = Math.max(0, state.player.dashCooldown - dt);
     state.player.spinCooldown = Math.max(0, state.player.spinCooldown - dt);
+    state.player.tripleCooldown = Math.max(0, state.player.tripleCooldown - dt);
 
     if (state.player.isSpinning > 0) {
       state.player.isSpinning -= dt;
       state.player.spinAngle += 0.5 * dt;
-      state.player.spinHitDelay = Math.max(0, state.player.spinHitDelay - dt);
     } else {
       state.player.spinAngle = 0;
-      state.player.spinHitDelay = 0;
+    }
+
+    if (state.player.isTripling > 0) {
+      state.player.isTripling -= dt;
     }
 
     updateProjectiles(dt);
@@ -318,8 +321,9 @@ function gameLoop(timestamp) {
   }
 
   // ── Smooth player mesh follow ──────────────────────────────────────────────
+  const isTripling = state.player.isTripling > 0;
   const breathOffset = state.playerMixer ? 0 : Math.sin(state.playerIdleBreath) * 0.8;
-  const isMoving = state.player.facingX !== 0 || state.player.facingY !== 0;
+  const isMoving = !isTripling && (state.player.facingX !== 0 || state.player.facingY !== 0);
   const terrainY = state.currentScene === 'wilds2'
     ? getTerrainHeightWilds2(state.player.x, state.player.y)
     : getTerrainHeight(state.player.x, state.player.y);
@@ -327,9 +331,11 @@ function gameLoop(timestamp) {
   const targetPlayerY = (isMoving && !state.playerMixer)
     ? basePlayerY + Math.abs(Math.sin(state.player.walkCycle * 2)) * 1.5
     : basePlayerY + breathOffset;
-  state.playerMesh.position.y += (targetPlayerY - state.playerMesh.position.y) * Math.min(dt * 12, 1);
-  state.playerMesh.position.x += (state.player.x - state.playerMesh.position.x) * Math.min(dt * 10, 1);
-  state.playerMesh.position.z += (state.player.y - state.playerMesh.position.z) * Math.min(dt * 10, 1);
+  if (!isTripling) {
+    state.playerMesh.position.y += (targetPlayerY - state.playerMesh.position.y) * Math.min(dt * 12, 1);
+    state.playerMesh.position.x += (state.player.x - state.playerMesh.position.x) * Math.min(dt * 10, 1);
+    state.playerMesh.position.z += (state.player.y - state.playerMesh.position.z) * Math.min(dt * 10, 1);
+  }
   state.playerIdleBreath += 0.03 * dt;
 
   // Character always faces forward, plus any accumulated spin

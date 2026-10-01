@@ -70,6 +70,17 @@ export function updateUI() {
     }
   }
 
+  const btnTriple = document.getElementById('btn-triple');
+  if (btnTriple) {
+    if (s.player.tripleCooldown > 0) {
+      btnTriple.style.opacity = '0.4';
+      btnTriple.textContent = `⏳ ${(s.player.tripleCooldown / 60).toFixed(1)}s`;
+    } else {
+      btnTriple.style.opacity = '1.0';
+      btnTriple.textContent = `⚔️ Triple (R)`;
+    }
+  }
+
   drawMinimap();
 }
 
@@ -1186,7 +1197,7 @@ window.zoomCamera = function(dir) {
 window.addEventListener('keydown', e => {
   const key = e.key.toLowerCase();
   state.keys[key] = true;
-  if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'shift', 'z', 'x', 'c', 'v', 'tab', 'f', 'i', 'j', 'm', '=', '-'].includes(key)) {
+  if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'shift', 'z', 'x', 'r', 'c', 'v', 'tab', 'f', 'i', 'j', 'm', '=', '-'].includes(key)) {
     e.preventDefault();
   }
   if (key === 'escape' && typeof window.togglePause === 'function') window.togglePause();

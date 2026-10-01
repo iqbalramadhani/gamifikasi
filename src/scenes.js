@@ -843,11 +843,15 @@ export function initEntities() {
       }
     }
 
-    // sword_slash_3 → animasi skill spin (tombol X)
+    // sword_slash_3 → animasi skill Triple Slash (R)
     if (loadedModels.sword_slash_3 && loadedModels.sword_slash_3.animations && loadedModels.sword_slash_3.animations.length > 0) {
-      s.playerActions.spin = s.playerMixer.clipAction(loadedModels.sword_slash_3.animations[0]);
-      s.playerActions.spin.setLoop(THREE.LoopOnce);
-      s.playerActions.spin.clampWhenFinished = true;
+      const clip = loadedModels.sword_slash_3.animations[0];
+      s.playerActions.triple = s.playerMixer.clipAction(clip);
+      s.playerActions.triple.setLoop(THREE.LoopOnce);
+      s.playerActions.triple.clampWhenFinished = false;
+      s.playerActions.triple.setEffectiveWeight(1);
+      s.playerActions.triple.timeScale = 0.75;
+      console.log('[triple] clip.duration =', clip.duration, 's | effective frames @0.75:', Math.round(clip.duration / 0.75 * 60));
     }
     
     if (s.playerActions.idle) {
