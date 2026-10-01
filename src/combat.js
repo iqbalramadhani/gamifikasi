@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { state } from './state.js';
-import { mapSize, weaponList, armorList, enemyTemplates, enemyTemplates2, WILDS2_MIN_LEVEL, lootTable, consumableItems, statusEffects } from './constants.js';
+import { mapSize, weaponList, armorList, enemyTemplates, enemyTemplates2, eliteTemplates, WILDS2_MIN_LEVEL, lootTable, consumableItems, statusEffects } from './constants.js';
 import { loadedModels } from './model-loader.js';
 import { blocked, spawnParticles, spawnDamageText } from './helpers.js';
 import { spawnAtFreePos, spawnAtFreePosWilds2, getTerrainHeight, getTerrainHeightWilds2 } from './scenes.js';
@@ -30,7 +30,12 @@ export function applyStatusEffect(enemy, type) {
 
 // ─── Enemy spawner (called by initEntities + game loop) ──────────────────────
 
-export function spawnEnemy(ex, ey, scaleFactor = 1.0, isBossChild = false) {
+function hasAnyKey(keys, names) {
+  for (const n of names) if (keys[n]) return true;
+  return false;
+}
+
+export function spawnEnemy(ex, ey, scaleFactor = 1.0, isBossChild = false, forceElite = false) {
   const s = state;
   if (!ex || !ey) {
     const pos = spawnAtFreePos();
@@ -48,36 +53,96 @@ export function spawnEnemy(ex, ey, scaleFactor = 1.0, isBossChild = false) {
   }
 
   const charKey = tmpl.charKey;
+  const isElite = (forceElite || (!isBossChild && Math.random() < 0.22)) && !!eliteTemplates[typeStr];
+  const elite = isElite ? eliteTemplates[typeStr] : null;
+
+  if (isElite) {
+    scaleFactor *= elite.scaleBonus;
+    eR *= elite.scaleBonus;
+    hp *= elite.hpMultiplier;
+    damage = (damage || 10) * elite.damageMultiplier;
+    baseSpeed *= elite.speedMultiplier;
+  }
 
   let mesh, eY;
 
-    if (loadedModels[charKey]) {
-      const gltfEnemy = SkeletonUtils.clone(loadedModels[charKey]);
-      gltfEnemy.scale.set(7 * scaleFactor, 7 * scaleFactor, 7 * scaleFactor);
-      gltfEnemy.position.y = -12;
-      mesh = new THREE.Group();
-      mesh.add(gltfEnemy);
-      eY = isFlying ? 35 : 15;
-    } else {
-      const boxGeo = new THREE.BoxGeometry(20 * scaleFactor, 20 * scaleFactor, 20 * scaleFactor);
-      const boxMat = new THREE.MeshLambertMaterial({ color: 0xff0000 });
-      mesh = new THREE.Mesh(boxGeo, boxMat);
-      eY = isFlying ? 30 : 10;
-    }
+  if (loadedModels[charKey]) {
+    const gltfEnemy = SkeletonUtils.clone(loadedModels[charKey]);
+    gltfEnemy.scale.set(7 * scaleFactor, 7 * scaleFactor, 7 * scaleFactor);
+    gltfEnemy.position.y = -12;
+    mesh = new THREE.Group();
+    mesh.add(gltfEnemy);
+    eY = isFlying ? (isElite ? 42 : 35) : 15;
+  } else {
+    const boxGeo = new THREE.BoxGeometry(20 * scaleFactor, 20 * scaleFactor, 20 * scaleFactor);
+    const boxMat = new THREE.MeshLambertMaterial({ color: isElite ? elite.auraColor : 0xff0000 });
+    mesh = new THREE.Mesh(boxGeo, boxMat);
+    eY = isFlying ? (isElite ? 38 : 30) : 10;
+  }
+
+  let auraMesh = null;
+  let crownMesh = null;
+  let eliteLight = null;
+
+  if (isElite) {
+    // Glowing ground aura ring
+    const auraGeo = new THREE.RingGeometry(eR * 0.8, eR * 1.45, 32);
+    const auraMat = new THREE.MeshBasicMaterial({
+      color: elite.auraColor,
+      transparent: true,
+      opacity: 0.8,
+      side: THREE.DoubleSide
+    });
+    auraMesh = new THREE.Mesh(auraGeo, auraMat);
+    auraMesh.rotation.x = -Math.PI / 2;
+    auraMesh.position.y = isFlying ? -28 : -11;
+    mesh.add(auraMesh);
+
+    // Floating Golden Crown / Emblem
+    const crownGeo = new THREE.OctahedronGeometry(4.5 * (scaleFactor / elite.scaleBonus), 0);
+    const crownMat = new THREE.MeshBasicMaterial({ color: 0xffd700 });
+    crownMesh = new THREE.Mesh(crownGeo, crownMat);
+    crownMesh.position.y = isFlying ? 42 : 32;
+    mesh.add(crownMesh);
+
+    // Subtle colored point light
+    eliteLight = new THREE.PointLight(elite.auraColor, 1.8, 80);
+    eliteLight.position.y = 12;
+    mesh.add(eliteLight);
+  }
 
   const levelMulti = 1 + s.player.level * 0.1;
   hp *= levelMulti;
   mesh.position.set(ex, eY, ey);
   s.scene.add(mesh);
 
-  const hpBgMat = new THREE.MeshBasicMaterial({ color: 0x222222 });
-  const hpFgMat = new THREE.MeshBasicMaterial({ color: 0x008800 });
-  const hpGeo = new THREE.PlaneGeometry(24, 4);
+  const hpBarWidth = isElite ? 38 : 24;
+  const hpBarHeight = isElite ? 5.5 : 4;
+  const hpGeo = new THREE.PlaneGeometry(hpBarWidth, hpBarHeight);
+  const hpBgMat = new THREE.MeshBasicMaterial({ color: isElite ? 0x0a0a0a : 0x222222 });
+  const hpFgMat = new THREE.MeshBasicMaterial({ color: isElite ? 0xff0055 : 0x008800 });
   const hpGroup = new THREE.Group();
   const hpBg = new THREE.Mesh(hpGeo, hpBgMat);
   const hpFg = new THREE.Mesh(hpGeo, hpFgMat);
   hpFg.position.z = 0.1;
   hpGroup.add(hpBg, hpFg);
+
+  if (isElite) {
+    // Golden border frame for Elite HP
+    const frameGeo = new THREE.PlaneGeometry(hpBarWidth + 2.5, hpBarHeight + 2);
+    const frameMat = new THREE.MeshBasicMaterial({ color: 0xffd700 });
+    const frameMesh = new THREE.Mesh(frameGeo, frameMat);
+    frameMesh.position.z = -0.05;
+    hpGroup.add(frameMesh);
+
+    // Star icon marker on left of HP bar
+    const starGeo = new THREE.OctahedronGeometry(2.5, 0);
+    const starMat = new THREE.MeshBasicMaterial({ color: 0xffd700 });
+    const starMesh = new THREE.Mesh(starGeo, starMat);
+    starMesh.position.set(-hpBarWidth / 2 - 4.5, 0, 0.2);
+    hpGroup.add(starMesh);
+  }
+
   s.scene.add(hpGroup);
 
   const dx = (Math.random() - 0.5) * 2;
@@ -89,6 +154,7 @@ export function spawnEnemy(ex, ey, scaleFactor = 1.0, isBossChild = false) {
       limbs[child.name] = child;
     }
   });
+
   s.enemies.push({
     x: ex, y: ey, r: eR, meshY: eY, dx, dy,
     hp, maxHp: hp, baseSpeed, damage: damage || 10,
@@ -98,13 +164,20 @@ export function spawnEnemy(ex, ey, scaleFactor = 1.0, isBossChild = false) {
     limbs,
     isBossChild,
     isFlying: !!isFlying,
-    age: 0
+    age: 0,
+    isElite,
+    elite,
+    auraMesh,
+    crownMesh,
+    hpBarWidth,
+    _announced: false,
+    hazardTimer: 0,
   });
 }
 
 // ─── Tier-2 enemy spawner (Scorched Dunes, level 10+) ──────────────────────
 
-export function spawnEnemy2(ex, ey, scaleFactor = 1.0, isBossChild = false) {
+export function spawnEnemy2(ex, ey, scaleFactor = 1.0, isBossChild = false, forceElite = false) {
   const s = state;
   if (s.player.level < WILDS2_MIN_LEVEL) return;
   if (!ex || !ey) {
@@ -115,6 +188,17 @@ export function spawnEnemy2(ex, ey, scaleFactor = 1.0, isBossChild = false) {
   const tmpl = enemyTemplates2[Math.floor(Math.random() * enemyTemplates2.length)];
   let { hp, speed: baseSpeed, r: eR, typeStr, isFlying, damage } = tmpl;
   const charKey = tmpl.charKey;
+
+  const isElite = (forceElite || (!isBossChild && Math.random() < 0.22)) && !!eliteTemplates[typeStr];
+  const elite = isElite ? eliteTemplates[typeStr] : null;
+
+  if (isElite) {
+    scaleFactor *= elite.scaleBonus;
+    eR *= elite.scaleBonus;
+    hp *= elite.hpMultiplier;
+    damage = (damage || 10) * elite.damageMultiplier;
+    baseSpeed *= elite.speedMultiplier;
+  }
 
   let mesh, eY;
   if (loadedModels[charKey]) {
@@ -127,12 +211,43 @@ export function spawnEnemy2(ex, ey, scaleFactor = 1.0, isBossChild = false) {
     gltfEnemy.position.y = -12;
     mesh = new THREE.Group();
     mesh.add(gltfEnemy);
-    eY = isFlying ? 35 : 15;
+    eY = isFlying ? (isElite ? 42 : 35) : 15;
   } else {
     const boxGeo = new THREE.BoxGeometry(20 * scaleFactor, 20 * scaleFactor, 20 * scaleFactor);
-    const boxMat = new THREE.MeshLambertMaterial({ color: 0xff8800 });
+    const boxMat = new THREE.MeshLambertMaterial({ color: isElite ? elite.auraColor : 0xff8800 });
     mesh = new THREE.Mesh(boxGeo, boxMat);
-    eY = isFlying ? 30 : 10;
+    eY = isFlying ? (isElite ? 38 : 30) : 10;
+  }
+
+  let auraMesh = null;
+  let crownMesh = null;
+  let eliteLight = null;
+
+  if (isElite) {
+    // Glowing ground aura ring
+    const auraGeo = new THREE.RingGeometry(eR * 0.8, eR * 1.45, 32);
+    const auraMat = new THREE.MeshBasicMaterial({
+      color: elite.auraColor,
+      transparent: true,
+      opacity: 0.8,
+      side: THREE.DoubleSide
+    });
+    auraMesh = new THREE.Mesh(auraGeo, auraMat);
+    auraMesh.rotation.x = -Math.PI / 2;
+    auraMesh.position.y = isFlying ? -28 : -11;
+    mesh.add(auraMesh);
+
+    // Floating Golden Crown / Emblem
+    const crownGeo = new THREE.OctahedronGeometry(4.5 * (scaleFactor / elite.scaleBonus), 0);
+    const crownMat = new THREE.MeshBasicMaterial({ color: 0xffd700 });
+    crownMesh = new THREE.Mesh(crownGeo, crownMat);
+    crownMesh.position.y = isFlying ? 42 : 32;
+    mesh.add(crownMesh);
+
+    // Subtle colored point light
+    eliteLight = new THREE.PointLight(elite.auraColor, 1.8, 80);
+    eliteLight.position.y = 12;
+    mesh.add(eliteLight);
   }
 
   // Stronger scaling than the base Wilds tier
@@ -141,14 +256,33 @@ export function spawnEnemy2(ex, ey, scaleFactor = 1.0, isBossChild = false) {
   mesh.position.set(ex, eY, ey);
   s.scene.add(mesh);
 
-  const hpBgMat = new THREE.MeshBasicMaterial({ color: 0x222222 });
-  const hpFgMat = new THREE.MeshBasicMaterial({ color: 0xaa2200 });
-  const hpGeo = new THREE.PlaneGeometry(24, 4);
+  const hpBarWidth = isElite ? 38 : 24;
+  const hpBarHeight = isElite ? 5.5 : 4;
+  const hpGeo = new THREE.PlaneGeometry(hpBarWidth, hpBarHeight);
+  const hpBgMat = new THREE.MeshBasicMaterial({ color: isElite ? 0x0a0a0a : 0x222222 });
+  const hpFgMat = new THREE.MeshBasicMaterial({ color: isElite ? 0xff0055 : 0xaa2200 });
   const hpGroup = new THREE.Group();
   const hpBg = new THREE.Mesh(hpGeo, hpBgMat);
   const hpFg = new THREE.Mesh(hpGeo, hpFgMat);
   hpFg.position.z = 0.1;
   hpGroup.add(hpBg, hpFg);
+
+  if (isElite) {
+    // Golden border frame for Elite HP
+    const frameGeo = new THREE.PlaneGeometry(hpBarWidth + 2.5, hpBarHeight + 2);
+    const frameMat = new THREE.MeshBasicMaterial({ color: 0xffd700 });
+    const frameMesh = new THREE.Mesh(frameGeo, frameMat);
+    frameMesh.position.z = -0.05;
+    hpGroup.add(frameMesh);
+
+    // Star icon marker on left of HP bar
+    const starGeo = new THREE.OctahedronGeometry(2.5, 0);
+    const starMat = new THREE.MeshBasicMaterial({ color: 0xffd700 });
+    const starMesh = new THREE.Mesh(starGeo, starMat);
+    starMesh.position.set(-hpBarWidth / 2 - 4.5, 0, 0.2);
+    hpGroup.add(starMesh);
+  }
+
   s.scene.add(hpGroup);
 
   const dx = (Math.random() - 0.5) * 2;
@@ -169,7 +303,14 @@ export function spawnEnemy2(ex, ey, scaleFactor = 1.0, isBossChild = false) {
     isBossChild,
     isFlying: !!isFlying,
     tier: 2,
-    age: 0
+    age: 0,
+    isElite,
+    elite,
+    auraMesh,
+    crownMesh,
+    hpBarWidth,
+    _announced: false,
+    hazardTimer: 0,
   });
 }
 
@@ -203,6 +344,23 @@ export function move(dt) {
 
   if (s.keys.c) { s.keys.c = false; usePotion(); }
 
+  if (hasAnyKey(s.keys, ['arrowup', 'arrowdown', 'arrowleft', 'arrowright']) && s.autoWalkTarget) {
+    clearAutoWalkTarget();
+  }
+
+  if (dx === 0 && dy === 0 && s.autoWalkTarget) {
+    const targetX = s.autoWalkTarget.x;
+    const targetY = s.autoWalkTarget.y;
+    const distToTarget = Math.hypot(targetX - s.player.x, targetY - s.player.y);
+
+    if (distToTarget <= 12 || blocked(targetX, targetY, s.player.r)) {
+      clearAutoWalkTarget();
+    } else {
+      dx = (targetX - s.player.x) / distToTarget;
+      dy = (targetY - s.player.y) / distToTarget;
+    }
+  }
+
   if (dx !== 0 || dy !== 0) {
     const len = Math.hypot(dx, dy);
     dx /= len; dy /= len;
@@ -232,11 +390,12 @@ export function move(dt) {
         const e = s.enemies[i];
         if (Math.hypot(e.x - s.player.x, e.y - s.player.y) < s.player.r + e.r + 100) {
           const spinCrit = calcCritDamage(s.player.attackDamage * 3);
-          e.hp -= spinCrit.value;
+          const dealtDmg = applyEliteOnHit(e, spinCrit.value);
+          e.hp -= dealtDmg;
           e.slowTimer = 90;
           e.stunTimer = 20;
           const spinColor = spinCrit.isCrit ? '#ffff00' : '#ff4444';
-          const spinLabel = spinCrit.isCrit ? `CRIT! -${spinCrit.value}` : `-${spinCrit.value}`;
+          const spinLabel = spinCrit.isCrit ? `CRIT! -${dealtDmg}` : `-${dealtDmg}`;
           spawnDamageText(e.x, e.mesh.position.y + 35, e.y, spinLabel, spinColor);
           if (e.hp <= 0) killEnemy(i);
           else {
@@ -300,6 +459,16 @@ export function move(dt) {
   } else {
     s.player.walkCycle = 0;
     animatePlayer(false);
+  }
+}
+
+export function clearAutoWalkTarget() {
+  state.autoWalkTarget = null;
+  if (state.waypointMesh) {
+    state.scene?.remove(state.waypointMesh);
+    state.waypointMesh.geometry?.dispose?.();
+    state.waypointMesh.material?.dispose?.();
+    state.waypointMesh = null;
   }
 }
 
@@ -398,6 +567,42 @@ export function attack() {
   playSound('dash');
 }
 
+function applyEliteOnHit(e, dmgValue) {
+  const s = state;
+  if (!e.isElite || !e.elite) return dmgValue;
+  let finalDmg = dmgValue;
+
+  // Centurion Phalanx Shield (blocks 40% from front)
+  if (e.elite.ability === 'phalanx_shield') {
+    const angleToPlayer = Math.atan2(s.player.y - e.y, s.player.x - e.x);
+    let diff = Math.abs(angleToPlayer - e.mesh.rotation.y);
+    while (diff > Math.PI) diff = Math.abs(diff - Math.PI * 2);
+    if (diff < 1.0) {
+      finalDmg = Math.max(1, Math.floor(finalDmg * 0.6));
+      spawnDamageText(e.x, e.mesh.position.y + 45, e.y, `SHIELD BLOCKED!`, '#ffffff');
+      playSound('hit');
+    }
+  }
+
+  // Thorn Emperor Cactoro retaliation
+  if (e.elite.ability === 'thorns_reflect' && !s.player.defending) {
+    const thornsDmg = 6;
+    s.player.hp = Math.max(0, s.player.hp - thornsDmg);
+    spawnDamageText(s.player.x, 30, s.player.y, `THORNS! -${thornsDmg}`, '#ffd600');
+    spawnParticles(s.player.x, s.player.y, 0xffd600, 5, 'hit');
+  }
+
+  // Golden Midas Slime drops coin on hit
+  if (e.elite.ability === 'golden_burst') {
+    s.gold += 5;
+    spawnParticles(e.x, e.y, 0xffd700, 4, 'heal');
+    spawnDamageText(e.x, e.mesh.position.y + 35, e.y, `+5 GOLD!`, '#ffd700');
+    if (typeof window.updateUI === 'function') window.updateUI(true);
+  }
+
+  return finalDmg;
+}
+
 function doTripleHit(finalHit = false) {
   const s = state;
   let hitSomething = false;
@@ -408,12 +613,13 @@ function doTripleHit(finalHit = false) {
     const e = s.enemies[i];
     if (Math.hypot(e.x - s.player.x, e.y - s.player.y) < s.player.r + e.r + 100) {
       const crit = calcCritDamage(s.player.attackDamage * dmgMult);
-      e.hp -= crit.value;
+      const dealtDmg = applyEliteOnHit(e, crit.value);
+      e.hp -= dealtDmg;
       e.slowTimer = finalHit ? 45 : 30;
       e.stunTimer = finalHit ? 15 : 10;
       hitSomething = true;
       const color = crit.isCrit ? '#ffff00' : '#ff4444';
-      const label = crit.isCrit ? `CRIT! -${crit.value}` : `-${crit.value}`;
+      const label = crit.isCrit ? `CRIT! -${dealtDmg}` : `-${dealtDmg}`;
       spawnDamageText(e.x, e.mesh.position.y + 35, e.y, label, color);
       if (e.hp <= 0) killEnemy(i);
       else {
@@ -481,13 +687,14 @@ function doMeleeHit() {
     const dist = Math.hypot(e.x - s.player.x, e.y - s.player.y);
     if (dist < s.player.r + e.r + 100) {
       const crit = calcCritDamage(s.player.attackDamage);
-      e.hp -= crit.value;
+      const dealtDmg = applyEliteOnHit(e, crit.value);
+      e.hp -= dealtDmg;
       e.slowTimer = 30;
       e.stunTimer = 10;
       hitSomething = true;
 
       const dmgColor = crit.isCrit ? '#ffff00' : '#ff4444';
-      const dmgLabel = crit.isCrit ? `CRIT! -${crit.value}` : `-${crit.value}`;
+      const dmgLabel = crit.isCrit ? `CRIT! -${dealtDmg}` : `-${dealtDmg}`;
       spawnDamageText(e.x, e.mesh.position.y + 35, e.y, dmgLabel, dmgColor);
       // Apply status effects based on enemy type
       if (['slime', 'mage', 'necro'].includes(e.type) && !e.statusEffect && Math.random() < 0.2) {
@@ -787,6 +994,57 @@ function killEnemy(index) {
   s.scene.add(expMesh);
   s.expOrbs.push({ x: e.x, y: e.y, mesh: expMesh, taken: false });
 
+  // Elite Monster defeat rewards & fanfare
+  if (e.isElite && e.elite) {
+    s.cameraShake = Math.max(s.cameraShake || 0, 18);
+    playSound('coin');
+    playSound('hit');
+
+    const msgEl = document.getElementById('message');
+    if (msgEl) {
+      msgEl.innerHTML = `<span style="color:#ffd700;font-weight:bold;">🏆 ELITE DIKALAHKAN:</span> ${e.elite.icon} <span style="color:#fff;font-weight:bold;">${e.elite.name}</span>! <span style="color:#2ecc71;font-weight:bold;">(+${e.elite.bonusGold} Gold, +${e.elite.bonusExp} EXP)</span>`;
+    }
+
+    s.gold += e.elite.bonusGold;
+    s.player.exp += e.elite.bonusExp;
+
+    // Burst of Gold coins
+    for (let g = 0; g < 6; g++) {
+      const dropMesh = new THREE.Mesh(
+        new THREE.OctahedronGeometry(4, 0),
+        new THREE.MeshLambertMaterial({ color: 0xffd700 })
+      );
+      dropMesh.position.set(e.x + (Math.random() - 0.5) * 45, 5, e.y + (Math.random() - 0.5) * 45);
+      dropMesh.castShadow = true;
+      s.scene.add(dropMesh);
+      s.lootDrops.push({ x: dropMesh.position.x, y: dropMesh.position.z, taken: false, type: 'gold', item: { id: 'gold', name: 'Gold', value: 15 }, mesh: dropMesh });
+    }
+
+    // Guaranteed 2 Potion drops
+    for (let p = 0; p < 2; p++) {
+      const dropMesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(2.5, 2.5, 7, 8),
+        new THREE.MeshLambertMaterial({ color: 0xff0000 })
+      );
+      dropMesh.position.set(e.x + (p === 0 ? 14 : -14), 4, e.y + (Math.random() - 0.5) * 20);
+      s.scene.add(dropMesh);
+      s.lootDrops.push({ x: dropMesh.position.x, y: dropMesh.position.z, taken: false, type: 'potion', mesh: dropMesh });
+    }
+
+    // Guaranteed 1 Stamina Potion
+    const spMesh = new THREE.Mesh(
+      new THREE.CylinderGeometry(2, 2, 6, 8),
+      new THREE.MeshLambertMaterial({ color: 0xf1c40f })
+    );
+    spMesh.position.set(e.x, 3, e.y - 14);
+    s.scene.add(spMesh);
+    s.lootDrops.push({ x: e.x, y: e.y - 14, taken: false, type: 'consumable', item: { id: 'stamina_potion', name: 'Stamina Potion' }, mesh: spMesh });
+
+    spawnParticles(e.x, e.y, e.elite.auraColor, 40, 'death');
+    spawnDamageText(e.x, e.mesh.position.y + 45, e.y, `★ ${e.elite.name} DEFEATED! ★`, '#ffd700');
+
+    if (typeof window.updateUI === 'function') window.updateUI(true);
+  }
 }
 
 
@@ -864,6 +1122,14 @@ export function updateEnemies(dt) {
             s.cameraShake = Math.max(s.cameraShake || 0, 5);
             playSound('hit');
             spawnDamageText(s.player.x, 30, s.player.y, `-${eDmg}`, '#ff8888');
+
+            // Earth slam knockback & camera shake
+            if (e.isElite && e.elite.ability === 'earth_slam') {
+              s.cameraShake = Math.max(s.cameraShake || 0, 16);
+              s.player.stamina = Math.max(0, s.player.stamina - 20);
+              spawnParticles(e.x, e.y, 0xaa00ff, 15, 'dust');
+            }
+
             // Poison/burn chance when hit by elemental enemies
             if (!s.player.statusEffect) {
               if (['slime', 'mage', 'necro'].includes(e.type) && Math.random() < 0.3) {
@@ -885,12 +1151,69 @@ export function updateEnemies(dt) {
     } else {
       if (e.attackCooldown > 0) e.attackCooldown -= dt;
 
-      const speed = e.slowTimer > 0 ? e.baseSpeed * 0.4 : e.baseSpeed;
+      let speed = e.slowTimer > 0 ? e.baseSpeed * 0.4 : e.baseSpeed;
+
+      // Berserk Frenzy for Warlord Yeti Frostbane
+      if (e.isElite && e.elite.ability === 'berserk_frenzy' && e.hp < e.maxHp * 0.5) {
+        speed *= 1.45;
+        if (e.auraMesh && !e._berserkApplied) {
+          e.auraMesh.material.color.setHex(0xff0000);
+          e._berserkApplied = true;
+          spawnDamageText(e.x, e.mesh.position.y + 35, e.y, `BERSERK!`, '#ff0000');
+        }
+      }
+
+      // Proximity alert for elite
+      if (e.isElite && distToPlayer < 500 && !e._announced) {
+        e._announced = true;
+        const msgEl = document.getElementById('message');
+        if (msgEl) {
+          msgEl.innerHTML = `<span style="color:#ff3333;font-weight:bold;">⚠️ MONSTER ELIT MUNCUL:</span> ${e.elite.icon} <span style="color:#ffd700;font-weight:bold;">${e.elite.name}</span> (${e.elite.title})!`;
+        }
+        playSound('hit');
+      }
+
+      // Acid pool hazard for King Slime Vorax
+      if (e.isElite && e.elite.ability === 'acid_pool') {
+        e.hazardTimer = (e.hazardTimer || 0) + dt;
+        if (e.hazardTimer > 50) {
+          e.hazardTimer = 0;
+          spawnParticles(e.x, e.y, 0x00ff66, 3, 'dust');
+          if (distToPlayer < 40) {
+            s.player.hp = Math.max(0, s.player.hp - 3);
+            spawnDamageText(s.player.x, 30, s.player.y, `ACID! -3`, '#00ff66');
+            playSound('hit');
+          }
+        }
+      }
+
+      // Phase shift teleport for Phantom Wraith Mushnub
+      if (e.isElite && e.elite.ability === 'phase_shift') {
+        e.hazardTimer = (e.hazardTimer || 0) + dt;
+        if (e.hazardTimer > 180 && distToPlayer > 80 && distToPlayer < 450) {
+          e.hazardTimer = 0;
+          spawnParticles(e.x, e.y, 0x7c4dff, 15, 'death');
+          const pAngle = Math.atan2(s.player.y - e.y, s.player.x - e.x);
+          e.x += Math.cos(pAngle) * 65;
+          e.y += Math.sin(pAngle) * 65;
+          spawnParticles(e.x, e.y, 0x7c4dff, 15, 'heal');
+          playSound('dash');
+        }
+      }
+
+      // Sand vortex pull for Leviathan Dune Stalker
+      if (e.isElite && e.elite.ability === 'sand_vortex' && distToPlayer < 250 && distToPlayer > 40) {
+        const pullAngle = Math.atan2(e.y - s.player.y, e.x - s.player.x);
+        s.player.x += Math.cos(pullAngle) * 1.0 * dt;
+        s.player.y += Math.sin(pullAngle) * 1.0 * dt;
+        if (Math.random() < 0.1) spawnParticles(e.x, e.y, 0x651fff, 2, 'dust');
+      }
 
       if (distToPlayer < 800) {
         const angle = Math.atan2(s.player.y - e.y, s.player.x - e.x);
+        const isRanged = e.type === 'archer' || e.type === 'sc_archer' || (e.isElite && ['mage', 'sc_mage', 'sc_dragon'].includes(e.type));
         
-        if (distToPlayer < s.player.r + e.r + 15 && e.hp > 0 && e.type !== 'kamikaze' && e.type !== 'archer' && (!e.attackCooldown || e.attackCooldown <= 0)) {
+        if (distToPlayer < s.player.r + e.r + 15 && e.hp > 0 && e.type !== 'kamikaze' && !isRanged && (!e.attackCooldown || e.attackCooldown <= 0)) {
           e.actionState = 'attack';
           e.attackAnimTimer = 30;
           e.attackCooldown = 90;
@@ -898,8 +1221,9 @@ export function updateEnemies(dt) {
           e.dx = 0;
           e.dy = 0;
           e.mesh.rotation.y = angle;
-        } else if (e.type === 'archer') {
-          if (distToPlayer > 300) {
+        } else if (isRanged) {
+          const keepDist = (e.type.includes('mage') || e.type.includes('dragon')) ? 220 : 300;
+          if (distToPlayer > keepDist) {
             e.dx = Math.cos(angle) * speed;
             e.dy = Math.sin(angle) * speed;
           } else {
@@ -907,20 +1231,56 @@ export function updateEnemies(dt) {
           }
           if (e.attackTimer === undefined) e.attackTimer = 0;
           e.attackTimer += dt;
-          if (e.attackTimer > 120 && distToPlayer < 400) {
+          const shootInterval = e.isElite ? 85 : 120;
+          if (e.attackTimer > shootInterval && distToPlayer < 450) {
             e.attackTimer = 0;
-            const m = new THREE.Mesh(
-              new THREE.SphereGeometry(4, 4, 4),
-              new THREE.MeshBasicMaterial({ color: 0xff0000 })
-            );
-            m.position.set(e.x, 10, e.y);
-            s.scene.add(m);
-            s.projectiles.push({
-              x: e.x, y: e.y,
-              dx: Math.cos(angle) * 8, dy: Math.sin(angle) * 8,
-              mesh: m, isEnemy: true,
-            });
-            playSound('shoot');
+
+            if (e.isElite && e.elite.ability === 'triple_shot') {
+              for (let aOffset of [-0.25, 0, 0.25]) {
+                const spreadAngle = angle + aOffset;
+                const m = new THREE.Mesh(new THREE.SphereGeometry(4, 6, 6), new THREE.MeshBasicMaterial({ color: 0x00e5ff }));
+                m.position.set(e.x, 12, e.y);
+                s.scene.add(m);
+                s.projectiles.push({ x: e.x, y: e.y, dx: Math.cos(spreadAngle) * 9, dy: Math.sin(spreadAngle) * 9, mesh: m, isEnemy: true, damage: 18, colorHex: '#00e5ff' });
+              }
+              playSound('shoot');
+            } else if (e.isElite && e.elite.ability === 'blinding_volley') {
+              for (let aOffset of [-0.3, 0, 0.3]) {
+                const spreadAngle = angle + aOffset;
+                const m = new THREE.Mesh(new THREE.SphereGeometry(4.5, 6, 6), new THREE.MeshBasicMaterial({ color: 0xffab00 }));
+                m.position.set(e.x, 12, e.y);
+                s.scene.add(m);
+                s.projectiles.push({ x: e.x, y: e.y, dx: Math.cos(spreadAngle) * 8.5, dy: Math.sin(spreadAngle) * 8.5, mesh: m, isEnemy: true, damage: 20, colorHex: '#ffab00' });
+              }
+              playSound('shoot');
+            } else if (e.isElite && e.elite.ability === 'meteor_burst') {
+              const m = new THREE.Mesh(new THREE.SphereGeometry(7, 8, 8), new THREE.MeshBasicMaterial({ color: 0xff007f }));
+              m.position.set(e.x, 15, e.y);
+              s.scene.add(m);
+              s.projectiles.push({ x: e.x, y: e.y, dx: Math.cos(angle) * 7, dy: Math.sin(angle) * 7, mesh: m, isEnemy: true, damage: 26, radius: 14, colorHex: '#ff007f' });
+              playSound('shoot');
+            } else if (e.isElite && e.elite.ability === 'solar_flare') {
+              const m = new THREE.Mesh(new THREE.SphereGeometry(7.5, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffea00 }));
+              m.position.set(e.x, 15, e.y);
+              s.scene.add(m);
+              s.projectiles.push({ x: e.x, y: e.y, dx: Math.cos(angle) * 7.5, dy: Math.sin(angle) * 7.5, mesh: m, isEnemy: true, damage: 28, radius: 15, colorHex: '#ffea00' });
+              playSound('shoot');
+            } else if (e.isElite && e.elite.ability === 'dragon_breath') {
+              for (let aOffset of [-0.15, 0.15]) {
+                const spreadAngle = angle + aOffset;
+                const m = new THREE.Mesh(new THREE.SphereGeometry(5.5, 6, 6), new THREE.MeshBasicMaterial({ color: 0xd50000 }));
+                m.position.set(e.x, 20, e.y);
+                s.scene.add(m);
+                s.projectiles.push({ x: e.x, y: e.y, dx: Math.cos(spreadAngle) * 8, dy: Math.sin(spreadAngle) * 8, mesh: m, isEnemy: true, damage: 24, colorHex: '#d50000' });
+              }
+              playSound('shoot');
+            } else {
+              const m = new THREE.Mesh(new THREE.SphereGeometry(4, 4, 4), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
+              m.position.set(e.x, 10, e.y);
+              s.scene.add(m);
+              s.projectiles.push({ x: e.x, y: e.y, dx: Math.cos(angle) * 8, dy: Math.sin(angle) * 8, mesh: m, isEnemy: true, damage: 12 });
+              playSound('shoot');
+            }
           }
         } else {
           e.dx = Math.cos(angle) * speed;
@@ -1018,23 +1378,37 @@ export function updateEnemies(dt) {
       if (l['arm-right']) l['arm-right'].rotation.x = 0;
     }
     e.mesh.position.y += (meshYTarget - e.mesh.position.y) * Math.min(dt * 8, 1);
-    e.hpGroup.position.set(e.x, e.mesh.position.y + 90, e.y);
+    e.hpGroup.position.set(e.x, e.mesh.position.y + (e.isElite ? 105 : 90), e.y);
     e.hpGroup.lookAt(s.camera.position);
 
+    const barW = e.hpBarWidth || 24;
     const hpPercent = Math.max(0, e.hp / e.maxHp);
     e.hpFg.scale.x = Math.max(0.001, hpPercent);
-    e.hpFg.position.x = -(24 - (24 * hpPercent)) / 2;
+    e.hpFg.position.x = -(barW - (barW * hpPercent)) / 2;
+
+    if (e.isElite) {
+      if (e.auraMesh) e.auraMesh.rotation.z += 0.04 * dt;
+      if (e.crownMesh) {
+        e.crownMesh.rotation.y += 0.06 * dt;
+        e.crownMesh.rotation.x += 0.03 * dt;
+        e.crownMesh.position.y = (e.isFlying ? 42 : 32) + Math.sin(Date.now() / 250) * 2;
+      }
+    }
 
     // Collision with player
     if (distToPlayer < s.player.r + e.r && e.hp > 0) {
       if (e.type === 'kamikaze') {
-        spawnParticles(e.x, e.y, 0xff8800, 50, 'death');
+        const isElite = e.isElite;
+        const blastDmg = isElite ? 45 : 20;
+        spawnParticles(e.x, e.y, isElite ? 0xff3d00 : 0xff8800, isElite ? 80 : 50, 'death');
         playSound('hit');
-        s.player.hp = Math.max(0, s.player.hp - 20);
+        if (isElite) s.cameraShake = Math.max(s.cameraShake || 0, 22);
+        s.player.hp = Math.max(0, s.player.hp - blastDmg);
+        spawnDamageText(s.player.x, 30, s.player.y, `-${blastDmg}`, '#ff0000');
         e.hp = 0;
         s.scene.remove(e.mesh); s.scene.remove(e.hpGroup);
         s.enemies.splice(idx, 1);
-        if (s.player.hp <= 0) teleportToHometown('Anda pingsan! Terlempar kembali ke Kota.');
+        if (s.player.hp <= 0) teleportToHometown('Ledakan musuh mengakhiri petualanganmu!');
       }
     }
 

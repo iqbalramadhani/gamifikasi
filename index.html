@@ -10,32 +10,28 @@
   <div id="wrap">
     <!-- Navbar (HUD) -->
     <div id="hud">
-      <div class="title-nav">⚔️ The Lost Kingdom 3D</div>
-      <div class="badge">❤️ HP: <span id="hp">100/100</span></div>
-      <div class="badge">⚔️ ATK: <span id="atk">1</span></div>
-      <div class="badge" style="background: rgba(255, 200, 0, 0.5); border-color: #f1c40f;">✦ Crit: <span id="crit-chance">5.0%</span></div>
-      <div class="badge">
-        ⚡ SP: <span id="stamina-text">100/100</span>
-        <div style="width: 100px; height: 5px; background: #555; margin-top: 5px; border-radius: 2px; overflow: hidden;">
-          <div id="stamina-bar" style="width: 100%; height: 100%; background: #f1c40f; transition: width 0.1s;"></div>
+      <div class="hud-left">
+        <div class="title-nav">⚔️ The Lost Kingdom</div>
+        <div class="badge badge-hp">❤️ HP: <span id="hp">100/100</span></div>
+        <div class="badge badge-sp">
+          ⚡ SP: <span id="stamina-text">100/100</span>
+          <div class="stamina-bar-container">
+            <div id="stamina-bar"></div>
+          </div>
         </div>
+        <div class="badge badge-lv">⭐ Lv <span id="player-level">1</span> (<span id="exp">0</span>/<span id="max-exp">20</span>)</div>
+        <div class="badge badge-gold">💰 <span id="gold">0</span></div>
+        <div class="badge badge-potion">🧪 <span id="nav-potions">0</span></div>
+        <div class="badge badge-bounty" id="side-quest-badge" style="display:none;">📜 Bounty: <span id="side-quest-text"></span></div>
       </div>
-      <div class="badge" style="background: rgba(0, 50, 150, 0.6); border-color: #3498db;">⭐ Lv <span id="player-level">1</span> (EXP: <span id="exp">0</span>/<span id="max-exp">20</span>)</div>
-      <div class="badge">💰 Gold: <span id="gold">0</span></div>
-      <div class="badge" style="background: rgba(192, 57, 43, 0.6); border-color: #e74c3c;">🧪 Potion: <span id="nav-potions">0</span></div>
+      
+      <div class="hud-right">
+        <button class="nav-btn nav-btn-inventory" onclick="openInventory()">🎒 Tas</button>
+        <button class="nav-btn nav-btn-stats" onclick="openStats()">📊 Stats <span id="stat-notif" style="display:none; background:red; padding:1px 5px; border-radius:50%; font-size:11px;">!</span></button>
+        <button class="nav-btn nav-btn-quest" onclick="openQuestBoard()">📜 Misi (J)</button>
+        <button class="nav-btn nav-btn-menu" onclick="openSettings()">⚙️ Menu</button>
+      </div>
 
-      <div class="badge" id="side-quest-badge" style="display:none; background: #8e44ad; border-color: #9b59b6;">📜 Bounty: <span id="side-quest-text"></span></div>
-      <div class="badge" id="zoom-badge" style="background: rgba(46, 204, 113, 0.6); border-color: #2ecc71;">🔍 Zoom: <span id="val-cam-z-hud">200</span></div>
-      <div class="badge" style="background: rgba(100, 100, 100, 0.6); border-color: #888;">🖥️ FPS: <span id="fps">60</span></div>
-      
-      <button onclick="saveGame()" style="margin-left: 15px; padding: 5px 15px; background-color: #27ae60; color: white; border: 2px solid #2ecc71; border-radius: 5px; font-weight: bold; cursor: pointer; text-shadow: 1px 1px 2px black; box-shadow: 0px 0px 10px rgba(46,204,113,0.5);">💾 Save Game</button>
-      <span id="save-status" style="margin-left: 10px; color: #f1c40f; font-weight: bold; text-shadow: 1px 1px 2px black;"></span>
-      <button onclick="openInventory()" style="margin-left: 15px; padding: 5px 15px; background-color: #e67e22; color: white; border: 2px solid #d35400; border-radius: 5px; font-weight: bold; cursor: pointer; text-shadow: 1px 1px 2px black; box-shadow: 0px 0px 10px rgba(230,126,34,0.5);">🎒 Tas</button>
-      <button onclick="openQuestBoard()" style="margin-left: 15px; padding: 5px 15px; background-color: #f39c12; color: white; border: 2px solid #e67e22; border-radius: 5px; font-weight: bold; cursor: pointer; text-shadow: 1px 1px 2px black; box-shadow: 0px 0px 10px rgba(243,156,18,0.5);">📜 Misi (J)</button>
-      <button onclick="openStats()" style="margin-left: 15px; padding: 5px 15px; background-color: #9b59b6; color: white; border: 2px solid #8e44ad; border-radius: 5px; font-weight: bold; cursor: pointer; text-shadow: 1px 1px 2px black; box-shadow: 0px 0px 10px rgba(155,89,182,0.5);">📊 Stats <span id="stat-notif" style="display:none; background:red; padding:2px 5px; border-radius:50%; font-size:12px;">!</span></button>
-      <button onclick="openTutorial()" style="margin-left: 15px; padding: 5px 15px; background-color: #2980b9; color: white; border: 2px solid #3498db; border-radius: 5px; font-weight: bold; cursor: pointer; text-shadow: 1px 1px 2px black; box-shadow: 0px 0px 10px rgba(52,152,219,0.5);">📖 Cara Main</button>
-      <button onclick="openSettings()" style="margin-left: 15px; padding: 5px 15px; background-color: #34495e; color: white; border: 2px solid #2c3e50; border-radius: 5px; font-weight: bold; cursor: pointer; text-shadow: 1px 1px 2px black; box-shadow: 0px 0px 10px rgba(44,62,80,0.5);">⚙️ Settings</button>
-      
       <canvas id="minimap" width="150" height="150"></canvas>
     </div>
     
@@ -75,32 +71,49 @@
       </div>
     </div>
     <div id="settings-menu" style="display: none; position: fixed; top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);z-index:999;align-items:center;justify-content:center;">
-      <div class="box" style="background:#222; border:2px solid #555; padding:20px; color:white; width: 300px;">
-        <h2 style="color: #f1c40f; margin-bottom: 20px;">⚙️ Camera Settings</h2>
-        <div style="margin-bottom: 15px;">
-          <label>Height (Y): <span id="val-cam-y">150</span></label><br>
-          <input type="range" id="cam-y" min="50" max="400" value="150" oninput="updateCameraSettings()" style="width: 100%;">
+      <div class="box" style="background:#222; border:2px solid #555; padding:20px; color:white; width: 340px; max-width: 90vw;">
+        <h2 style="color: #f1c40f; margin-bottom: 15px; text-align: center;">⚙️ MENU & PENGATURAN</h2>
+        
+        <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+          <button class="ui-btn" onclick="saveGame()" style="flex: 1; padding: 10px 8px; background: #27ae60; font-size: 14px; font-weight: bold;">💾 Simpan Game</button>
+          <button class="ui-btn" onclick="closeSettings(); openTutorial();" style="flex: 1; padding: 10px 8px; background: #2980b9; font-size: 14px; font-weight: bold;">📖 Cara Main</button>
         </div>
-        <div style="margin-bottom: 15px;">
-          <label>Distance (Z): <span id="val-cam-z">200</span></label><br>
-          <input type="range" id="cam-z" min="50" max="500" value="200" oninput="updateCameraSettings()" style="width: 100%;">
+        <div id="save-status" style="min-height: 18px; font-size: 13px; text-align: center; color: #f1c40f; font-weight: bold; margin-bottom: 10px;"></div>
+
+        <div style="border-top: 1px solid #444; padding-top: 10px;">
+          <h3 style="color: #3498db; margin: 0 0 10px; font-size: 14px;">🎥 Pengaturan Kamera</h3>
+          <div style="margin-bottom: 10px;">
+            <label style="font-size: 13px;">Height (Y): <span id="val-cam-y">150</span></label><br>
+            <input type="range" id="cam-y" min="50" max="400" value="150" oninput="updateCameraSettings()" style="width: 100%;">
+          </div>
+          <div style="margin-bottom: 10px;">
+            <label style="font-size: 13px;">Distance (Z): <span id="val-cam-z">200</span></label><br>
+            <input type="range" id="cam-z" min="50" max="500" value="200" oninput="updateCameraSettings()" style="width: 100%;">
+          </div>
+          <div style="margin-bottom: 10px;">
+            <label style="font-size: 13px;">Look Angle (Y): <span id="val-cam-look">10</span></label><br>
+            <input type="range" id="cam-look" min="-50" max="100" value="10" oninput="updateCameraSettings()" style="width: 100%;">
+          </div>
         </div>
-        <div style="margin-bottom: 15px;">
-          <label>Look Angle (Y): <span id="val-cam-look">10</span></label><br>
-          <input type="range" id="cam-look" min="-50" max="100" value="10" oninput="updateCameraSettings()" style="width: 100%;">
-        </div>
-        <div style="border-top: 1px solid #444; padding-top: 15px;">
-          <h3 style="color: #f1c40f; margin: 0 0 10px; font-size: 15px;">⚙️ Auto-Use Potion</h3>
-          <div style="margin-bottom: 15px;">
-            <label>🧪 Auto-Heal saat HP ≤ <span id="val-auto-health">50</span>%</label><br>
+
+        <div style="border-top: 1px solid #444; padding-top: 10px;">
+          <h3 style="color: #f1c40f; margin: 0 0 10px; font-size: 14px;">⚙️ Auto-Use Potion</h3>
+          <div style="margin-bottom: 10px;">
+            <label style="font-size: 13px;">🧪 Auto-Heal saat HP ≤ <span id="val-auto-health">50</span>%</label><br>
             <input type="range" id="set-auto-health" min="0" max="100" value="50" step="5" oninput="updateAutoUseSettings()" style="width: 100%;">
           </div>
-          <div style="margin-bottom: 15px;">
-            <label>⚡ Auto-SP saat Stamina ≤ <span id="val-auto-sp">30</span>%</label><br>
+          <div style="margin-bottom: 10px;">
+            <label style="font-size: 13px;">⚡ Auto-SP saat Stamina ≤ <span id="val-auto-sp">30</span>%</label><br>
             <input type="range" id="set-auto-sp" min="0" max="100" value="30" step="5" oninput="updateAutoUseSettings()" style="width: 100%;">
           </div>
         </div>
-        <button class="ui-btn" onclick="closeSettings()" style="margin-top:15px; width: 100%; padding: 10px; background: #e74c3c;">Tutup</button>
+
+        <div style="display: flex; justify-content: space-between; font-size: 11px; color: #888; margin-top: 10px; padding: 6px 10px; background: rgba(0,0,0,0.4); border-radius: 4px;">
+          <span>🖥️ FPS: <span id="fps" style="color:#fff;">60</span></span>
+          <span id="zoom-badge">🔍 Zoom: <span id="val-cam-z-hud" style="color:#fff;">200</span></span>
+        </div>
+
+        <button class="ui-btn" onclick="closeSettings()" style="margin-top:12px; width: 100%; padding: 8px; background: #555;">Tutup Menu</button>
       </div>
     </div>
     <div id="pause-menu">
@@ -121,6 +134,18 @@
       <div class="modal-content" style="color: #ddd; width: 400px; padding: 20px;">
         <h2 style="color:#f1c40f; margin-bottom: 5px;">📊 KARAKTER STATUS</h2>
         <p style="font-size: 18px; color: #aaa; margin-top: 0;">Stat Points: <span id="stat-points" style="color: #fff; font-weight: bold; font-size: 24px;">0</span></p>
+
+        <!-- Combat Stats Overview -->
+        <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+           <div style="flex: 1; background: rgba(231,76,60,0.15); border: 1px solid #e74c3c; border-radius: 6px; padding: 8px; text-align: center;">
+             <div style="font-size: 12px; color: #aaa;">⚔️ ATK Damage</div>
+             <div style="font-size: 20px; font-weight: bold; color: #e74c3c;"><span id="atk">1</span></div>
+           </div>
+           <div style="flex: 1; background: rgba(241,196,15,0.15); border: 1px solid #f1c40f; border-radius: 6px; padding: 8px; text-align: center;">
+             <div style="font-size: 12px; color: #aaa;">✦ Crit Chance</div>
+             <div style="font-size: 20px; font-weight: bold; color: #f1c40f;"><span id="crit-chance">5.0%</span></div>
+           </div>
+        </div>
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; background: #333; padding: 10px; border-radius: 5px;">
            <div style="text-align: left;"><h3 style="margin:0; color:#e74c3c;">💪 Strength (STR)</h3><small>Menambah Attack Damage</small></div>
            <div><span id="stat-str" style="font-size:20px; font-weight:bold; margin-right: 15px;">1</span><button onclick="addStat('str')" style="background:#e74c3c; width: 40px; font-size: 20px;">+</button></div>

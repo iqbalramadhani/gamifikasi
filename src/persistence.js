@@ -56,7 +56,7 @@ export function saveGame(isAuto = false) {
     critChance: s.critChance,
     critMultiplier: s.critMultiplier,
     questStage: s.questStage,
-    questCompleted: s.questCompleted,
+    questCompleted: JSON.stringify(s.questCompleted),
     autoHealThreshold: s.autoHealThreshold,
     autoSPThreshold: s.autoSPThreshold,
   };
@@ -242,7 +242,13 @@ export function loadGame() {
       s.autoHealThreshold = d.autoHealThreshold ?? 50;
       s.autoSPThreshold = d.autoSPThreshold ?? 30;
       s.questStage = d.questStage ?? 0;
-      s.questCompleted = d.questCompleted ?? [];
+      
+      try {
+        s.questCompleted = d.questCompleted ? JSON.parse(d.questCompleted) : [];
+        if (!Array.isArray(s.questCompleted)) s.questCompleted = [];
+      } catch(e) {
+        s.questCompleted = [];
+      }
 
       // Restore equipment colors on loaded meshes
       if (s.playerBladeMat && weaponList[s.currentWeapon]) {

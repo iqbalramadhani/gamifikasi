@@ -144,6 +144,8 @@ export const state = {
   shopNPC: null,
   healerNPC: null,
   blacksmithNPC: null,
+  autoWalkTarget: null,
+  waypointMesh: null,
 
   // BGM flag
   bgmStarted: false,

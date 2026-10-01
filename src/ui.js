@@ -3,7 +3,7 @@ import { state } from './state.js';
 import { mapSize, weaponList, armorList, helmetList, bootList, lootTable, consumableItems, WILDS2_MIN_LEVEL } from './constants.js';
 import { playSound } from './audio.js';
 import { blocked, spawnParticles, checkItems } from './helpers.js';
-import { updatePortalAnimations } from './scenes.js';
+import { updatePortalAnimations, getTerrainHeight, getTerrainHeightWilds2 } from './scenes.js';
 
 
 // ─── UI throttled update ──────────────────────────────────────────────────────
@@ -106,8 +106,13 @@ export function drawMinimap() {
   const ctx = mm.getContext('2d');
   ctx.clearRect(0, 0, 150, 150);
 
-  const scale = 150 / mapSize;
   const s = state;
+  const cx = 75, cy = 75;          // center = player
+  const range = 1500;               // world units shown at canvas edge
+  const scale = 150 / (range * 2);  // map units → px, player-centered
+  // World (x,z) → minimap px, offset so player sits at center
+  const mx = x => cx + (x - s.player.x) * scale;
+  const mz = z => cy + (z - s.player.y) * scale;
 
   // Background — hometown is green, The Wilds is dark forest green,
   // Scorched Dunes (wilds2) is sandy/tan.
@@ -121,40 +126,40 @@ export function drawMinimap() {
   // the same coordinates point to the pyramid in wilds2.
   if (s.currentScene !== 'wilds2') {
     ctx.fillStyle = '#ffd700';
-    ctx.fillRect((mapSize / 2) * scale - 3, (mapSize / 2) * scale - 3, 6, 6);
+    ctx.fillRect(mx(mapSize / 2) - 3, mz(mapSize / 2) - 3, 6, 6);
   }
 
   // Portals
   if (s.hometownPortal) {
     ctx.fillStyle = '#00ffff';
-    ctx.fillRect(s.hometownPortal.position.x * scale - 3, s.hometownPortal.position.z * scale - 3, 6, 6);
+    ctx.fillRect(mx(s.hometownPortal.position.x) - 3, mz(s.hometownPortal.position.z) - 3, 6, 6);
   }
   if (s.wildsPortal) {
     ctx.fillStyle = '#ff00ff';
-    ctx.fillRect(s.wildsPortal.position.x * scale - 3, s.wildsPortal.position.z * scale - 3, 6, 6);
+    ctx.fillRect(mx(s.wildsPortal.position.x) - 3, mz(s.wildsPortal.position.z) - 3, 6, 6);
   }
   // Desert portals — orange
   if (s.desertPortalWilds && s.currentScene !== 'wilds2') {
     ctx.fillStyle = '#ff8800';
-    ctx.fillRect(s.desertPortalWilds.position.x * scale - 3, s.desertPortalWilds.position.z * scale - 3, 6, 6);
+    ctx.fillRect(mx(s.desertPortalWilds.position.x) - 3, mz(s.desertPortalWilds.position.z) - 3, 6, 6);
   }
   if (s.desertPortalWilds2 && s.currentScene === 'wilds2') {
     ctx.fillStyle = '#ff8800';
-    ctx.fillRect(s.desertPortalWilds2.position.x * scale - 3, s.desertPortalWilds2.position.z * scale - 3, 6, 6);
+    ctx.fillRect(mx(s.desertPortalWilds2.position.x) - 3, mz(s.desertPortalWilds2.position.z) - 3, 6, 6);
   }
 
   // Nearby enemies (max 15 for performance)
   const nearby = s.enemies
-    .filter(e => Math.hypot(e.x - s.player.x, e.y - s.player.y) < 1500)
+    .filter(e => Math.hypot(e.x - s.player.x, e.y - s.player.y) < range)
     .sort((a, b) => Math.hypot(a.x - s.player.x, a.y - s.player.y) - Math.hypot(b.x - s.player.x, b.y - s.player.y))
     .slice(0, 15);
   ctx.fillStyle = '#ff4444';
-  nearby.forEach(e => ctx.fillRect(e.x * scale - 1.5, e.y * scale - 1.5, 3, 3));
+  nearby.forEach(e => ctx.fillRect(mx(e.x) - 1.5, mz(e.y) - 1.5, 3, 3));
 
   // Boss
   if (s.bossActive) {
     ctx.fillStyle = '#ff0000';
-    ctx.fillRect(s.bossX * scale - 5, s.bossY * scale - 5, 10, 10);
+    ctx.fillRect(mx(s.bossX) - 5, mz(s.bossY) - 5, 10, 10);
   }
 
   // NPCs (shop, healer, blacksmith)
@@ -162,12 +167,23 @@ export function drawMinimap() {
   [s.shopNPC, s.healerNPC, s.blacksmithNPC].forEach(npc => {
     if (npc && npc.position) {
       ctx.fillStyle = npcColor;
-      ctx.fillRect(npc.position.x * scale - 2, npc.position.z * scale - 2, 4, 4);
+      ctx.fillRect(mx(npc.position.x) - 2, mz(npc.position.z) - 2, 4, 4);
     }
   });
 
+  // Auto-walk waypoint
+  if (s.autoWalkTarget) {
+    ctx.fillStyle = '#00ff88';
+    ctx.beginPath();
+    ctx.arc(mx(s.autoWalkTarget.x), mz(s.autoWalkTarget.y), 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0, 255, 136, 0.5)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
   // Player (centered, always)
-  const px = 75, py = 75;
+  const px = cx, py = cy;
   ctx.fillStyle = '#ffffff';
   ctx.beginPath();
   ctx.arc(px, py, 4, 0, Math.PI * 2);
@@ -1343,11 +1359,54 @@ export function closeFullMap() {
   document.getElementById('full-map-modal').style.display = 'none';
 }
 
+export function setAutoWalkTarget(x, y) {
+  const s = state;
+  if (!s.scene || !s.isGameStarted || s.gameOver) return;
+
+  if (s.autoWalkTarget) {
+    s.autoWalkTarget.x = x;
+    s.autoWalkTarget.y = y;
+  } else {
+    s.autoWalkTarget = { x, y };
+    s.waypointMesh = new THREE.Mesh(
+      new THREE.RingGeometry(14, 18, 24),
+      new THREE.MeshBasicMaterial({
+        color: 0x00ff88,
+        transparent: true,
+        opacity: 0.85,
+        side: THREE.DoubleSide,
+      })
+    );
+    s.waypointMesh.rotation.x = -Math.PI / 2;
+    s.scene.add(s.waypointMesh);
+  }
+
+  const terrainY = s.currentScene === 'wilds2'
+    ? getTerrainHeightWilds2(x, y)
+    : getTerrainHeight(x, y);
+  s.waypointMesh.position.set(x, 4 + terrainY, y);
+  if (typeof drawMinimap === 'function') drawMinimap();
+
+  const msgEl = document.getElementById('message');
+  if (msgEl) msgEl.textContent = `🏃 Otomatis berjalan ke tujuan di peta...`;
+}
+
+export function clearAutoWalkTargetUI() {
+  state.autoWalkTarget = null;
+  if (state.waypointMesh) {
+    state.scene?.remove(state.waypointMesh);
+    state.waypointMesh.geometry?.dispose?.();
+    state.waypointMesh.material?.dispose?.();
+    state.waypointMesh = null;
+  }
+  if (typeof drawMinimap === 'function') drawMinimap();
+}
+
 export function drawFullMap() {
   const canvas = document.getElementById('fullmap-canvas');
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
-  
+
   const mapWidth = 600;
   const mapHeight = 600;
   ctx.clearRect(0, 0, mapWidth, mapHeight);
@@ -1402,13 +1461,52 @@ export function drawFullMap() {
   ctx.arc(px, py, 6, 0, Math.PI * 2);
   ctx.fill();
   
-  // Direction indicator
-  const dirLen = 12;
-  const dirAngle = Math.atan2(s.player.facingX, s.player.facingY);
-  ctx.strokeStyle = '#ffffff';
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(px, py);
-  ctx.lineTo(px + Math.sin(dirAngle) * dirLen, py - Math.cos(dirAngle) * dirLen);
-  ctx.stroke();
+    // Auto-walk waypoint
+  if (s.autoWalkTarget) {
+    const wx = s.autoWalkTarget.x * scale;
+    const wy = s.autoWalkTarget.y * scale;
+    ctx.strokeStyle = '#00ff88';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(wx, wy, 10, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = '#00ff88';
+    ctx.beginPath();
+    ctx.arc(wx, wy, 4, 0, Math.PI * 2);
+    ctx.fill();
+    // Dashed line from player to waypoint
+    ctx.setLineDash([6, 4]);
+    ctx.strokeStyle = 'rgba(0,255,136,0.5)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(px, py);
+    ctx.lineTo(wx, wy);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // Click instruction
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.font = '12px sans-serif';
+  ctx.fillText('Klik peta untuk menandai tujuan auto-walk', 10, mapHeight - 10);
+}
+
+// Wire full-map canvas click to set auto-walk target
+{
+  const canvas = document.getElementById('fullmap-canvas');
+  if (canvas) {
+    canvas.addEventListener('click', e => {
+      const s = state;
+      if (!s.isGameStarted || s.gameOver) return;
+
+      const rect = canvas.getBoundingClientRect();
+      const scale = 600 / mapSize; // same scale used in drawFullMap
+
+      const clickX = (e.clientX - rect.left) / scale;
+      const clickY = (e.clientY - rect.top) / scale;
+
+      setAutoWalkTarget(clickX, clickY);
+      drawFullMap();
+    });
+  }
 }
