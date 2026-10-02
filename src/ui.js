@@ -452,7 +452,7 @@ export function checkInteractions() {
 
   if (s.currentScene === 'hometown') {
     const distShop = Math.hypot(s.player.x - s.shopNPC.position.x, s.player.y - s.shopNPC.position.z);
-    if (distShop < 50) {
+    if (distShop < 65) {
       interactText = 'Tekan [F] untuk Bicara';
       if (s.keys.f && !s.shopOpen && s.shopCooldown === 0) {
         s.shopCooldown = 30;
@@ -462,7 +462,7 @@ export function checkInteractions() {
     }
 
     const distHeal = Math.hypot(s.player.x - s.healerNPC.position.x, s.player.y - s.healerNPC.position.z);
-    if (distHeal < 50) {
+    if (distHeal < 65) {
       interactText = 'Tekan [F] untuk Bicara';
       if (s.keys.f && s.shopCooldown === 0) {
         s.shopCooldown = 30;
@@ -482,7 +482,7 @@ export function checkInteractions() {
     }
 
     const distPortal = Math.hypot(s.player.x - s.hometownPortal.position.x, s.player.y - s.hometownPortal.position.z);
-    if (distPortal < 50) {
+    if (distPortal < 60) {
       interactText = 'Tekan [F] masuk ke The Wilds';
       if (s.keys.f) {
         // Directly teleport without shop cooldown gating
@@ -495,7 +495,7 @@ export function checkInteractions() {
 
     if (s.blacksmithNPC) {
       const distBS = Math.hypot(s.player.x - s.blacksmithNPC.position.x, s.player.y - s.blacksmithNPC.position.z);
-      if (distBS < 50) {
+      if (distBS < 65) {
         interactText = 'Tekan [F] untuk Bicara';
         if (s.keys.f && !s.blacksmithOpen && s.shopCooldown === 0) {
           s.shopCooldown = 30;
@@ -507,12 +507,42 @@ export function checkInteractions() {
 
     if (s.questBoardPos) {
       const distQB = Math.hypot(s.player.x - s.questBoardPos.x, s.player.y - s.questBoardPos.z);
-      if (distQB < 50) {
+      if (distQB < 65) {
         interactText = 'Tekan [F] Papan Misi';
         if (s.keys.f && s.shopCooldown === 0) {
           s.shopCooldown = 30;
           s.keys.f = false;
           openQuestBoard();
+        }
+      }
+    }
+
+    // Village Inn / Tavern
+    if (s.innSignPos) {
+      const distInn = Math.hypot(s.player.x - s.innSignPos.x, s.player.y - s.innSignPos.z);
+      if (distInn < 70) {
+        interactText = 'Tekan [F] Istirahat di Penginapan (Pulihkan HP & SP)';
+        if (s.keys.f && s.shopCooldown === 0) {
+          s.shopCooldown = 40;
+          s.keys.f = false;
+          restAtInn();
+        }
+      }
+    }
+
+    // Wandering Villagers
+    if (s.villagers && s.villagers.length) {
+      for (const v of s.villagers) {
+        const distV = Math.hypot(s.player.x - v.x, s.player.y - v.z);
+        if (distV < 60) {
+          interactText = `Tekan [F] Bicara dengan ${v.name}`;
+          if (s.keys.f && s.shopCooldown === 0) {
+            s.shopCooldown = 30;
+            s.keys.f = false;
+            const quote = v.speech[Math.floor(Math.random() * v.speech.length)];
+            startDialogue(`${v.name} (${v.role})`, quote, () => {});
+            break;
+          }
         }
       }
     }
@@ -565,7 +595,91 @@ export function checkInteractions() {
     if (interactText !== '') msgEl.textContent = interactText;
     else if (msgEl.textContent.startsWith('Tekan [F]')) msgEl.textContent = '';
   }
+
+  updateSpeechBubbles();
 }
+
+let currentBubbleNpc = null;
+export function updateSpeechBubbles() {
+  const s = state;
+  const bubbleContainer = document.getElementById('speech-bubbles-layer');
+  if (!bubbleContainer) return;
+
+  if (s.currentScene !== 'hometown' || !s.camera) {
+    bubbleContainer.innerHTML = '';
+    currentBubbleNpc = null;
+    return;
+  }
+
+  // Find nearest villager or NPC within 85 units
+  let nearest = null;
+  let minDist = 85;
+
+  if (s.villagers) {
+    for (const v of s.villagers) {
+      const d = Math.hypot(s.player.x - v.x, s.player.y - v.z);
+      if (d < minDist) {
+        minDist = d;
+        nearest = v;
+      }
+    }
+  }
+
+  if (nearest) {
+    const v3 = new THREE.Vector3(nearest.x, 60, nearest.z);
+    v3.project(s.camera);
+    const sx = (v3.x * 0.5 + 0.5) * window.innerWidth;
+    const sy = (-(v3.y * 0.5) + 0.5) * window.innerHeight;
+
+    if (v3.z < 1) { // in front of camera
+      if (currentBubbleNpc !== nearest.id) {
+        currentBubbleNpc = nearest.id;
+        const quote = nearest.speech[0];
+        bubbleContainer.innerHTML = `
+          <div class="npc-speech-bubble" style="left:${sx}px; top:${sy}px;">
+            <div class="bubble-speaker">💬 ${nearest.name}</div>
+            <div class="bubble-text">"${quote}"</div>
+          </div>
+        `;
+      } else {
+        const bubble = bubbleContainer.querySelector('.npc-speech-bubble');
+        if (bubble) {
+          bubble.style.left = `${sx}px`;
+          bubble.style.top = `${sy}px`;
+        }
+      }
+      return;
+    }
+  }
+
+  currentBubbleNpc = null;
+  bubbleContainer.innerHTML = '';
+}
+
+export function restAtInn() {
+  const s = state;
+  const overlay = document.getElementById('rest-screen-overlay');
+  if (overlay) {
+    overlay.style.opacity = '1';
+  }
+  playSound('rest');
+
+  setTimeout(() => {
+    s.player.hp = s.player.maxHp;
+    s.player.stamina = s.player.maxStamina;
+    if (s.player.statusEffect) s.player.statusEffect = null;
+    updateUI();
+
+    const msgEl = document.getElementById('message');
+    if (msgEl) msgEl.textContent = '🛏️ Kamu bangun dengan tubuh segar bugar di Penginapan!';
+    spawnDamageText(s.player.x, 35, s.player.y, '💚 HP & STAMINA PULIH PENUH! 💤', '#2ecc71');
+
+    setTimeout(() => {
+      if (overlay) overlay.style.opacity = '0';
+    }, 500);
+  }, 700);
+}
+window.restAtInn = restAtInn;
 
 // ─── Shop ──────────────────────────────────────────────────────────────────────
 

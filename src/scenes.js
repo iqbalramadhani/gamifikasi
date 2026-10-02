@@ -8,6 +8,7 @@ import { mapSize } from './constants.js';
 import { loadedModels } from './model-loader.js';
 import { spawnEnemy, spawnEnemy2 } from './combat.js';
 import { scatterInteractables } from './landmarks.js';
+import { playSound } from './audio.js';
 
 export function getTerrainHeight(x, y) {
   // Area kota (Hometown) harus sepenuhnya datar
@@ -391,16 +392,16 @@ export function initHometown() {
       for (let dz = -3; dz <= 3; dz++) {
         if (Math.hypot(dx, dz) > 3.5) continue;
         const dirt = SkeletonUtils.clone(loadedModels.patch_dirt);
-        dirt.scale.set(30, 30, 30);
-        const px = hx + dx * 65;
-        const pz = hy + dz * 65;
+        dirt.scale.set(45, 45, 45);
+        const px = hx + dx * 75;
+        const pz = hy + dz * 75;
         dirt.position.set(px, -2.8, pz);
         s.hometownGroup.add(dirt);
       }
     }
   } else {
     const plazaMesh = new THREE.Mesh(
-      new THREE.CircleGeometry(250, 32),
+      new THREE.CircleGeometry(320, 32),
       new THREE.MeshLambertMaterial({ color: 0x6e6e6e })
     );
     plazaMesh.rotation.x = -Math.PI / 2;
@@ -411,13 +412,13 @@ export function initHometown() {
   // Dirt paths connecting plaza to buildings
   if (loadedModels.patch_dirt) {
     function addPath(startX, startZ, endX, endZ) {
-      const steps = Math.round(Math.hypot(endX - startX, endZ - startZ) / 30);
+      const steps = Math.round(Math.hypot(endX - startX, endZ - startZ) / 42);
       for (let i = 1; i <= steps; i++) {
         const t = i / steps;
         const px = startX + (endX - startX) * t;
         const pz = startZ + (endZ - startZ) * t;
         const dirt = SkeletonUtils.clone(loadedModels.patch_dirt);
-        dirt.scale.set(30, 30, 30);
+        dirt.scale.set(45, 45, 45);
         dirt.position.set(px, -2.8, pz);
         dirt.rotation.y = Math.atan2(endX - startX, endZ - startZ);
         s.hometownGroup.add(dirt);
@@ -443,60 +444,77 @@ export function initHometown() {
     addPath(hx, hy, hx, hy - 400);
   }
 
-  // Fountain
+  // Fountain (Grand 2-Tier Central Plaza Fountain)
   const fountainMat = new THREE.MeshLambertMaterial({ color: 0xaaaaaa });
   const fountain = new THREE.Mesh(
-    new THREE.CylinderGeometry(30, 35, 10, 16), fountainMat
+    new THREE.CylinderGeometry(56, 64, 18, 24), fountainMat
   );
-  fountain.position.set(hx, 5, hy);
+  fountain.position.set(hx, 9, hy);
   s.hometownGroup.add(fountain);
 
   const waterMat = new THREE.MeshLambertMaterial({
     color: 0x00aaff, transparent: true, opacity: 0.8,
   });
   const water = new THREE.Mesh(
-    new THREE.CylinderGeometry(28, 28, 2, 16), waterMat
+    new THREE.CylinderGeometry(52, 52, 3, 24), waterMat
   );
-  water.position.set(hx, 10, hy);
+  water.position.set(hx, 17, hy);
   s.hometownGroup.add(water);
 
   const pillar = new THREE.Mesh(
-    new THREE.CylinderGeometry(5, 5, 25, 8), fountainMat
+    new THREE.CylinderGeometry(8, 10, 45, 12), fountainMat
   );
-  pillar.position.set(hx, 15, hy);
+  pillar.position.set(hx, 25, hy);
   s.hometownGroup.add(pillar);
-  s.obstaclesHometown.push({ x: hx, y: hy, r: 35, h: 30 });
 
-  // Extra decorations: stones, plants, and fence segments around plaza
+  // Upper bowl tier
+  const upperBowl = new THREE.Mesh(
+    new THREE.CylinderGeometry(22, 26, 8, 16), fountainMat
+  );
+  upperBowl.position.set(hx, 46, hy);
+  const upperWater = new THREE.Mesh(
+    new THREE.CylinderGeometry(20, 20, 2, 16), waterMat
+  );
+  upperWater.position.set(hx, 49, hy);
+  const spoutTop = new THREE.Mesh(
+    new THREE.CylinderGeometry(4, 5, 10, 8), fountainMat
+  );
+  spoutTop.position.set(hx, 53, hy);
+  s.hometownGroup.add(upperBowl, upperWater, spoutTop);
+
+  s.obstaclesHometown.push({ x: hx, y: hy, r: 64, h: 60 });
+
+  // Extra decorations: stones, plants, and rocks around plaza
   function placeDecoration(x, z, r) {
     if (s.obstaclesHometown.some(o => Math.hypot(o.x - x, o.y - z) < o.r + r + 10)) return;
     const rand = Math.random();
     if (rand < 0.5 && loadedModels.stones) {
       const stone = SkeletonUtils.clone(loadedModels.stones);
-      const sc = 20 + Math.random() * 10;
+      const sc = 35 + Math.random() * 15;
       stone.scale.set(sc, sc, sc);
       stone.position.set(x, 0, z);
       stone.rotation.y = Math.random() * Math.PI;
       s.hometownGroup.add(stone);
     } else if (rand < 0.8 && loadedModels.plant) {
       const plant = SkeletonUtils.clone(loadedModels.plant);
-      plant.scale.set(15, 15, 15);
+      plant.scale.set(28, 28, 28);
       plant.position.set(x, 0, z);
       s.hometownGroup.add(plant);
     } else {
+      const rockR = (r || 16);
       const rock = new THREE.Mesh(
-        new THREE.DodecahedronGeometry(r || 10, 0),
+        new THREE.DodecahedronGeometry(rockR, 0),
         new THREE.MeshLambertMaterial({ color: 0x888888 })
       );
-      rock.position.set(x, (r || 10) + getTerrainHeight(x, z), z);
+      rock.position.set(x, rockR + getTerrainHeight(x, z), z);
       s.hometownGroup.add(rock);
     }
-    s.obstaclesHometown.push({ x, y: z, r: (r || 10) * 0.7, h: (r || 10) });
+    s.obstaclesHometown.push({ x, y: z, r: (r || 16) * 0.7, h: (r || 16) });
   }
   for (let i = 0; i < 25; i++) {
     const angle = Math.random() * Math.PI * 2;
-    const dist = 180 + Math.random() * 200;
-    placeDecoration(hx + Math.cos(angle) * dist, hy + Math.sin(angle) * dist, 8 + Math.random() * 10);
+    const dist = 220 + Math.random() * 220;
+    placeDecoration(hx + Math.cos(angle) * dist, hy + Math.sin(angle) * dist, 12 + Math.random() * 12);
   }
 
   // Debug: log model loading status
@@ -536,19 +554,19 @@ export function initHometown() {
       const bs = SkeletonUtils.clone(loadedModels.building_struct);
       const br = SkeletonUtils.clone(loadedModels.building_roof);
       grp.add(bs, br);
-      grp.scale.set(45, 45, 45);
+      grp.scale.set(80, 80, 80);
       return grp;
     }
     // --- building platform ---
     if ((modelKey === 'building_platform' || modelKey === 'struct_roof') && loadedModels.building_platform) {
       const grp = SkeletonUtils.clone(loadedModels.building_platform);
-      grp.scale.set(30, 30, 30);
+      grp.scale.set(65, 65, 65);
       return grp;
     }
     // --- house (default & fallback) ---
     if (loadedModels.house) {
       const grp = SkeletonUtils.clone(loadedModels.house);
-      grp.scale.set(25, 25, 25);
+      grp.scale.set(60, 60, 60);
       return grp;
     }
     // --- last resort: struct alone ---
@@ -557,22 +575,22 @@ export function initHometown() {
       const bs = SkeletonUtils.clone(loadedModels.building_struct);
       if (loadedModels.building_roof) grp.add(SkeletonUtils.clone(loadedModels.building_roof));
       grp.add(bs);
-      grp.scale.set(45, 45, 45);
+      grp.scale.set(80, 80, 80);
       return grp;
     }
     // --- prosedural geometry jika SEMUA model gagal ---
     console.warn('[makeBuilding] Semua model gagal dimuat, pakai prosedural geometry');
     const grp = new THREE.Group();
     const base = new THREE.Mesh(
-      new THREE.BoxGeometry(60, 40, 60),
+      new THREE.BoxGeometry(110, 75, 110),
       new THREE.MeshLambertMaterial({ color: 0xddd3c6 })
     );
-    base.position.y = 20;
+    base.position.y = 37.5;
     const roof = new THREE.Mesh(
-      new THREE.ConeGeometry(45, 30, 4),
+      new THREE.ConeGeometry(85, 55, 4),
       new THREE.MeshLambertMaterial({ color: 0x8b2e2e })
     );
-    roof.position.y = 55;
+    roof.position.y = 100;
     roof.rotation.y = Math.PI / 4;
     grp.add(base, roof);
     return grp;
@@ -583,7 +601,7 @@ export function initHometown() {
     hGroup.position.set(hx + p.x, 0, hy + p.z);
     hGroup.rotation.y = p.r;
     s.hometownGroup.add(hGroup);
-    s.obstaclesHometown.push({ x: hx + p.x, y: hy + p.z, r: 45, h: 100 });
+    s.obstaclesHometown.push({ x: hx + p.x, y: hy + p.z, r: 70, h: 140 });
   });
 
   // Pagar persegi di sekeliling tiap bangunan (2 sisi saja)
@@ -595,31 +613,31 @@ export function initHometown() {
       ];
       for (const side of sides) {
         const fence = SkeletonUtils.clone(loadedModels.fence);
-        fence.scale.set(25, 25, 25);
+        fence.scale.set(45, 45, 45);
         fence.rotation.y = side.ry;
         fence.position.set(side.x, 0, side.z);
         s.hometownGroup.add(fence);
       }
     }
-    addBuildingFence(hx - 300, hy - 300, 60);
-    addBuildingFence(hx + 300, hy + 300, 60);
-    addBuildingFence(hx - 300, hy + 300, 60);
-    addBuildingFence(hx + 400, hy - 100, 60);
-    addBuildingFence(hx - 400, hy + 100, 60);
-    addBuildingFence(hx + 260, hy - 320, 60);
-    addBuildingFence(hx - 200, hy - 200, 45);
-    addBuildingFence(hx + 200, hy - 200, 45);
-    addBuildingFence(hx - 200, hy + 200, 45);
+    addBuildingFence(hx - 300, hy - 300, 85);
+    addBuildingFence(hx + 300, hy + 300, 85);
+    addBuildingFence(hx - 300, hy + 300, 85);
+    addBuildingFence(hx + 400, hy - 100, 85);
+    addBuildingFence(hx - 400, hy + 100, 85);
+    addBuildingFence(hx + 260, hy - 320, 85);
+    addBuildingFence(hx - 200, hy - 200, 65);
+    addBuildingFence(hx + 200, hy - 200, 65);
+    addBuildingFence(hx - 200, hy + 200, 65);
   }
 
   // Target dummy
   if (loadedModels.target) {
     const target = SkeletonUtils.clone(loadedModels.target);
-    target.scale.set(30, 30, 30);
+    target.scale.set(52, 52, 52);
     target.position.set(hx + 160, 0, hy - 300);
     target.rotation.y = Math.PI / 4;
     s.hometownGroup.add(target);
-    s.obstaclesHometown.push({ x: hx + 160, y: hy - 300, r: 15, h: 30 });
+    s.obstaclesHometown.push({ x: hx + 160, y: hy - 300, r: 22, h: 55 });
   }
 
   // Extra fence segments along plaza perimeter
@@ -634,11 +652,11 @@ export function initHometown() {
     ];
     for (const fp of fencePositions) {
       const fence = SkeletonUtils.clone(loadedModels.fence);
-      fence.scale.set(20, 20, 20);
+      fence.scale.set(38, 38, 38);
       fence.rotation.y = fp.ry;
       fence.position.set(fp.x, 0, fp.z);
       s.hometownGroup.add(fence);
-      s.obstaclesHometown.push({ x: fp.x, y: fp.z, r: 15, h: 20 });
+      s.obstaclesHometown.push({ x: fp.x, y: fp.z, r: 20, h: 30 });
     }
   }
 
@@ -655,7 +673,7 @@ export function initHometown() {
       eGroup.position.set(eb.x, 0, eb.z);
       eGroup.rotation.y = Math.random() * Math.PI * 2;
       s.hometownGroup.add(eGroup);
-      s.obstaclesHometown.push({ x: eb.x, y: eb.z, r: 40, h: 100 });
+      s.obstaclesHometown.push({ x: eb.x, y: eb.z, r: 70, h: 140 });
     }
   }
 
@@ -663,28 +681,28 @@ export function initHometown() {
   let stallGroup;
   if (loadedModels.tent) {
     stallGroup = SkeletonUtils.clone(loadedModels.tent);
-    stallGroup.scale.set(30, 30, 30);
+    stallGroup.scale.set(60, 60, 60);
   } else {
     stallGroup = new THREE.Group();
     const poleMat = new THREE.MeshLambertMaterial({ color: 0x5c4033 });
-    const stallPoleGeo = new THREE.CylinderGeometry(2, 2, 40, 4);
-    [[-20, 20, -20], [20, 20, -20], [-20, 20, 20], [20, 20, 20]].forEach(([px, py, pz]) => {
+    const stallPoleGeo = new THREE.CylinderGeometry(3, 3, 65, 4);
+    [[-32, 32.5, -32], [32, 32.5, -32], [-32, 32.5, 32], [32, 32.5, 32]].forEach(([px, py, pz]) => {
       const p = new THREE.Mesh(stallPoleGeo, poleMat);
       p.position.set(px, py, pz);
       stallGroup.add(p);
     });
     const awning = new THREE.Mesh(
-      new THREE.PlaneGeometry(50, 50),
+      new THREE.PlaneGeometry(85, 85),
       new THREE.MeshLambertMaterial({ color: 0xffaa00, side: THREE.DoubleSide })
     );
     awning.rotation.x = -Math.PI / 2 + 0.2;
-    awning.position.y = 42;
+    awning.position.y = 66;
     stallGroup.add(awning);
     const table = new THREE.Mesh(
-      new THREE.BoxGeometry(30, 15, 15),
+      new THREE.BoxGeometry(50, 22, 24),
       new THREE.MeshLambertMaterial({ color: 0x6e4a2b })
     );
-    table.position.set(0, 7.5, 10);
+    table.position.set(0, 11, 15);
     stallGroup.add(table);
   }
   stallGroup.position.set(hx - 200, 0, hy - 200);
@@ -694,27 +712,27 @@ export function initHometown() {
   let shrineGroup;
   if (loadedModels.building_platform) {
     shrineGroup = SkeletonUtils.clone(loadedModels.building_platform);
-    shrineGroup.scale.set(35, 35, 35);
+    shrineGroup.scale.set(65, 65, 65);
   } else {
     shrineGroup = new THREE.Group();
     const sBaseMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
     const sBase = new THREE.Mesh(
-      new THREE.CylinderGeometry(25, 25, 5, 8), sBaseMat
+      new THREE.CylinderGeometry(40, 40, 8, 8), sBaseMat
     );
-    sBase.position.y = 2.5;
+    sBase.position.y = 4;
     shrineGroup.add(sBase);
-    const stallPoleGeo = new THREE.CylinderGeometry(2, 2, 40, 4);
+    const stallPoleGeo = new THREE.CylinderGeometry(3, 3, 60, 4);
     for (let i = 0; i < 4; i++) {
       const sp = new THREE.Mesh(stallPoleGeo, sBaseMat);
       const ang = (i / 4) * Math.PI * 2 + Math.PI / 4;
-      sp.position.set(Math.cos(ang) * 20, 20, Math.sin(ang) * 20);
+      sp.position.set(Math.cos(ang) * 32, 30, Math.sin(ang) * 32);
       shrineGroup.add(sp);
     }
     const sRoof = new THREE.Mesh(
-      new THREE.ConeGeometry(30, 20, 4),
+      new THREE.ConeGeometry(48, 30, 4),
       new THREE.MeshLambertMaterial({ color: 0x00aaff })
     );
-    sRoof.position.y = 50;
+    sRoof.position.y = 75;
     sRoof.rotation.y = Math.PI / 4;
     shrineGroup.add(sRoof);
   }
@@ -727,26 +745,26 @@ export function initHometown() {
     bsGroup = new THREE.Group();
     bsGroup.add(SkeletonUtils.clone(loadedModels.building_struct));
     bsGroup.add(SkeletonUtils.clone(loadedModels.building_roof));
-    bsGroup.scale.set(45, 45, 45);
+    bsGroup.scale.set(80, 80, 80);
   } else {
     bsGroup = new THREE.Group();
     const anvil = new THREE.Mesh(
-      new THREE.BoxGeometry(15, 10, 10),
+      new THREE.BoxGeometry(24, 16, 16),
       new THREE.MeshLambertMaterial({ color: 0x222222 })
     );
-    anvil.position.set(0, 5, 10);
+    anvil.position.set(0, 8, 16);
     bsGroup.add(anvil);
     const furnace = new THREE.Mesh(
-      new THREE.BoxGeometry(20, 30, 20),
+      new THREE.BoxGeometry(32, 48, 32),
       new THREE.MeshLambertMaterial({ color: 0x552222 })
     );
-    furnace.position.set(0, 15, -15);
+    furnace.position.set(0, 24, -20);
     bsGroup.add(furnace);
     const fire = new THREE.Mesh(
-      new THREE.SphereGeometry(6, 8, 8),
+      new THREE.SphereGeometry(10, 8, 8),
       new THREE.MeshLambertMaterial({ color: 0xffaa00, emissive: 0xff5500 })
     );
-    fire.position.set(0, 10, -5);
+    fire.position.set(0, 16, -8);
     bsGroup.add(fire);
   }
   bsGroup.position.set(hx - 200, 0, hy + 200);
@@ -755,23 +773,23 @@ export function initHometown() {
   // Quest Board
   const qbGroup = new THREE.Group();
   const board = new THREE.Mesh(
-    new THREE.BoxGeometry(20, 15, 2),
+    new THREE.BoxGeometry(22, 16, 2),
     new THREE.MeshLambertMaterial({ color: 0x8b5a2b })
   );
-  board.position.y = 10;
-  const postL = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 15), new THREE.MeshLambertMaterial({ color: 0x5c4033 }));
-  postL.position.set(-8, 7.5, 0);
-  const postR = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 15), new THREE.MeshLambertMaterial({ color: 0x5c4033 }));
-  postR.position.set(8, 7.5, 0);
-  const paper = new THREE.Mesh(new THREE.PlaneGeometry(6, 8), new THREE.MeshBasicMaterial({ color: 0xeeeeee }));
-  paper.position.set(0, 10, 1.1);
+  board.position.y = 11;
+  const postL = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 18), new THREE.MeshLambertMaterial({ color: 0x5c4033 }));
+  postL.position.set(-9, 9, 0);
+  const postR = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 18), new THREE.MeshLambertMaterial({ color: 0x5c4033 }));
+  postR.position.set(9, 9, 0);
+  const paper = new THREE.Mesh(new THREE.PlaneGeometry(7, 9), new THREE.MeshBasicMaterial({ color: 0xeeeeee }));
+  paper.position.set(0, 11, 1.1);
   qbGroup.add(board, postL, postR, paper);
   qbGroup.position.set(hx, 0, hy + 100);
-  qbGroup.scale.set(2, 2, 2);
+  qbGroup.scale.set(3.5, 3.5, 3.5);
   qbGroup.rotation.y = Math.PI;
   s.hometownGroup.add(qbGroup);
   s.questBoardPos = { x: hx, z: hy + 100 };
-  s.obstaclesHometown.push({ x: hx, y: hy + 100, r: 15, h: 30 });
+  s.obstaclesHometown.push({ x: hx, y: hy + 100, r: 24, h: 45 });
 
   // Flag posts around plaza
   if (loadedModels.flag) {
@@ -783,10 +801,10 @@ export function initHometown() {
     ];
     for (const fp of flagPositions) {
       const flag = SkeletonUtils.clone(loadedModels.flag);
-      flag.scale.set(20, 20, 20);
+      flag.scale.set(40, 40, 40);
       flag.position.set(fp.x, 0, fp.z);
       s.hometownGroup.add(flag);
-      s.obstaclesHometown.push({ x: fp.x, y: fp.z, r: 8, h: 30 });
+      s.obstaclesHometown.push({ x: fp.x, y: fp.z, r: 16, h: 60 });
     }
   }
 }
@@ -1231,7 +1249,7 @@ export function updatePortalAnimations() {
 export function initNPCs() {
   const s = state;
   const hx = 500, hy = 500;
-  const NPC_HEIGHT = 30;
+  const NPC_HEIGHT = 52; // Skala tinggi manusia dewasa proporsional dengan player (~52-54 unit)
 
   // Portal to Wilds
   s.hometownPortal = createPortal(0x00ffff);
@@ -1246,9 +1264,10 @@ export function initNPCs() {
     s.shopNPC.add(shopMesh);
   } else {
     s.shopNPC = new THREE.Mesh(
-      new THREE.CylinderGeometry(8, 8, 25, 8),
+      new THREE.CylinderGeometry(11, 11, 48, 8),
       new THREE.MeshLambertMaterial({ color: 0xffd700 })
     );
+    s.shopNPC.position.y = 24;
   }
   s.shopNPC.position.set(hx - 200, 0, hy - 200);
   s.hometownGroup.add(s.shopNPC);
@@ -1261,9 +1280,10 @@ export function initNPCs() {
     s.healerNPC.add(healerMesh);
   } else {
     s.healerNPC = new THREE.Mesh(
-      new THREE.CylinderGeometry(8, 8, 25, 8),
+      new THREE.CylinderGeometry(11, 11, 48, 8),
       new THREE.MeshLambertMaterial({ color: 0xff66cc })
     );
+    s.healerNPC.position.y = 24;
   }
   s.healerNPC.position.set(hx + 200, 0, hy - 200);
   s.hometownGroup.add(s.healerNPC);
@@ -1276,51 +1296,409 @@ export function initNPCs() {
     s.blacksmithNPC.add(bsMesh);
   } else {
     s.blacksmithNPC = new THREE.Mesh(
-      new THREE.CylinderGeometry(9, 9, 25, 8),
+      new THREE.CylinderGeometry(12, 12, 48, 8),
       new THREE.MeshLambertMaterial({ color: 0x333333 })
     );
+    s.blacksmithNPC.position.y = 24;
   }
   s.blacksmithNPC.position.set(hx - 200, 0, hy + 200);
   s.hometownGroup.add(s.blacksmithNPC);
 
-  // Extra NPCs
-  if (loadedModels.char_e) {
-    const guardMesh = SkeletonUtils.clone(loadedModels.char_e);
-    scaleNPCToHeight(guardMesh, NPC_HEIGHT);
-    const guardGroup = new THREE.Group();
-    guardGroup.add(guardMesh);
-    guardGroup.position.set(hx + 120, 0, hy + 120);
-    guardGroup.rotation.y = Math.PI;
-    s.hometownGroup.add(guardGroup);
-  }
-  if (loadedModels.char_f) {
-    const villagerMesh = SkeletonUtils.clone(loadedModels.char_f);
-    scaleNPCToHeight(villagerMesh, NPC_HEIGHT);
-    const villagerGroup = new THREE.Group();
-    villagerGroup.add(villagerMesh);
-    villagerGroup.position.set(hx - 120, 0, hy + 120);
-    villagerGroup.rotation.y = 0;
-    s.hometownGroup.add(villagerGroup);
-  }
-  if (loadedModels.char_g) {
-    const guard2Mesh = SkeletonUtils.clone(loadedModels.char_g);
-    scaleNPCToHeight(guard2Mesh, NPC_HEIGHT);
-    const guard2Group = new THREE.Group();
-    guard2Group.add(guard2Mesh);
-    guard2Group.position.set(hx + 120, 0, hy - 120);
-    guard2Group.rotation.y = Math.PI * 0.5;
-    s.hometownGroup.add(guard2Group);
+  // ── Village Inn / Tavern (Penginapan Desa) ──
+  const innGroup = new THREE.Group();
+  const counterMat = new THREE.MeshLambertMaterial({ color: 0x5c4033 });
+  const counter = new THREE.Mesh(new THREE.BoxGeometry(60, 20, 24), counterMat);
+  counter.position.set(0, 10, 0);
+  innGroup.add(counter);
+
+  // Mugs & Stools
+  const mugMat = new THREE.MeshLambertMaterial({ color: 0xd4ac0d });
+  [-14, 0, 14].forEach(mx => {
+    const mug = new THREE.Mesh(new THREE.CylinderGeometry(2, 2, 4, 6), mugMat);
+    mug.position.set(mx, 22, 0);
+    innGroup.add(mug);
+  });
+  const stoolMat = new THREE.MeshLambertMaterial({ color: 0x4a3219 });
+  [-16, 16].forEach(sx => {
+    const stool = new THREE.Mesh(new THREE.CylinderGeometry(5.5, 5.5, 11, 8), stoolMat);
+    stool.position.set(sx, 5.5, -20);
+    innGroup.add(stool);
+  });
+
+  // Warm Lantern Post
+  const lanternPost = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.5, 36), counterMat);
+  lanternPost.position.set(26, 18, -6);
+  const lanternLight = new THREE.PointLight(0xffaa44, 2.0, 160);
+  lanternLight.position.set(26, 36, -6);
+  innGroup.add(lanternPost, lanternLight);
+
+  // Signpost: Penginapan Desa
+  const signGroup = new THREE.Group();
+  const signBoard = new THREE.Mesh(new THREE.BoxGeometry(34, 14, 3), new THREE.MeshLambertMaterial({ color: 0x7f4f24 }));
+  signBoard.position.set(0, 26, 0);
+  const signPostMesh = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 30), counterMat);
+  signPostMesh.position.set(0, 15, 0);
+  signGroup.add(signBoard, signPostMesh);
+  signGroup.position.set(-28, 0, -12);
+  innGroup.add(signGroup);
+
+  innGroup.position.set(hx + 300, 0, hy + 260);
+  innGroup.rotation.y = Math.PI;
+  s.hometownGroup.add(innGroup);
+  s.innSignPos = { x: hx + 300, z: hy + 260 };
+  s.obstaclesHometown.push({ x: hx + 300, y: hy + 260, r: 40, h: 50 });
+
+  // Innkeeper NPC (Paman Bob)
+  if (loadedModels.char_h || loadedModels.char_a) {
+    const innMesh = SkeletonUtils.clone(loadedModels.char_h || loadedModels.char_a);
+    scaleNPCToHeight(innMesh, NPC_HEIGHT);
+    s.innNPC = new THREE.Group();
+    s.innNPC.add(innMesh);
+    s.innNPC.position.set(hx + 300, 0, hy + 288);
+    s.hometownGroup.add(s.innNPC);
   }
 
-  // Collision for NPCs
+  // ── Living Wandering Villagers (Warga Desa yang Berkeliling) ──
+  s.villagers = [
+    {
+      id: 'elder',
+      name: 'Tetua Timothy',
+      role: 'Tetua Desa',
+      modelKey: 'char_a',
+      x: hx + 40, z: hy + 40,
+      mesh: null,
+      patrol: [
+        { x: hx + 40, z: hy + 40 },
+        { x: hx + 70, z: hy - 50 },
+        { x: hx - 50, z: hy - 60 },
+        { x: hx - 60, z: hy + 50 },
+      ],
+      patrolIdx: 0,
+      speed: 0.65,
+      walkCycle: 0,
+      speech: [
+        "Dahulu kerajaan kita sangat megah dan damai sebelum sang Golem terlelap...",
+        "Berhati-hatilah jika melangkah jauh ke dalam hutan berkabut!",
+        "Jika tubuhmu lelah, beristirahatlah di Penginapan Paman Bob di sebelah timur.",
+      ]
+    },
+    {
+      id: 'guard_portal',
+      name: 'Ksatria Donald',
+      role: 'Penjaga Gerbang',
+      modelKey: 'arena_soldier',
+      x: hx, z: hy + 300,
+      mesh: null,
+      patrol: [
+        { x: hx - 50, z: hy + 340 },
+        { x: hx + 50, z: hy + 340 },
+        { x: hx + 50, z: hy + 250 },
+        { x: hx - 50, z: hy + 250 },
+      ],
+      patrolIdx: 0,
+      speed: 0.85,
+      walkCycle: 0,
+      speech: [
+        "Gerbang Hutan aman dalam pengawasan! Waspadalah selalu, Ksatria!",
+        "Monster di luar sana bertambah kuat dan buas seiring jauhnya perjalananmu.",
+        "Pedang yang tajam dan ramuan penawar racun adalah kunci bertahan hidup.",
+      ]
+    },
+    {
+      id: 'merchant_finn',
+      name: 'Pengembara Finn',
+      role: 'Pedagang Keliling',
+      modelKey: 'char_g',
+      x: hx - 120, z: hy - 120,
+      mesh: null,
+      patrol: [
+        { x: hx - 140, z: hy - 150 },
+        { x: hx - 50, z: hy - 60 },
+        { x: hx - 120, z: hy - 40 },
+      ],
+      patrolIdx: 0,
+      speed: 0.7,
+      walkCycle: 0,
+      speech: [
+        "Aku baru kembali dari perbatasan Scorched Dunes, pasirnya menyengat luar biasa!",
+        "Jangan lupa menempa perlengkapanmu di Brutus si Pandai Besi.",
+        "Koin emas yang kau dapat dari monster bisa membeli banyak bekal berharga.",
+      ]
+    },
+    {
+      id: 'farmer_maya',
+      name: 'Petani Maya',
+      role: 'Warga Desa',
+      modelKey: 'char_f',
+      x: hx + 140, z: hy + 80,
+      mesh: null,
+      patrol: [
+        { x: hx + 140, z: hy + 80 },
+        { x: hx + 200, z: hy + 140 },
+        { x: hx + 140, z: hy + 190 },
+      ],
+      patrolIdx: 0,
+      speed: 0.55,
+      walkCycle: 0,
+      speech: [
+        "Udara di desa kita selalu segar dan menenangkan hati.",
+        "Ayam-ayam di pekarangan selalu riang menyambut pagi hari.",
+        "Senang melihat pahlawan tangguh sepertimu melindungi desa kami!",
+      ]
+    },
+  ];
+
+  s.villagers.forEach(v => {
+    const raw = loadedModels[v.modelKey] || loadedModels.char_b || loadedModels.char_a;
+    if (raw) {
+      const vMesh = SkeletonUtils.clone(raw);
+      scaleNPCToHeight(vMesh, NPC_HEIGHT);
+      v.mesh = new THREE.Group();
+      v.mesh.add(vMesh);
+      v.mesh.position.set(v.x, 0, v.z);
+      s.hometownGroup.add(v.mesh);
+
+      // Cache limb objects for natural human walking animation
+      v.legL = vMesh.getObjectByName('leg-left');
+      v.legR = vMesh.getObjectByName('leg-right');
+      v.armL = vMesh.getObjectByName('arm-left');
+      v.armR = vMesh.getObjectByName('arm-right');
+      v.head = vMesh.getObjectByName('head');
+    }
+  });
+
+  // ── Village Animals (Buddy si Anjing & Ayam-ayam Desa) ──
+  s.villageAnimals = [];
+
+  // Buddy the Dog
+  const dogMesh = new THREE.Group();
+  const dogBodyMat = new THREE.MeshLambertMaterial({ color: 0x8b5a2b });
+  const dogDarkMat = new THREE.MeshLambertMaterial({ color: 0x3d2714 });
+  const dogNoseMat = new THREE.MeshLambertMaterial({ color: 0x111111 });
+
+  const dBody = new THREE.Mesh(new THREE.BoxGeometry(9, 7, 14), dogBodyMat);
+  dBody.position.y = 6.5;
+  const dHead = new THREE.Mesh(new THREE.BoxGeometry(6, 6, 6), dogBodyMat);
+  dHead.position.set(0, 11, 7);
+  const dSnout = new THREE.Mesh(new THREE.BoxGeometry(4, 3.5, 5), dogDarkMat);
+  dSnout.position.set(0, 9.5, 10.5);
+  const dNose = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.8, 1.8), dogNoseMat);
+  dNose.position.set(0, 10.8, 13.2);
+  const dEarL = new THREE.Mesh(new THREE.BoxGeometry(1.5, 4, 2.5), dogDarkMat);
+  dEarL.position.set(-3.5, 11, 6.5);
+  const dEarR = new THREE.Mesh(new THREE.BoxGeometry(1.5, 4, 2.5), dogDarkMat);
+  dEarR.position.set(3.5, 11, 6.5);
+  const dTail = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1.2, 7, 6), dogDarkMat);
+  dTail.position.set(0, 9, -7.5);
+  dTail.rotation.x = -Math.PI / 4;
+  dogMesh.add(dBody, dHead, dSnout, dNose, dEarL, dEarR, dTail);
+  dogMesh.userData.tail = dTail;
+
+  [[-3, 3, 4], [3, 3, 4], [-3, 3, -4], [3, 3, -4]].forEach(([lx, ly, lz]) => {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(2.5, 6, 2.5), dogBodyMat);
+    leg.position.set(lx, ly, lz);
+    dogMesh.add(leg);
+  });
+  dogMesh.scale.set(1.6, 1.6, 1.6);
+  dogMesh.position.set(hx + 40, 0, hy - 40);
+  s.hometownGroup.add(dogMesh);
+  s.villageAnimals.push({
+    type: 'dog',
+    name: 'Buddy',
+    x: hx + 40, z: hy - 40,
+    mesh: dogMesh,
+    barkTimer: 0,
+  });
+
+  // 3 Chickens
+  const chickenPositions = [
+    { x: hx + 160, z: hy + 130 },
+    { x: hx + 200, z: hy + 160 },
+    { x: hx - 140, z: hy + 160 },
+  ];
+  chickenPositions.forEach((pos, idx) => {
+    const cMesh = new THREE.Group();
+    const cMatWhite = new THREE.MeshLambertMaterial({ color: idx === 1 ? 0xf5b041 : 0xffffff });
+    const cMatComb = new THREE.MeshLambertMaterial({ color: 0xe74c3c });
+    const cMatBeak = new THREE.MeshLambertMaterial({ color: 0xf39c12 });
+
+    const cBody = new THREE.Mesh(new THREE.BoxGeometry(5, 5, 7), cMatWhite);
+    cBody.position.y = 4.5;
+    const cHead = new THREE.Group();
+    cHead.position.set(0, 7.5, 3.5);
+    const headBlock = new THREE.Mesh(new THREE.BoxGeometry(3.5, 4, 3.5), cMatWhite);
+    const comb = new THREE.Mesh(new THREE.BoxGeometry(1.2, 2.5, 2.5), cMatComb);
+    comb.position.set(0, 3, 0);
+    const beak = new THREE.Mesh(new THREE.ConeGeometry(1, 2.5, 4), cMatBeak);
+    beak.rotation.x = Math.PI / 2;
+    beak.position.set(0, 0, 2.5);
+    cHead.add(headBlock, comb, beak);
+    cMesh.add(cBody, cHead);
+    cMesh.userData.head = cHead;
+
+    [[-1.5, 1.5, 0], [1.5, 1.5, 0]].forEach(([lx, ly, lz]) => {
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(1, 3, 1), cMatBeak);
+      leg.position.set(lx, ly, lz);
+      cMesh.add(leg);
+    });
+
+    cMesh.scale.set(1.5, 1.5, 1.5);
+    cMesh.position.set(pos.x, 0, pos.z);
+    s.hometownGroup.add(cMesh);
+    s.villageAnimals.push({
+      type: 'chicken',
+      x: pos.x, z: pos.z,
+      mesh: cMesh,
+      peckTimer: Math.random() * 3,
+      cluckTimer: Math.random() * 8,
+    });
+  });
+
+  // Collision for NPCs & Stalls
   s.obstaclesHometown.push(
-    { x: hx - 200, y: hy - 200, r: 10 },
-    { x: hx + 200, y: hy - 200, r: 10 },
-    { x: hx - 200, y: hy + 200, r: 10 },
-    { x: hx + 120, y: hy + 120, r: 10 },
-    { x: hx - 120, y: hy + 120, r: 10 },
-    { x: hx + 120, y: hy - 120, r: 10 },
+    { x: hx - 200, y: hy - 200, r: 25 },
+    { x: hx + 200, y: hy - 200, r: 25 },
+    { x: hx - 200, y: hy + 200, r: 25 },
+    { x: hx + 300, y: hy + 260, r: 35 },
   );
+}
+
+// ─── Villagers & Town Animals Update Loop ─────────────────────────────────────
+
+export function updateVillagers(dt) {
+  const s = state;
+  if (s.currentScene !== 'hometown') return;
+  const time = Date.now() * 0.003;
+
+  // 1. Update Wandering Villagers with realistic human walking gait
+  if (s.villagers) {
+    s.villagers.forEach(v => {
+      if (!v.mesh) return;
+
+      // Lazy find limbs if not already cached
+      if (!v.legL) {
+        v.legL = v.mesh.getObjectByName('leg-left');
+        v.legR = v.mesh.getObjectByName('leg-right');
+        v.armL = v.mesh.getObjectByName('arm-left');
+        v.armR = v.mesh.getObjectByName('arm-right');
+        v.head = v.mesh.getObjectByName('head');
+      }
+
+      const distToPlayer = Math.hypot(s.player.x - v.x, s.player.y - v.z);
+
+      if (distToPlayer < 65) {
+        // Look at player & pause
+        const targetAngle = Math.atan2(s.player.x - v.x, s.player.y - v.z);
+        let diff = targetAngle - v.mesh.rotation.y;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        v.mesh.rotation.y += diff * 0.12;
+
+        // Smoothly return limbs to standing position
+        if (v.legL) v.legL.rotation.x *= 0.8;
+        if (v.legR) v.legR.rotation.x *= 0.8;
+        if (v.armL) v.armL.rotation.x *= 0.8;
+        if (v.armR) v.armR.rotation.x *= 0.8;
+
+        v.mesh.position.set(v.x, 0, v.z);
+        if (v.head) {
+          v.head.rotation.y = Math.sin(time * 2 + v.x) * 0.08;
+        }
+      } else if (v.patrol && v.patrol.length) {
+        // Move along patrol waypoints
+        const wp = v.patrol[v.patrolIdx];
+        const dx = wp.x - v.x;
+        const dz = wp.z - v.z;
+        const distWp = Math.hypot(dx, dz);
+
+        if (distWp < 8) {
+          v.patrolIdx = (v.patrolIdx + 1) % v.patrol.length;
+        } else {
+          // Walk step
+          const moveDist = v.speed * dt * 0.85;
+          v.x += (dx / distWp) * moveDist;
+          v.z += (dz / distWp) * moveDist;
+
+          // Face walking direction smoothly
+          const targetAngle = Math.atan2(dx, dz);
+          let diff = targetAngle - v.mesh.rotation.y;
+          while (diff < -Math.PI) diff += Math.PI * 2;
+          while (diff > Math.PI) diff -= Math.PI * 2;
+          v.mesh.rotation.y += diff * 0.15;
+
+          // Natural human walking cycle (legs swing alternately, arms swing in opposition)
+          v.walkCycle = (v.walkCycle || 0) + v.speed * 0.18 * dt;
+          const swing = Math.sin(v.walkCycle) * 0.65;
+
+          if (v.legL) v.legL.rotation.x = swing;
+          if (v.legR) v.legR.rotation.x = -swing;
+          if (v.armL) v.armL.rotation.x = -swing * 0.7;
+          if (v.armR) v.armR.rotation.x = swing * 0.7;
+
+          // Keep feet on the ground! Subtle pelvic bob of max 0.2 units instead of hopping
+          const subtleBob = Math.sin(v.walkCycle * 2) * 0.2;
+          v.mesh.position.set(v.x, Math.max(0, subtleBob), v.z);
+        }
+      } else {
+        // Idle
+        v.mesh.position.set(v.x, 0, v.z);
+        if (v.legL) v.legL.rotation.x = 0;
+        if (v.legR) v.legR.rotation.x = 0;
+        if (v.armL) v.armL.rotation.x = 0;
+        if (v.armR) v.armR.rotation.x = 0;
+      }
+    });
+  }
+
+  // Also animate stationary NPCs (Shop, Healer, Blacksmith, Innkeeper)
+  const stationaryNpcs = [s.shopNPC, s.healerNPC, s.blacksmithNPC, s.innNPC];
+  stationaryNpcs.forEach(npc => {
+    if (!npc) return;
+    const dist = Math.hypot(s.player.x - npc.position.x, s.player.y - npc.position.z);
+    if (dist < 75) {
+      const targetAngle = Math.atan2(s.player.x - npc.position.x, s.player.y - npc.position.z);
+      let diff = targetAngle - npc.rotation.y;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      npc.rotation.y += diff * 0.1;
+    }
+  });
+
+  // 2. Update Village Animals
+  if (s.villageAnimals) {
+    s.villageAnimals.forEach(a => {
+      if (!a.mesh) return;
+      if (a.type === 'dog') {
+        const distToPlayer = Math.hypot(s.player.x - a.x, s.player.y - a.z);
+        if (a.mesh.userData.tail) {
+          // Rapid tail wagging when player is near
+          const wagSpeed = distToPlayer < 65 ? 25 : 8;
+          a.mesh.userData.tail.rotation.y = Math.sin(time * wagSpeed) * 0.7;
+        }
+        if (distToPlayer < 65) {
+          // Turn toward player
+          a.mesh.rotation.y = Math.atan2(s.player.x - a.x, s.player.y - a.z);
+          a.barkTimer = (a.barkTimer || 0) + dt;
+          if (a.barkTimer > 400) {
+            a.barkTimer = 0;
+            playSound('bark');
+          }
+        }
+      } else if (a.type === 'chicken') {
+        // Head pecking animation
+        if (a.mesh.userData.head) {
+          a.mesh.userData.head.rotation.x = Math.abs(Math.sin(time * 3 + a.x)) * 0.55;
+        }
+        a.cluckTimer = (a.cluckTimer || 0) + dt;
+        if (a.cluckTimer > 700) {
+          a.cluckTimer = 0;
+          if (Math.hypot(s.player.x - a.x, s.player.y - a.z) < 120) {
+            playSound('cluck');
+          }
+        }
+      }
+    });
+  }
 }
 
 export function initWildsNPCs() {

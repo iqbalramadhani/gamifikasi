@@ -301,3 +301,60 @@ button.ui-btn:hover { background: #2980b9; }
   overflow-y: auto;
 }
 
+/* BGM Navigation Button */
+.nav-btn-bgm {
+  background: linear-gradient(135deg, #1abc9c, #16a085);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.3);
+  font-weight: bold;
+}
+.nav-btn-bgm:hover {
+  background: linear-gradient(135deg, #16a085, #117a65);
+  box-shadow: 0 0 10px rgba(26, 188, 156, 0.6);
+}
+
+/* Living World NPC Speech Bubble */
+.npc-speech-bubble {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  background: rgba(18, 26, 38, 0.94);
+  backdrop-filter: blur(8px);
+  border: 1.5px solid #f1c40f;
+  border-radius: 10px;
+  padding: 8px 14px;
+  color: #ecf0f1;
+  font-size: 13px;
+  max-width: 240px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.65), 0 0 12px rgba(241, 196, 15, 0.3);
+  animation: bubblePop 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  pointer-events: none;
+  z-index: 100;
+}
+.npc-speech-bubble::after {
+  content: '';
+  position: absolute;
+  bottom: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 8px 7px 0 7px;
+  border-style: solid;
+  border-color: #f1c40f transparent transparent transparent;
+}
+.bubble-speaker {
+  font-size: 11px;
+  font-weight: bold;
+  color: #f1c40f;
+  margin-bottom: 2px;
+}
+.bubble-text {
+  font-size: 12px;
+  color: #f8f9f9;
+  line-height: 1.35;
+  font-style: italic;
+}
+
+@keyframes bubblePop {
+  0% { transform: translate(-50%, -85%) scale(0.7); opacity: 0; }
+  100% { transform: translate(-50%, -100%) scale(1); opacity: 1; }
+}
+

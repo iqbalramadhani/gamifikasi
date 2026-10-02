@@ -8,7 +8,7 @@ import * as THREE from 'three';
 // Subsystem modules
 import { state } from './state.js';
 import { loadAllModels, loadedModels } from './model-loader.js';
-import { initSetup, initMap, initHometown, initEntities, initNPCs, initWildsNPCs, initWilds2, getTerrainHeight, getTerrainHeightWilds2 } from './scenes.js';
+import { initSetup, initMap, initHometown, initEntities, initNPCs, initWildsNPCs, initWilds2, getTerrainHeight, getTerrainHeightWilds2, updateVillagers } from './scenes.js';
 import { spawnBoss, spawnParticles, checkItems, blocked } from './helpers.js';
 import { spawnEnemy, spawnEnemy2, usePotion } from './combat.js';
 import {
@@ -345,6 +345,7 @@ function gameLoop(timestamp) {
     updateWeather(dt);
     updateParticles(dt);
     updatePet(dt);
+    updateVillagers(dt);
     checkItems();
     autoUsePotions();
     updateUI();

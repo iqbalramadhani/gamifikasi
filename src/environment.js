@@ -67,12 +67,34 @@ export function updateWeather(dt) {
     }
   }
 
-  // Ambient Particles (Fireflies, Leaves, Sand)
+  // Ambient Particles (Fireflies, Leaves, Sand, Fountain Splashes, Chimney Smoke)
   if (!s.ambientTimer) s.ambientTimer = 0;
   s.ambientTimer += dt;
   if (s.ambientTimer > 5) {
     s.ambientTimer = 0;
-    if (s.currentScene === 'wilds') {
+    if (s.currentScene === 'hometown') {
+      // Fountain water droplets leaping
+      spawnParticles(500 + (Math.random() - 0.5) * 50, 500 + (Math.random() - 0.5) * 50, 0x5dade2, 1, 'heal');
+      
+      // Chimney smoke
+      const chimneys = [
+        { x: 260, y: 140 },
+        { x: 620, y: 740 },
+        { x: 60, y: 440 },
+        { x: 940, y: 660 },
+      ];
+      const ch = chimneys[Math.floor(Math.random() * chimneys.length)];
+      if (Math.random() < 0.6) {
+        spawnParticles(ch.x, ch.y, 0xd5d8dc, 1, 'dust');
+      }
+
+      // Evening golden fireflies
+      if (s.dayTime > 0.38) {
+        if (Math.random() < 0.5) {
+          spawnParticles(s.player.x + (Math.random() - 0.5) * 500, s.player.y + (Math.random() - 0.5) * 500, 0xf1c40f, 1, 'heal');
+        }
+      }
+    } else if (s.currentScene === 'wilds') {
       if (s.dayTime > 0.4) {
         if (Math.random() < 0.5) spawnParticles(s.player.x + (Math.random()-0.5)*800, s.player.y + (Math.random()-0.5)*800, 0x88ff88, 1, 'heal'); // Firefly
       } else {

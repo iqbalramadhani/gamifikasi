@@ -21,15 +21,10 @@
         </div>
         <div class="badge badge-lv">⭐ Lv <span id="player-level">1</span> (<span id="exp">0</span>/<span id="max-exp">20</span>)</div>
         <div class="badge badge-gold">💰 <span id="gold">0</span></div>
-        <div class="badge badge-potion">🧪 <span id="nav-potions">0</span></div>
         <div class="badge badge-bounty" id="side-quest-badge" style="display:none;">📜 Bounty: <span id="side-quest-text"></span></div>
       </div>
       
       <div class="hud-right">
-        <button class="nav-btn nav-btn-map" onclick="openFullMap()">🗺️ Peta (M)</button>
-        <button class="nav-btn nav-btn-inventory" onclick="openInventory()">🎒 Tas</button>
-        <button class="nav-btn nav-btn-stats" onclick="openStats()">📊 Stats <span id="stat-notif" style="display:none; background:red; padding:1px 5px; border-radius:50%; font-size:11px;">!</span></button>
-        <button class="nav-btn nav-btn-quest" onclick="openQuestBoard()">📜 Misi (J)</button>
         <button class="nav-btn nav-btn-menu" onclick="openSettings()">⚙️ Menu</button>
       </div>
     </div>
@@ -98,6 +93,13 @@
           <button class="ui-btn" onclick="closeSettings(); openTutorial();" style="flex: 1; padding: 10px 8px; background: #2980b9; font-size: 14px; font-weight: bold;">📖 Cara Main</button>
         </div>
         <div id="save-status" style="min-height: 18px; font-size: 13px; text-align: center; color: #f1c40f; font-weight: bold; margin-bottom: 10px;"></div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px;">
+          <button class="ui-btn" id="btn-toggle-bgm" onclick="toggleBGM()" style="padding: 10px 8px; background: #8e44ad; font-size: 14px; font-weight: bold;">🎵 Musik: ON</button>
+          <button class="ui-btn" onclick="closeSettings(); openInventory();" style="padding: 10px 8px; background: #16a085; font-size: 14px; font-weight: bold;">🎒 Tas (I)</button>
+          <button class="ui-btn" onclick="closeSettings(); openStats();" style="padding: 10px 8px; background: #d35400; font-size: 14px; font-weight: bold; position: relative;">📊 Stats <span id="stat-notif" style="display:none; position: absolute; top: -4px; right: -4px; background: red; padding: 1px 6px; border-radius: 50%; font-size: 11px;">!</span></button>
+          <button class="ui-btn" onclick="closeSettings(); openQuestBoard();" style="padding: 10px 8px; background: #2c3e50; font-size: 14px; font-weight: bold;">📜 Misi (J)</button>
+        </div>
 
         <div style="border-top: 1px solid #444; padding-top: 10px;">
           <h3 style="color: #3498db; margin: 0 0 10px; font-size: 14px;">🎥 Pengaturan Kamera</h3>
@@ -369,6 +371,13 @@
     </div>
   </div>
 
+
+  <!-- Speech Bubbles Layer & Rest Screen Overlay for Living World -->
+  <div id="speech-bubbles-layer" style="position:fixed; top:0; left:0; width:100vw; height:100vh; pointer-events:none; z-index:90; overflow:hidden;"></div>
+  <div id="rest-screen-overlay" style="position:fixed; top:0; left:0; width:100vw; height:100vh; background:#060a0f; opacity:0; pointer-events:none; transition:opacity 0.6s ease; z-index:9999; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#fff; font-size:24px; font-weight:bold; letter-spacing:1px; text-shadow:0 0 20px #2ecc71;">
+    💤 Beristirahat pulas di Penginapan Desa...
+    <span style="font-size:15px; color:#2ecc71; margin-top:10px; font-weight:normal;">✨ Seluruh HP &amp; SP Pulih Penuh!</span>
+  </div>
 
   <!-- Memuat Script Game secara modular -->
   <script type="module" src="/src/main.js"></script>
