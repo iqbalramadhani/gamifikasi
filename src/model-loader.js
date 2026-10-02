@@ -129,6 +129,7 @@ export async function loadAllModels() {
         gltf => {
           gltf.scene.traverse(child => {
             if (child.isMesh) {
+              child.frustumCulled = false;
               child.castShadow = true;
               child.receiveShadow = true;
             }
@@ -154,6 +155,7 @@ export async function loadAllModels() {
         fbx => {
           fbx.traverse(child => {
             if (child.isMesh) {
+              child.frustumCulled = false;
               child.castShadow = true;
               child.receiveShadow = true;
             }
@@ -171,3 +173,67 @@ export async function loadAllModels() {
 
   await Promise.all([...promises, ...fbxPromises]);
 }
+
+/**
+ * Creates an AnimationMixer for an instantiated enemy or boss model,
+ * resolving animations from the loaded glTF asset (Walk, Idle, Attack, Hit, Death).
+ */
+export function createEnemyMixer(charKey, gltfEnemy) {
+  const animClips = loadedModels[charKey]?.animations;
+  if (!animClips || animClips.length === 0) return { mixer: null, actions: {}, currentAction: null };
+
+  const mixer = new THREE.AnimationMixer(gltfEnemy);
+  const findClip = (patterns) => {
+    for (const p of patterns) {
+      const found = animClips.find(clip => p.test(clip.name));
+      if (found) return found;
+    }
+    return null;
+  };
+
+  const walkClip = findClip([/^walk$/i, /^fast_flying$/i, /walk/i, /run/i, /sprint/i, /flying/i]);
+  const idleClip = findClip([/^idle$/i, /^flying_idle$/i, /idle/i]);
+  const attackClip = findClip([/^bite_front$/i, /^punch$/i, /^headbutt$/i, /^attack-melee/i, /attack/i, /bite/i]);
+  const hitClip = findClip([/^hitrecieve$/i, /^hitreact$/i, /hit/i]);
+  const deathClip = findClip([/^death$/i, /^die$/i, /death/i]);
+
+  const actions = {
+    walk: walkClip ? mixer.clipAction(walkClip) : null,
+    idle: idleClip ? mixer.clipAction(idleClip) : null,
+    attack: attackClip ? mixer.clipAction(attackClip) : null,
+    hit: hitClip ? mixer.clipAction(hitClip) : null,
+    death: deathClip ? mixer.clipAction(deathClip) : null,
+  };
+
+  if (actions.walk) {
+    actions.walk.setLoop(THREE.LoopRepeat);
+    actions.walk.timeScale = 1.2;
+  }
+  if (actions.idle) {
+    actions.idle.setLoop(THREE.LoopRepeat);
+    actions.idle.timeScale = 1.0;
+  }
+  if (actions.attack) {
+    actions.attack.setLoop(THREE.LoopOnce);
+    actions.attack.clampWhenFinished = true;
+    actions.attack.timeScale = 1.4;
+  }
+  if (actions.hit) {
+    actions.hit.setLoop(THREE.LoopOnce);
+    actions.hit.clampWhenFinished = true;
+    actions.hit.timeScale = 1.5;
+  }
+  if (actions.death) {
+    actions.death.setLoop(THREE.LoopOnce);
+    actions.death.clampWhenFinished = true;
+  }
+
+  const currentAction = actions.idle || actions.walk || null;
+  if (currentAction) {
+    currentAction.time = Math.random() * (currentAction.getClip().duration || 1);
+    currentAction.play();
+  }
+
+  return { mixer, actions, currentAction };
+}
+

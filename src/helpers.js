@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { state } from './state.js';
 import { mapSize, enemyTemplates } from './constants.js';
-import { loadedModels } from './model-loader.js';
+import { loadedModels, createEnemyMixer } from './model-loader.js';
 import { playSound } from './audio.js';
 
 // ─── Collision / spawner helpers ──────────────────────────────────────────────
@@ -231,6 +231,11 @@ export function spawnBoss() {
       }
       
       s.bossMesh.position.set(s.bossX, -5, s.bossY);
+
+      const anim = createEnemyMixer('arena_soldier', bModel);
+      s.bossMixer = anim.mixer;
+      s.bossActions = anim.actions;
+      s.bossCurrentAction = anim.currentAction;
     } else {
       const bGeo = new THREE.BoxGeometry(60, 60, 60);
       const bMat = new THREE.MeshLambertMaterial({ color: 0xcccccc });
@@ -242,10 +247,37 @@ export function spawnBoss() {
     document.getElementById('message').textContent =
       '⚠️ THE GOLDEN GOLEM TELAH BANGKIT! Kalahkan dia untuk menang!';
       
-    const bGeo = new THREE.BoxGeometry(60, 60, 60);
-    const bMat = new THREE.MeshLambertMaterial({ color: 0xffd700 });
-    s.bossMesh = new THREE.Mesh(bGeo, bMat);
-    s.bossMesh.position.set(s.bossX, 30, s.bossY);
+    if (loadedModels.blob_green_spiky) {
+      const bModel = SkeletonUtils.clone(loadedModels.blob_green_spiky);
+      bModel.scale.set(40, 40, 40);
+      bModel.position.y = -12;
+      // Beri kilau emas untuk Golden Golem
+      bModel.traverse(child => {
+        if (child.isMesh) {
+          child.frustumCulled = false;
+          if (child.material) {
+            child.material = child.material.clone();
+            child.material.color.setHex(0xffd700);
+            if (child.material.emissive) {
+              child.material.emissive.setHex(0x443300);
+            }
+          }
+        }
+      });
+      s.bossMesh = new THREE.Group();
+      s.bossMesh.add(bModel);
+      s.bossMesh.position.set(s.bossX, 0, s.bossY);
+
+      const anim = createEnemyMixer('blob_green_spiky', bModel);
+      s.bossMixer = anim.mixer;
+      s.bossActions = anim.actions;
+      s.bossCurrentAction = anim.currentAction;
+    } else {
+      const bGeo = new THREE.BoxGeometry(60, 60, 60);
+      const bMat = new THREE.MeshLambertMaterial({ color: 0xffd700 });
+      s.bossMesh = new THREE.Mesh(bGeo, bMat);
+      s.bossMesh.position.set(s.bossX, 30, s.bossY);
+    }
   }
 
   s.scene.add(s.bossMesh);

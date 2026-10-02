@@ -828,6 +828,11 @@ export function initEntities() {
     const fbxModel = SkeletonUtils.clone(loadedModels.player_model);
     fbxModel.scale.set(0.3, 0.3, 0.3); // Scale diperkecil sedikit agar pas
     fbxModel.position.y = -15; 
+    fbxModel.traverse(child => {
+      if (child.isMesh) {
+        child.frustumCulled = false;
+      }
+    }); 
     
     // Setup Animasi
     s.playerMixer = new THREE.AnimationMixer(fbxModel);
@@ -1726,9 +1731,12 @@ export function initWildsNPCs() {
     gltfBoss.scale.set(100, 100, 100);
     gltfBoss.position.y = -30;
     gltfBoss.traverse((child) => {
-      if (child.isMesh && child.material) {
-        child.material = child.material.clone();
-        child.material.color.setHex(0xffd700);
+      if (child.isMesh) {
+        child.frustumCulled = false;
+        if (child.material) {
+          child.material = child.material.clone();
+          child.material.color.setHex(0xffd700);
+        }
       }
     });
     s.bossMesh = new THREE.Group();
@@ -2144,6 +2152,18 @@ export function initWilds2() {
     const bossClone = SkeletonUtils.clone(loadedModels.arena_soldier);
     bossClone.scale.set(120, 120, 120);
     bossClone.position.y = 0; // feet on terrain (model bottom is at y=0)
+    bossClone.traverse(child => {
+      if (child.isMesh) {
+        child.frustumCulled = false;
+        if (child.material) {
+          if (Array.isArray(child.material)) {
+            child.material = child.material.map(m => m.clone());
+          } else {
+            child.material = child.material.clone();
+          }
+        }
+      }
+    });
     s.bossMesh = new THREE.Group();
     s.bossMesh.add(bossClone);
 

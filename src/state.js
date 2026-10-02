@@ -107,6 +107,7 @@ export const state = {
   expOrbs: [],
   potionItems: [],
   enemies: [],
+  dyingEnemies: [],
   projectiles: [],
   particles: [],
   lootDrops: [],

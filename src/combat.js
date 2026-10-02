@@ -2,10 +2,68 @@ import * as THREE from 'three';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { state } from './state.js';
 import { mapSize, weaponList, armorList, enemyTemplates, enemyTemplates2, eliteTemplates, WILDS2_MIN_LEVEL, lootTable, consumableItems, statusEffects } from './constants.js';
-import { loadedModels } from './model-loader.js';
+import { loadedModels, createEnemyMixer } from './model-loader.js';
 import { blocked, spawnParticles, spawnDamageText } from './helpers.js';
 import { spawnAtFreePos, spawnAtFreePosWilds2, getTerrainHeight, getTerrainHeightWilds2 } from './scenes.js';
 import { playSound } from './audio.js';
+
+// ─── Enemy animation helper ───────────────────────────────────────────────────
+
+export function playEnemyAction(e, actionName, duration = 0.2) {
+  if (!e || !e.mixer || !e.actions) return;
+  const target = e.actions[actionName];
+  if (!target) return;
+
+  if (e.currentAction === target) {
+    if (!target.isRunning()) {
+      target.reset();
+      target.play();
+    }
+    return;
+  }
+
+  const prev = e.currentAction;
+  e.currentAction = target;
+  e.currentActionName = actionName;
+
+  target.reset();
+  target.fadeIn(duration);
+  target.play();
+
+  if (prev && prev !== target) {
+    prev.fadeOut(duration);
+  }
+}
+
+/**
+ * Mencari sudut jalan memutar (detour) ketika musuh terhalang oleh objek/rintangan.
+ * Menguji berbagai sudut ke kiri dan ke kanan untuk menemukan jalur yang bebas obstacle.
+ */
+export function findDetourAngle(e, targetX, targetY) {
+  const directAngle = Math.atan2(targetY - e.y, targetX - e.x);
+  const offsets = [
+    Math.PI * 0.25, -Math.PI * 0.25,
+    Math.PI * 0.45, -Math.PI * 0.45,
+    Math.PI * 0.65, -Math.PI * 0.65,
+    Math.PI * 0.85, -Math.PI * 0.85
+  ];
+  if (Math.random() < 0.5) offsets.reverse();
+
+  const checkDist = (e.r || 16) + 35;
+  for (const offset of offsets) {
+    const testAng = directAngle + offset;
+    const testX = e.x + Math.cos(testAng) * checkDist;
+    const testY = e.y + Math.sin(testAng) * checkDist;
+    if (!blocked(testX, testY, e.r)) {
+      const halfX = e.x + Math.cos(testAng) * (checkDist * 0.5);
+      const halfY = e.y + Math.sin(testAng) * (checkDist * 0.5);
+      if (!blocked(halfX, halfY, e.r)) {
+        return testAng;
+      }
+    }
+  }
+  return directAngle + (Math.random() < 0.5 ? Math.PI * 0.5 : -Math.PI * 0.5);
+}
 
 // ─── Critical hit helper ──────────────────────────────────────────────────────
 
@@ -65,14 +123,30 @@ export function spawnEnemy(ex, ey, scaleFactor = 1.0, isBossChild = false, force
   }
 
   let mesh, eY;
+  let animData = null;
 
   if (loadedModels[charKey]) {
     const gltfEnemy = SkeletonUtils.clone(loadedModels[charKey]);
     gltfEnemy.scale.set(7 * scaleFactor, 7 * scaleFactor, 7 * scaleFactor);
     gltfEnemy.position.y = -12;
+    gltfEnemy.traverse(child => {
+      if (child.isMesh) {
+        child.frustumCulled = false;
+        child.castShadow = true;
+        child.receiveShadow = true;
+        if (child.material) {
+          if (Array.isArray(child.material)) {
+            child.material = child.material.map(m => m.clone());
+          } else {
+            child.material = child.material.clone();
+          }
+        }
+      }
+    });
     mesh = new THREE.Group();
     mesh.add(gltfEnemy);
     eY = isFlying ? (isElite ? 42 : 35) : 15;
+    animData = createEnemyMixer(charKey, gltfEnemy);
   } else {
     const boxGeo = new THREE.BoxGeometry(20 * scaleFactor, 20 * scaleFactor, 20 * scaleFactor);
     const boxMat = new THREE.MeshLambertMaterial({ color: isElite ? elite.auraColor : 0xff0000 });
@@ -159,6 +233,10 @@ export function spawnEnemy(ex, ey, scaleFactor = 1.0, isBossChild = false, force
     x: ex, y: ey, r: eR, meshY: eY, dx, dy,
     hp, maxHp: hp, baseSpeed, damage: damage || 10,
     mesh, hpGroup, hpFg,
+    mixer: animData?.mixer || null,
+    actions: animData?.actions || null,
+    currentAction: animData?.currentAction || null,
+    currentActionName: animData?.currentAction ? 'idle' : null,
     stunTimer: 0, slowTimer: 0, type: typeStr,
     attackTimer: 0, walkCycle: Math.random() * Math.PI * 2,
     limbs,
@@ -172,6 +250,12 @@ export function spawnEnemy(ex, ey, scaleFactor = 1.0, isBossChild = false, force
     hpBarWidth,
     _announced: false,
     hazardTimer: 0,
+    pauseTimer: 0,
+    detourTimer: 0,
+    detourAngle: 0,
+    stuckCounter: 0,
+    lastX: ex,
+    lastY: ey,
   });
 }
 
@@ -201,6 +285,7 @@ export function spawnEnemy2(ex, ey, scaleFactor = 1.0, isBossChild = false, forc
   }
 
   let mesh, eY;
+  let animData = null;
   if (loadedModels[charKey]) {
     const gltfEnemy = SkeletonUtils.clone(loadedModels[charKey]);
     if (charKey === 'arena_soldier') {
@@ -209,9 +294,24 @@ export function spawnEnemy2(ex, ey, scaleFactor = 1.0, isBossChild = false, forc
       gltfEnemy.scale.set(7 * scaleFactor, 7 * scaleFactor, 7 * scaleFactor);
     }
     gltfEnemy.position.y = -12;
+    gltfEnemy.traverse(child => {
+      if (child.isMesh) {
+        child.frustumCulled = false;
+        child.castShadow = true;
+        child.receiveShadow = true;
+        if (child.material) {
+          if (Array.isArray(child.material)) {
+            child.material = child.material.map(m => m.clone());
+          } else {
+            child.material = child.material.clone();
+          }
+        }
+      }
+    });
     mesh = new THREE.Group();
     mesh.add(gltfEnemy);
     eY = isFlying ? (isElite ? 42 : 35) : 15;
+    animData = createEnemyMixer(charKey, gltfEnemy);
   } else {
     const boxGeo = new THREE.BoxGeometry(20 * scaleFactor, 20 * scaleFactor, 20 * scaleFactor);
     const boxMat = new THREE.MeshLambertMaterial({ color: isElite ? elite.auraColor : 0xff8800 });
@@ -297,6 +397,10 @@ export function spawnEnemy2(ex, ey, scaleFactor = 1.0, isBossChild = false, forc
     x: ex, y: ey, r: eR, meshY: eY, dx, dy,
     hp, maxHp: hp, baseSpeed, damage: damage || 10,
     mesh, hpGroup, hpFg,
+    mixer: animData?.mixer || null,
+    actions: animData?.actions || null,
+    currentAction: animData?.currentAction || null,
+    currentActionName: animData?.currentAction ? 'idle' : null,
     stunTimer: 0, slowTimer: 0, type: typeStr,
     attackTimer: 0, walkCycle: Math.random() * Math.PI * 2,
     limbs,
@@ -311,6 +415,12 @@ export function spawnEnemy2(ex, ey, scaleFactor = 1.0, isBossChild = false, forc
     hpBarWidth,
     _announced: false,
     hazardTimer: 0,
+    pauseTimer: 0,
+    detourTimer: 0,
+    detourAngle: 0,
+    stuckCounter: 0,
+    lastX: ex,
+    lastY: ey,
   });
 }
 
@@ -1208,10 +1318,10 @@ export function updateProjectiles(dt) {
 function killEnemy(index) {
   const s = state;
   const e = s.enemies[index];
-  s.scene.remove(e.mesh);
-  s.scene.remove(e.hpGroup);
+  if (!e) return;
+
   s.enemies.splice(index, 1);
-  
+
   if (s.bountyQuest && s.bountyQuestProgress < s.bountyQuest.count) {
     s.bountyQuestProgress++;
     if (typeof window.updateQuestUI === 'function') window.updateQuestUI();
@@ -1314,6 +1424,38 @@ function killEnemy(index) {
 
     if (typeof window.updateUI === 'function') window.updateUI(true);
   }
+
+  // Remove HP bar and elite meshes immediately
+  if (e.hpGroup) {
+    s.scene.remove(e.hpGroup);
+    e.hpGroup = null;
+  }
+  if (e.auraMesh) {
+    e.mesh.remove(e.auraMesh);
+    e.auraMesh = null;
+  }
+  if (e.crownMesh) {
+    e.mesh.remove(e.crownMesh);
+    e.crownMesh = null;
+  }
+
+  // Play death animation if available!
+  if (e.actions?.death && e.mixer) {
+    e.isDying = true;
+    e.dx = 0;
+    e.dy = 0;
+    playEnemyAction(e, 'death', 0.08);
+    const dur = e.actions.death.getClip().duration || 1.0;
+    e.deathTimer = Math.max(50, Math.floor(dur * 60) + 15);
+    s.dyingEnemies = s.dyingEnemies || [];
+    s.dyingEnemies.push(e);
+  } else {
+    if (e.mixer) {
+      e.mixer.stopAllAction();
+      e.mixer.uncacheRoot(e.mesh);
+    }
+    s.scene.remove(e.mesh);
+  }
 }
 
 
@@ -1348,6 +1490,10 @@ export function updateEnemies(dt) {
     const e = s.enemies[idx];
     const distToPlayer = Math.hypot(s.player.x - e.x, s.player.y - e.y);
 
+    if (e.mixer && distToPlayer < 1200) {
+      e.mixer.update(dt * 0.016667);
+    }
+
     if (e.stunTimer > 0) {
       e.stunTimer -= dt;
     }
@@ -1371,11 +1517,14 @@ export function updateEnemies(dt) {
     }
 
     if (e.slowTimer > 0) e.slowTimer -= dt;
+    let speed = e.slowTimer > 0 ? e.baseSpeed * 0.4 : e.baseSpeed;
 
     if (e.stunTimer <= 0 && e.actionState === 'attack') {
       e.attackAnimTimer -= dt;
       e.dx = 0;
       e.dy = 0;
+      e.mesh.rotation.y = Math.atan2(s.player.x - e.x, s.player.y - e.y);
+      playEnemyAction(e, 'attack', 0.1);
 
       if (e.attackAnimTimer <= 15 && !e.hasDealtDamage) {
         e.hasDealtDamage = true;
@@ -1420,7 +1569,7 @@ export function updateEnemies(dt) {
     } else {
       if (e.attackCooldown > 0) e.attackCooldown -= dt;
 
-      let speed = e.slowTimer > 0 ? e.baseSpeed * 0.4 : e.baseSpeed;
+      speed = e.slowTimer > 0 ? e.baseSpeed * 0.4 : e.baseSpeed;
 
       // Berserk Frenzy for Warlord Yeti Frostbane
       if (e.isElite && e.elite.ability === 'berserk_frenzy' && e.hp < e.maxHp * 0.5) {
@@ -1478,7 +1627,28 @@ export function updateEnemies(dt) {
         if (Math.random() < 0.1) spawnParticles(e.x, e.y, 0x651fff, 2, 'dust');
       }
 
-      if (distToPlayer < 800) {
+      if (e.pauseTimer > 0) {
+        // AI sedang diam sejenak ketika mentok di objek ("diem dulu")
+        e.pauseTimer -= dt;
+        e.dx = 0;
+        e.dy = 0;
+        playEnemyAction(e, 'idle', 0.2);
+      } else if (e.detourTimer > 0) {
+        // AI sedang berjalan memutar mencari rute alternatif ("mencari jalan lain")
+        e.detourTimer -= dt;
+        e.dx = Math.cos(e.detourAngle) * speed;
+        e.dy = Math.sin(e.detourAngle) * speed;
+        e.mesh.rotation.y = Math.atan2(e.dx, e.dy);
+        playEnemyAction(e, 'walk', 0.2);
+
+        // Jika rute langsung ke pemain sudah bebas dan dekat, batalkan detour
+        const directAng = Math.atan2(s.player.y - e.y, s.player.x - e.x);
+        const checkX = e.x + Math.cos(directAng) * 45;
+        const checkY = e.y + Math.sin(directAng) * 45;
+        if (!blocked(checkX, checkY, e.r) && distToPlayer < 220) {
+          e.detourTimer = 0;
+        }
+      } else if (distToPlayer < 800) {
         const angle = Math.atan2(s.player.y - e.y, s.player.x - e.x);
         const isRanged = e.type === 'archer' || e.type === 'sc_archer' || (e.isElite && ['mage', 'sc_mage', 'sc_dragon'].includes(e.type));
         
@@ -1489,7 +1659,8 @@ export function updateEnemies(dt) {
           e.hasDealtDamage = false;
           e.dx = 0;
           e.dy = 0;
-          e.mesh.rotation.y = angle;
+          e.mesh.rotation.y = Math.atan2(s.player.x - e.x, s.player.y - e.y);
+          playEnemyAction(e, 'attack', 0.1);
         } else if (isRanged) {
           const keepDist = (e.type.includes('mage') || e.type.includes('dragon')) ? 220 : 300;
           if (distToPlayer > keepDist) {
@@ -1503,6 +1674,9 @@ export function updateEnemies(dt) {
           const shootInterval = e.isElite ? 85 : 120;
           if (e.attackTimer > shootInterval && distToPlayer < 450) {
             e.attackTimer = 0;
+            e.mesh.rotation.y = Math.atan2(s.player.x - e.x, s.player.y - e.y);
+            playEnemyAction(e, 'attack', 0.08);
+            e.rangedAttackResetTimer = 22;
 
             if (e.isElite && e.elite.ability === 'triple_shot') {
               for (let aOffset of [-0.25, 0, 0.25]) {
@@ -1586,19 +1760,49 @@ export function updateEnemies(dt) {
       }
     }
 
+    const prevX = e.x;
+    const prevY = e.y;
+
     if (e.type === 'ghost') {
       e.x = nx; e.y = ny;
     } else {
       if (blocked(nx, ny, e.r)) {
         if (!blocked(nx, e.y, e.r)) e.x = nx;
         else if (!blocked(e.x, ny, e.r)) e.y = ny;
-        else {
-          // Kalau tersangkut total, beri sedikit geseran acak agar bisa lepas dari sudut mati tembok
-          e.x += (Math.random() - 0.5) * 10;
-          e.y += (Math.random() - 0.5) * 10;
-        }
       } else {
         e.x = nx; e.y = ny;
+      }
+    }
+
+    // Deteksi jika musuh tersangkut di objek aset
+    const attemptedSpd = Math.hypot(e.dx, e.dy);
+    const actualMoved = Math.hypot(e.x - prevX, e.y - prevY);
+    if (attemptedSpd > 0.1 && e.actionState !== 'attack' && distToPlayer > s.player.r + e.r + 20) {
+      if (actualMoved < speed * 0.25 * dt) {
+        e.stuckCounter = (e.stuckCounter || 0) + 1;
+        if (e.stuckCounter >= 6) {
+          e.stuckCounter = 0;
+          // 1. "Diem dulu": berhenti sejenak (~0.35s - 0.65s)
+          e.pauseTimer = 20 + Math.random() * 18;
+          e.dx = 0; e.dy = 0;
+          playEnemyAction(e, 'idle', 0.2);
+          // 2. "Mencari jalan lain": tentukan sudut rute memutar yang tidak terhalang objek
+          e.detourAngle = findDetourAngle(e, s.player.x, s.player.y);
+          e.detourTimer = 45 + Math.random() * 35;
+        }
+      } else {
+        e.stuckCounter = Math.max(0, (e.stuckCounter || 0) - 1);
+      }
+    }
+
+    if (e.rangedAttackResetTimer > 0) {
+      e.rangedAttackResetTimer -= dt;
+      if (e.rangedAttackResetTimer <= 0) {
+        if (Math.hypot(e.dx, e.dy) > 0.1) {
+          playEnemyAction(e, 'walk', 0.2);
+        } else {
+          playEnemyAction(e, 'idle', 0.2);
+        }
       }
     }
 
@@ -1607,10 +1811,10 @@ export function updateEnemies(dt) {
     let lungeOffsetY = 0;
     if (e.actionState === 'attack') {
       const attackProgress = (30 - e.attackAnimTimer) / 30; // 0 to 1
-      const lunge = Math.sin(attackProgress * Math.PI) * 10;
-      const angle = e.mesh.rotation.y;
-      lungeOffsetX = Math.cos(angle) * lunge;
-      lungeOffsetY = Math.sin(angle) * lunge;
+      const lunge = Math.sin(attackProgress * Math.PI) * 12;
+      const angleToPlayer = Math.atan2(s.player.y - e.y, s.player.x - e.x);
+      lungeOffsetX = Math.cos(angleToPlayer) * lunge;
+      lungeOffsetY = Math.sin(angleToPlayer) * lunge;
     }
     
     e.mesh.position.x += (e.x + lungeOffsetX - e.mesh.position.x) * Math.min(dt * 10, 1);
@@ -1621,30 +1825,49 @@ export function updateEnemies(dt) {
     let meshYTarget = e.meshY + hoverBob + (s.currentScene === 'wilds2'
       ? getTerrainHeightWilds2(e.x, e.y) : getTerrainHeight(e.x, e.y));
     
-    if (e.actionState === 'attack') {
-      const attackProgress = (30 - e.attackAnimTimer) / 30;
-      const swing = Math.sin(attackProgress * Math.PI) * 1.5;
-      const l = e.limbs;
-      if (l['arm-left']) l['arm-left'].rotation.x = -swing;
-      if (l['arm-right']) l['arm-right'].rotation.x = -swing;
-      if (l['leg-left']) l['leg-left'].rotation.x = 0;
-      if (l['leg-right']) l['leg-right'].rotation.x = 0;
-    } else if (speedScalar > 0.1) {
-      e.mesh.rotation.y = Math.atan2(e.dx, e.dy);
-      if (e.walkCycle === undefined) e.walkCycle = Math.random() * Math.PI * 2;
-      e.walkCycle += speedScalar * 0.08 * dt;
-      meshYTarget += Math.abs(Math.sin(e.walkCycle * 2)) * 1.5;
-      const l = e.limbs;
-      if (l['leg-left']) l['leg-left'].rotation.x = Math.sin(e.walkCycle) * 0.8;
-      if (l['leg-right']) l['leg-right'].rotation.x = Math.sin(e.walkCycle + Math.PI) * 0.8;
-      if (l['arm-left']) l['arm-left'].rotation.x = Math.sin(e.walkCycle + Math.PI) * 0.8;
-      if (l['arm-right']) l['arm-right'].rotation.x = Math.sin(e.walkCycle) * 0.8;
+    if (e.mixer) {
+      if (e.actionState === 'attack' || (e.rangedAttackResetTimer && e.rangedAttackResetTimer > 0)) {
+        e.mesh.rotation.y = Math.atan2(s.player.x - e.x, s.player.y - e.y);
+      } else if (speedScalar > 0.1) {
+        e.mesh.rotation.y = Math.atan2(e.dx, e.dy);
+        if (e.actions?.walk) {
+          const speedRatio = speed / (e.baseSpeed || 1.5);
+          e.actions.walk.timeScale = Math.min(2.5, Math.max(0.6, speedRatio * 1.2));
+        }
+        playEnemyAction(e, 'walk', 0.2);
+      } else {
+        if (distToPlayer < 600) {
+          e.mesh.rotation.y = Math.atan2(s.player.x - e.x, s.player.y - e.y);
+        }
+        playEnemyAction(e, 'idle', 0.25);
+      }
     } else {
-      const l = e.limbs;
-      if (l['leg-left']) l['leg-left'].rotation.x = 0;
-      if (l['leg-right']) l['leg-right'].rotation.x = 0;
-      if (l['arm-left']) l['arm-left'].rotation.x = 0;
-      if (l['arm-right']) l['arm-right'].rotation.x = 0;
+      if (e.actionState === 'attack') {
+        e.mesh.rotation.y = Math.atan2(s.player.x - e.x, s.player.y - e.y);
+        const attackProgress = (30 - e.attackAnimTimer) / 30;
+        const swing = Math.sin(attackProgress * Math.PI) * 1.5;
+        const l = e.limbs;
+        if (l['arm-left']) l['arm-left'].rotation.x = -swing;
+        if (l['arm-right']) l['arm-right'].rotation.x = -swing;
+        if (l['leg-left']) l['leg-left'].rotation.x = 0;
+        if (l['leg-right']) l['leg-right'].rotation.x = 0;
+      } else if (speedScalar > 0.1) {
+        e.mesh.rotation.y = Math.atan2(e.dx, e.dy);
+        if (e.walkCycle === undefined) e.walkCycle = Math.random() * Math.PI * 2;
+        e.walkCycle += speedScalar * 0.08 * dt;
+        meshYTarget += Math.abs(Math.sin(e.walkCycle * 2)) * 1.5;
+        const l = e.limbs;
+        if (l['leg-left']) l['leg-left'].rotation.x = Math.sin(e.walkCycle) * 0.8;
+        if (l['leg-right']) l['leg-right'].rotation.x = Math.sin(e.walkCycle + Math.PI) * 0.8;
+        if (l['arm-left']) l['arm-left'].rotation.x = Math.sin(e.walkCycle + Math.PI) * 0.8;
+        if (l['arm-right']) l['arm-right'].rotation.x = Math.sin(e.walkCycle) * 0.8;
+      } else {
+        const l = e.limbs;
+        if (l['leg-left']) l['leg-left'].rotation.x = 0;
+        if (l['leg-right']) l['leg-right'].rotation.x = 0;
+        if (l['arm-left']) l['arm-left'].rotation.x = 0;
+        if (l['arm-right']) l['arm-right'].rotation.x = 0;
+      }
     }
     e.mesh.position.y += (meshYTarget - e.mesh.position.y) * Math.min(dt * 8, 1);
     e.hpGroup.position.set(e.x, e.mesh.position.y + (e.isElite ? 105 : 90), e.y);
@@ -1675,6 +1898,10 @@ export function updateEnemies(dt) {
         s.player.hp = Math.max(0, s.player.hp - blastDmg);
         spawnDamageText(s.player.x, 30, s.player.y, `-${blastDmg}`, '#ff0000');
         e.hp = 0;
+        if (e.mixer) {
+          e.mixer.stopAllAction();
+          e.mixer.uncacheRoot(e.mesh);
+        }
         s.scene.remove(e.mesh); s.scene.remove(e.hpGroup);
         s.enemies.splice(idx, 1);
         if (s.player.hp <= 0) teleportToHometown('Ledakan musuh mengakhiri petualanganmu!');
@@ -1685,9 +1912,41 @@ export function updateEnemies(dt) {
     // enemies are not removed before the player ever sees them)
     e.age += dt;
     if (!e.isBossChild && e.age > 180 && Math.hypot(e.x - s.player.x, e.y - s.player.y) > 2000 && e.stunTimer <= 0) {
+      if (e.mixer) {
+        e.mixer.stopAllAction();
+        e.mixer.uncacheRoot(e.mesh);
+      }
       s.scene.remove(e.mesh);
       s.scene.remove(e.hpGroup);
       s.enemies.splice(idx, 1);
+    }
+  }
+
+  // Update dying enemies (memutar animasi mati, kemudian perlahan tenggelam & dissolve ke tanah)
+  if (s.dyingEnemies && s.dyingEnemies.length > 0) {
+    for (let i = s.dyingEnemies.length - 1; i >= 0; i--) {
+      const de = s.dyingEnemies[i];
+      de.deathTimer -= dt;
+      if (de.mixer) {
+        de.mixer.update(dt * 0.016667);
+      }
+      if (de.deathTimer < 25) {
+        de.mesh.position.y -= 0.35 * dt;
+        de.mesh.traverse(child => {
+          if (child.isMesh && child.material) {
+            child.material.transparent = true;
+            child.material.opacity = Math.max(0, de.deathTimer / 25);
+          }
+        });
+      }
+      if (de.deathTimer <= 0) {
+        if (de.mixer) {
+          de.mixer.stopAllAction();
+          de.mixer.uncacheRoot(de.mesh);
+        }
+        s.scene.remove(de.mesh);
+        s.dyingEnemies.splice(i, 1);
+      }
     }
   }
 }
@@ -1705,7 +1964,60 @@ function teleportToHometown(msg) {
 
 export function updateBoss(dt) {
   const s = state;
+
+  // Handle boss dying animation and dissolving
+  if (s.bossDyingMesh && s.bossDeathTimer > 0) {
+    s.bossDeathTimer -= dt;
+    if (s.bossDyingMixer) s.bossDyingMixer.update(dt * 0.016667);
+    if (s.bossDeathTimer < 35) {
+      s.bossDyingMesh.position.y -= 0.4 * dt;
+      s.bossDyingMesh.traverse(child => {
+        if (child.isMesh && child.material) {
+          child.material.transparent = true;
+          child.material.opacity = Math.max(0, s.bossDeathTimer / 35);
+        }
+      });
+    }
+    if (s.bossDeathTimer <= 0) {
+      if (s.bossDyingMixer) {
+        s.bossDyingMixer.stopAllAction();
+        s.bossDyingMixer.uncacheRoot(s.bossDyingMesh);
+      }
+      s.scene.remove(s.bossDyingMesh);
+      s.bossDyingMesh = null;
+      s.bossDyingMixer = null;
+    }
+  }
+
   if (!s.bossActive || s.bossDefeated || !s.bossMesh) return;
+
+  if (s.bossMixer) {
+    s.bossMixer.update(dt * 0.016667);
+  }
+
+  const playBossAction = (actionName, duration = 0.2) => {
+    if (!s.bossMixer || !s.bossActions) return;
+    const target = s.bossActions[actionName];
+    if (!target) return;
+    if (s.bossCurrentAction === target) {
+      if (actionName === 'attack') {
+        target.reset();
+        target.play();
+      } else if (!target.isRunning()) {
+        target.reset();
+        target.play();
+      }
+      return;
+    }
+    const prev = s.bossCurrentAction;
+    s.bossCurrentAction = target;
+    target.reset();
+    target.fadeIn(duration);
+    target.play();
+    if (prev && prev !== target) {
+      prev.fadeOut(duration);
+    }
+  };
 
   const dist = Math.hypot(s.player.x - s.bossX, s.player.y - s.bossY);
   const angle = Math.atan2(s.player.y - s.bossY, s.player.x - s.bossX);
@@ -1777,12 +2089,16 @@ export function updateBoss(dt) {
       // Arena Champion: Melee Spear Attack
       if (s.bossAttackTimer > attackCooldown && dist < 160) {
         s.bossAttackTimer = 0;
+        playBossAction('attack', 0.1);
+        s.bossAttackAnimTimer = 25;
         s.cameraShake = Math.max(s.cameraShake || 0, s.bossPhase === 2 ? 25 : 15);
         playSound('hit');
         
-        // Animasi serangan tusukan (simulasi dengan rotasi sesaat)
-        s.bossMesh.rotation.x = Math.PI / 8;
-        setTimeout(() => { if (s.bossMesh) s.bossMesh.rotation.x = 0; }, 200);
+        // Animasi serangan tusukan (simulasi dengan rotasi sesaat jika tanpa mixer)
+        if (!s.bossMixer) {
+          s.bossMesh.rotation.x = Math.PI / 8;
+          setTimeout(() => { if (s.bossMesh) s.bossMesh.rotation.x = 0; }, 200);
+        }
 
         if (dist < 120) {
           if (!s.player.defending) {
@@ -1807,6 +2123,8 @@ export function updateBoss(dt) {
       
       if (s.bossAttackTimer > attackCooldown && dist < 120) {
          s.bossAttackTimer = 0;
+         playBossAction('attack', 0.1);
+         s.bossAttackAnimTimer = 25;
          s.cameraShake = Math.max(s.cameraShake || 0, s.bossPhase === 2 ? 25 : 20);
          spawnParticles(s.bossX, s.bossY, 0xffd700, 40, 'death');
          playSound('hit');
@@ -1825,6 +2143,8 @@ export function updateBoss(dt) {
             }
          }
       } else if (Math.random() < projectileChance) {
+        playBossAction('attack', 0.08);
+        s.bossAttackAnimTimer = 18;
         const m = new THREE.Mesh(
           new THREE.SphereGeometry(10, 8, 8),
           new THREE.MeshBasicMaterial({ color: 0xff0000 })
@@ -1842,6 +2162,15 @@ export function updateBoss(dt) {
     }
   }
 
+  // Action state resolution for boss (walk / idle)
+  if (s.bossAttackAnimTimer > 0) {
+    s.bossAttackAnimTimer -= dt;
+  } else if (s.bossReturning || (isAggro && dist > 80)) {
+    playBossAction('walk', 0.2);
+  } else {
+    playBossAction('idle', 0.25);
+  }
+
   // Smooth position interpolation after logic
   s.bossMesh.position.x += (s.bossX - s.bossMesh.position.x) * Math.min(dt * 6, 1);
   s.bossMesh.position.z += (s.bossY - s.bossMesh.position.z) * Math.min(dt * 6, 1);
@@ -1849,13 +2178,12 @@ export function updateBoss(dt) {
     ? getTerrainHeightWilds2(s.bossX, s.bossY)
     : getTerrainHeight(s.bossX, s.bossY);
   
-  const bossBaseY = s.currentScene === 'wilds2' ? -5 : 30; // -5 agar kaki menapak tanah
+  const bossBaseY = s.currentScene === 'wilds2' ? -5 : 0; // Menapak tanah
 
   // Animasi langkah yang lebih hidup (Bobbing & Wobbling)
   let walkBob = 0;
   let walkWobble = 0;
-  if (isAggro && dist > 80) {
-    // Arena Champion bergerak lebih cepat jadi animasinya lebih cepat dan melompat tinggi
+  if (!s.bossMixer && isAggro && dist > 80) {
     const walkSpeed = s.currentScene === 'wilds2' ? 120 : 250; 
     const time = Date.now() / walkSpeed;
     walkBob = Math.abs(Math.sin(time)) * (s.currentScene === 'wilds2' ? 15 : 6);
@@ -1863,8 +2191,12 @@ export function updateBoss(dt) {
   }
 
   s.bossMesh.position.y += (bossBaseY + bossTerrainY + walkBob - s.bossMesh.position.y) * Math.min(dt * 6, 1);
-  s.bossMesh.rotation.z = walkWobble;
-  s.bossMesh.rotation.x = Math.sin(Date.now() / 300) * 0.05;
+  if (!s.bossMixer) {
+    s.bossMesh.rotation.z = walkWobble;
+    s.bossMesh.rotation.x = Math.sin(Date.now() / 300) * 0.05;
+  } else {
+    s.bossMesh.rotation.z = 0;
+  }
 
   s.bossHpGroup.position.x += (s.bossX - s.bossHpGroup.position.x) * Math.min(dt * 6, 1);
   s.bossHpGroup.position.z += (s.bossY - s.bossHpGroup.position.z) * Math.min(dt * 6, 1);
@@ -1891,10 +2223,33 @@ export function updateBoss(dt) {
   if (s.bossHp <= 0 && !s.bossDefeated) {
     s.bossDefeated = true;
     s.bossActive = false;
-    s.scene.remove(s.bossMesh);
-    s.scene.remove(s.bossHpGroup);
-    s.bossMesh = null;
-    s.bossHpGroup = null;
+    if (s.bossHpGroup) {
+      s.scene.remove(s.bossHpGroup);
+      s.bossHpGroup = null;
+    }
+
+    if (s.bossActions?.death && s.bossMixer) {
+      playBossAction('death', 0.08);
+      const dur = s.bossActions.death.getClip().duration || 1.8;
+      s.bossDeathTimer = Math.max(70, Math.floor(dur * 60) + 30);
+      s.bossDyingMesh = s.bossMesh;
+      s.bossDyingMixer = s.bossMixer;
+      s.bossMesh = null;
+      s.bossMixer = null;
+      s.bossActions = null;
+      s.bossCurrentAction = null;
+    } else {
+      if (s.bossMixer) {
+        s.bossMixer.stopAllAction();
+        s.bossMixer = null;
+        s.bossActions = null;
+        s.bossCurrentAction = null;
+      }
+      if (s.bossMesh) {
+        s.scene.remove(s.bossMesh);
+        s.bossMesh = null;
+      }
+    }
 
     const isWilds2 = s.currentScene === 'wilds2';
     const name = isWilds2 ? 'Arena Champion' : 'The Golden Golem';

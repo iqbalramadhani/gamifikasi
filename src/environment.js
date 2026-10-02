@@ -290,10 +290,24 @@ export function teleportTo(sceneName) {
 
     // Clear existing enemies
     s.enemies.forEach(e => {
+      if (e.mixer) {
+        e.mixer.stopAllAction();
+        e.mixer.uncacheRoot(e.mesh);
+      }
       s.scene.remove(e.mesh);
       s.scene.remove(e.hpGroup);
     });
     s.enemies.length = 0;
+    if (s.dyingEnemies) {
+      s.dyingEnemies.forEach(de => {
+        if (de.mixer) {
+          de.mixer.stopAllAction();
+          de.mixer.uncacheRoot(de.mesh);
+        }
+        s.scene.remove(de.mesh);
+      });
+      s.dyingEnemies.length = 0;
+    }
 
     // Spawn initial wave of enemies in the Wilds scattered around the map
     const initialSpawns = Math.min(30, 10 + s.player.level * 2);
@@ -319,10 +333,24 @@ export function teleportTo(sceneName) {
 
     // Clear existing enemies
     s.enemies.forEach(e => {
+      if (e.mixer) {
+        e.mixer.stopAllAction();
+        e.mixer.uncacheRoot(e.mesh);
+      }
       s.scene.remove(e.mesh);
       s.scene.remove(e.hpGroup);
     });
     s.enemies.length = 0;
+    if (s.dyingEnemies) {
+      s.dyingEnemies.forEach(de => {
+        if (de.mixer) {
+          de.mixer.stopAllAction();
+          de.mixer.uncacheRoot(de.mesh);
+        }
+        s.scene.remove(de.mesh);
+      });
+      s.dyingEnemies.length = 0;
+    }
 
     // Spawn initial wave of tier-2 enemies in the desert
     const initialSpawns = Math.min(80, 40 + s.player.level * 3); // Lebih banyak musuh
