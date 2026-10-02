@@ -22,6 +22,7 @@
         <div class="badge badge-lv">⭐ Lv <span id="player-level">1</span> (<span id="exp">0</span>/<span id="max-exp">20</span>)</div>
         <div class="badge badge-gold">💰 <span id="gold">0</span></div>
         <div class="badge badge-bounty" id="side-quest-badge" style="display:none;">📜 Bounty: <span id="side-quest-text"></span></div>
+        <div class="badge badge-auto" id="auto-attack-badge" onclick="toggleAutoAttack()" title="Klik atau tekan T untuk toggle Mode Auto-Attack" style="cursor: pointer;">⚔️ Auto: <span id="auto-attack-status">OFF</span></div>
       </div>
       
       <div class="hud-right">
@@ -49,7 +50,7 @@
       </div>
     </div>
     
-    <div id="message">Panah: Gerak | Z: Dash | X: Spin | Spasi: Tebas Pedang</div>
+    <div id="message">Panah: Gerak | Spasi: Tebas | T: Auto Atk | Z: Dash | X: Spin | R: Triple | C: Heal | B: SP Pot</div>
     
     <!-- Layar Game (Canvas) -->
     <div id="game">
@@ -61,8 +62,10 @@
       <!-- Spacer for left side where movement used to be -->
       <div></div>
       <!-- Action buttons -->
-      <div style="display: flex; gap: 8px; align-items: flex-end; pointer-events: auto;">
+      <div style="display: flex; gap: 8px; align-items: flex-end; pointer-events: auto; flex-wrap: wrap; justify-content: flex-end;">
+        <button id="btn-auto-attack" class="action-btn" onclick="toggleAutoAttack()" style="background: #34495e;">⚔️ Auto (T): OFF</button>
         <button id="btn-potion" class="action-btn" onpointerdown="keys['c']=true" onpointerup="keys['c']=false" onpointercancel="keys['c']=false" onpointerleave="keys['c']=false" style="background: #c0392b;">🧪 Heal (C) [0]</button>
+        <button id="btn-sp-potion" class="action-btn" onpointerdown="keys['b']=true" onpointerup="keys['b']=false" onpointercancel="keys['b']=false" onpointerleave="keys['b']=false" style="background: #2980b9;">⚡ SP (B) [0]</button>
         <button id="btn-dash" class="action-btn" onpointerdown="keys['z']=true" onpointerup="keys['z']=false" onpointercancel="keys['z']=false" onpointerleave="keys['z']=false" style="background: #8e44ad;">⚡ Dash (Z)</button>
         <button id="btn-spin" class="action-btn" onpointerdown="keys['x']=true" onpointerup="keys['x']=false" onpointercancel="keys['x']=false" onpointerleave="keys['x']=false" style="background: #e67e22;">🌀 Spin (X)</button>
         <button id="btn-triple" class="action-btn" onpointerdown="keys['r']=true" onpointerup="keys['r']=false" onpointercancel="keys['r']=false" onpointerleave="keys['r']=false" style="background: #27ae60;">⚔️ Triple (R)</button>
@@ -126,6 +129,24 @@
           <div style="margin-bottom: 10px;">
             <label style="font-size: 13px;">⚡ Auto-SP saat Stamina ≤ <span id="val-auto-sp">30</span>%</label><br>
             <input type="range" id="set-auto-sp" min="0" max="100" value="30" step="5" oninput="updateAutoUseSettings()" style="width: 100%;">
+          </div>
+        </div>
+
+        <div style="border-top: 1px solid #444; padding-top: 10px;">
+          <h3 style="color: #e67e22; margin: 0 0 10px; font-size: 14px;">⚔️ Mode Auto-Attack</h3>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <span style="font-size: 13px;">Status Auto-Attack (T):</span>
+            <button class="ui-btn" id="set-auto-attack-btn" onclick="toggleAutoAttack()" style="padding: 6px 16px; font-size: 13px; font-weight: bold; background: #555;">OFF</button>
+          </div>
+          <div style="margin-bottom: 10px;">
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer;">
+              <input type="checkbox" id="set-auto-spin" onchange="updateAutoAttackSettings()" checked>
+              <span>🌀 Auto-Spin saat dikelilingi (≥2 musuh)</span>
+            </label>
+          </div>
+          <div style="margin-bottom: 10px;">
+            <label style="font-size: 13px;">🎯 Jarak Serang: <span id="val-auto-range">140</span> px</label><br>
+            <input type="range" id="set-auto-range" min="100" max="250" value="140" step="10" oninput="updateAutoAttackSettings()" style="width: 100%;">
           </div>
         </div>
 
@@ -313,7 +334,7 @@
           </div>
           <div class="shop-item">
             <span>⚡ Stamina Potion<br><small>Memulihkan SP secara instan</small></span>
-            <button onclick="buyInventoryItem('stamina_potion', 20)">Beli (20 🪙)</button>
+            <button onclick="buyStaminaPotion()">Beli (20 🪙)</button>
           </div>
           <div class="shop-item">
             <span>📜 Portal Scroll<br><small>Teleportasi kembali ke kota</small></span>

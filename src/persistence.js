@@ -59,6 +59,9 @@ export function saveGame(isAuto = false) {
     questCompleted: JSON.stringify(s.questCompleted),
     autoHealThreshold: s.autoHealThreshold,
     autoSPThreshold: s.autoSPThreshold,
+    autoAttack: s.autoAttack ? 1 : 0,
+    autoAttackSpin: s.autoAttackSpin ? 1 : 0,
+    autoAttackRange: s.autoAttackRange || 140,
   };
 
   fetch('http://localhost:3001/api/save', {
@@ -240,8 +243,10 @@ export function loadGame() {
       s.critChance = d.critChance ?? 0.05;
       s.critMultiplier = d.critMultiplier ?? 2.0;
       s.autoHealThreshold = d.autoHealThreshold ?? 50;
-      s.autoSPThreshold = d.autoSPThreshold ?? 30;
-      s.questStage = d.questStage ?? 0;
+      s.autoSPThreshold = d.autoSPThreshold ?? 50;
+      s.autoAttack = d.autoAttack === 1 || d.autoAttack === true;
+      s.autoAttackSpin = d.autoAttackSpin !== undefined ? (d.autoAttackSpin === 1 || d.autoAttackSpin === true) : true;
+      s.autoAttackRange = d.autoAttackRange ? Number(d.autoAttackRange) : 140;
       
       try {
         s.questCompleted = d.questCompleted ? JSON.parse(d.questCompleted) : [];

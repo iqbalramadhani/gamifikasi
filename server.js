@@ -61,6 +61,9 @@ const db = new sqlite3.Database(dbPath, (err) => {
                 db.run(`ALTER TABLE player_data ADD COLUMN questCompleted TEXT DEFAULT '[]'`, () => {});
                 db.run(`ALTER TABLE player_data ADD COLUMN autoHealThreshold INTEGER DEFAULT 50`, () => {});
                 db.run(`ALTER TABLE player_data ADD COLUMN autoSPThreshold INTEGER DEFAULT 30`, () => {});
+                db.run(`ALTER TABLE player_data ADD COLUMN autoAttack INTEGER DEFAULT 0`, () => {});
+                db.run(`ALTER TABLE player_data ADD COLUMN autoAttackSpin INTEGER DEFAULT 1`, () => {});
+                db.run(`ALTER TABLE player_data ADD COLUMN autoAttackRange INTEGER DEFAULT 140`, () => {});
             }
         });
     }
@@ -85,7 +88,8 @@ app.post('/api/save', (req, res) => {
                 currentHelmet = ?, currentBoots = ?,
                 ownedWeapons = ?, ownedArmors = ?, ownedHelmets = ?, ownedBoots = ?,
                 critChance = ?, critMultiplier = ?, questStage = ?, questCompleted = ?,
-                autoHealThreshold = ?, autoSPThreshold = ? WHERE id = 1`;
+                autoHealThreshold = ?, autoSPThreshold = ?,
+                autoAttack = ?, autoAttackSpin = ?, autoAttackRange = ? WHERE id = 1`;
             const params = [
                 data.x, data.y, data.hp, data.maxHp, data.attackDamage,
                 data.gold, data.potions, data.crystalCount, data.currentWeapon, data.currentArmor,
@@ -96,6 +100,7 @@ app.post('/api/save', (req, res) => {
                 data.ownedWeapons, data.ownedArmors, data.ownedHelmets, data.ownedBoots,
                 data.critChance, data.critMultiplier, data.questStage, data.questCompleted,
                 data.autoHealThreshold, data.autoSPThreshold,
+                data.autoAttack ?? 0, data.autoAttackSpin ?? 1, data.autoAttackRange ?? 140,
             ];
             db.run(sql, params, function(err) {
                 if (err) return res.status(500).json({ error: err.message });
@@ -107,8 +112,9 @@ app.post('/api/save', (req, res) => {
                 id, player_x, player_y, hp, maxHp, attackDamage,
                 gold, potions, crystalCount, currentWeapon, currentArmor, level, exp, nextExp, camera_y, camera_z, camera_look_y, inventory, statPoints, stat_str, stat_agi, stat_vit, bountyQuest, bountyQuestProgress, lastCrystalUse, current_scene,
                 currentHelmet, currentBoots, ownedWeapons, ownedArmors, ownedHelmets, ownedBoots,
-                critChance, critMultiplier, questStage, questCompleted, autoHealThreshold, autoSPThreshold
-            ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+                critChance, critMultiplier, questStage, questCompleted, autoHealThreshold, autoSPThreshold,
+                autoAttack, autoAttackSpin, autoAttackRange
+            ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
             const params = [
                 data.x, data.y, data.hp, data.maxHp, data.attackDamage,
                 data.gold, data.potions, data.crystalCount, data.currentWeapon, data.currentArmor,
@@ -119,6 +125,7 @@ app.post('/api/save', (req, res) => {
                 data.ownedWeapons, data.ownedArmors, data.ownedHelmets, data.ownedBoots,
                 data.critChance, data.critMultiplier, data.questStage, data.questCompleted,
                 data.autoHealThreshold, data.autoSPThreshold,
+                data.autoAttack ?? 0, data.autoAttackSpin ?? 1, data.autoAttackRange ?? 140,
             ];
             db.run(sql, params, function(err) {
                 if (err) return res.status(500).json({ error: err.message });

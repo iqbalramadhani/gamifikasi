@@ -29,6 +29,15 @@ There is no test runner. `test.js`, `test-blocked.js`, `test_glb.js` are ad-hoc 
 ### Three.js model/animation pipeline
 `model-loader.js` loads assets in parallel via `Promise.all`. FBX assets use `FBXLoader`; animations come from the clip array THREE auto-populates on the root `fbx` object (i.e. `fbx.animations[0]`). `scenes.js → initEntities()` builds the player `AnimationMixer` and `playerActions` (idle/run/attack) from these clips, with fallbacks to `idle_anim`/`run_anim`/`attack_anim` GLTF clips if FBX load fails.
 
+### HUD navbar & settings menu
+The HUD navbar (`#hud`) in `index.html` shows only status badges on the left (HP, SP, level, gold) and a single `⚙️ Menu` button on the right. The `#settings-menu` overlay (opened via `openSettings()`) contains:
+- **Quick action buttons** (2×2 grid): `🎵 Musik` (toggles BGM, `id="btn-toggle-bgm"` — updated by `updateBgmButtonUI()` in `audio.js`), `🎒 Tas (I)` → `closeSettings(); openInventory()`, `📊 Stats` (with `#stat-notif` badge for unspent stat points), `📜 Misi (J)` → `closeSettings(); openQuestBoard()`
+- Camera settings sliders
+- Auto-use potion sliders
+- `💾 Simpan Game` and `📖 Cara Main` buttons
+
+All modals (inventory, stats, quest board, full map) are triggered via keyboard shortcuts (`I`, `J`, `M`) or the quick-action buttons in the settings menu. The full map has **no dedicated navbar button** — it is opened by clicking the minimap overlay or pressing `M`.
+
 ### World layout
 Three scenes: `hometown` (safe zone, no enemies), `wilds` (main hunting area, has a boss), `wilds2` (Scorched Dunes — level-gated at 10+). Each scene has its own `THREE.Group`; only the active one is visible. Terrain height differs per scene — use `getTerrainHeightWilds2()` for `wilds2`, `getTerrainHeight()` for `wilds`/`hometown`.
 

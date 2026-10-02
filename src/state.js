@@ -40,7 +40,10 @@ export const state = {
   isGameStarted: false,
   gameOver: false,
   autoHealThreshold: 50, // auto-heal saat HP <= 50%
-  autoSPThreshold: 30,   // auto-SP saat Stamina <= 30%
+  autoSPThreshold: 50,   // auto-SP saat Stamina <= 50%
+  autoAttack: false,     // Mode auto-attack aktif/nonaktif
+  autoAttackSpin: true,  // Gunakan Spin Attack jika dikelilingi >= 2 musuh
+  autoAttackRange: 140,  // Jarak jangkauan deteksi auto-attack (pixel)
   shopOpen: false,
   blacksmithOpen: false,
   shopCooldown: 0,
@@ -115,6 +118,7 @@ export const state = {
 
   // Boss
   bossActive: false,
+  bossDefeated: false,
   bossMesh: null,
   bossHpGroup: null,
   bossHpFg: null,

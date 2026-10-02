@@ -47,7 +47,8 @@ export function checkItems() {
       drop.mesh.rotation.y += 0.05;
       drop.mesh.position.y = 5 + Math.sin(Date.now() / 400 + drop.x) * 2;
 
-      if (Math.hypot(s.player.x - drop.x, s.player.y - drop.y) < 40) {
+      const pickupRadius = s.autoAttack ? 200 : 40;
+      if (Math.hypot(s.player.x - drop.x, s.player.y - drop.y) < pickupRadius) {
         drop.taken = true;
         s.scene.remove(drop.mesh);
         playSound('coin');
@@ -93,7 +94,8 @@ export function checkItems() {
   });
 
   s.expOrbs.forEach(item => {
-    if (!item.taken && Math.hypot(s.player.x - item.x, s.player.y - item.y) < s.player.r + 15) {
+    const expPickupRadius = s.autoAttack ? 200 : s.player.r + 15;
+    if (!item.taken && Math.hypot(s.player.x - item.x, s.player.y - item.y) < expPickupRadius) {
       item.taken = true;
       item.mesh.visible = false;
       s.player.exp += 10;

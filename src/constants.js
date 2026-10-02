@@ -6,30 +6,43 @@ export const mapSize = 20000;
 export const WILDS2_MIN_LEVEL = 10;
 
 export const weaponList = [
-  { name: "Wooden Sword", damage: 0, cost: 0, color: 0xeeeeee },
-  { name: "Iron Sword", damage: 2, cost: 100, color: 0xaaaaaa },
-  { name: "Golden Sword", damage: 5, cost: 300, color: 0xffd700 },
-  { name: "Fire Blade", damage: 10, cost: 800, color: 0xff4400 },
-  { name: "Excalibur (Legendary)", damage: 50, cost: Infinity, color: 0x00ffff },
+  { name: "Wooden Sword",       damage: 0,   cost: 0,      color: 0xeeeeee, minLevel: 1  },
+  { name: "Iron Sword",         damage: 3,   cost: 250,    color: 0xaaaaaa, minLevel: 3  },
+  { name: "Steel Sword",        damage: 7,   cost: 600,    color: 0xcccccc, minLevel: 6  },
+  { name: "Golden Sword",       damage: 12,  cost: 1200,   color: 0xffd700, minLevel: 10 },
+  { name: "Fire Blade",         damage: 20,  cost: 2500,   color: 0xff4400, minLevel: 15 },
+  { name: "Shadow Blade",       damage: 30,  cost: 5000,   color: 0x440088, minLevel: 20 },
+  { name: "Void Reaper",        damage: 45,  cost: 10000,  color: 0x220044, minLevel: 28 },
+  { name: "Dragon Fang",        damage: 65,  cost: 20000,  color: 0xff2200, minLevel: 35 },
+  { name: "Excalibur (Legendary)", damage: 100, cost: Infinity, color: 0x00ffff, minLevel: 40 },
 ];
 
 export const armorList = [
-  { name: "Rusted Armor", hp: 0, cost: 0, color: 0xaaaaaa },
-  { name: "Knight Armor", hp: 50, cost: 150, color: 0xdddddd },
-  { name: "Paladin Armor", hp: 150, cost: 400, color: 0xffcc00 },
-  { name: "Dragon Armor", hp: 300, cost: 1000, color: 0x221111 },
+  { name: "Rusted Armor",    hp: 0,    cost: 0,      color: 0xaaaaaa, minLevel: 1  },
+  { name: "Leather Armor",  hp: 30,   cost: 300,    color: 0x8b5a2b, minLevel: 3  },
+  { name: "Knight Armor",   hp: 80,   cost: 800,    color: 0xdddddd, minLevel: 8  },
+  { name: "Paladin Armor",  hp: 180,  cost: 2000,   color: 0xffcc00, minLevel: 14 },
+  { name: "Dragon Armor",   hp: 350,  cost: 5000,   color: 0x221111, minLevel: 20 },
+  { name: "Void Armor",     hp: 600,  cost: 12000,  color: 0x330055, minLevel: 28 },
+  { name: "Celestial Plate",hp: 1000, cost: 25000,  color: 0xaaddff, minLevel: 38 },
 ];
 
 export const helmetList = [
-  { name: "Leather Cap", hp: 10, cost: 200, color: 0x8b5a2b },
-  { name: "Iron Helm", hp: 25, cost: 400, color: 0xaaaaaa },
-  { name: "Dragon Helm", hp: 50, cost: 800, color: 0xcc4400 },
+  { name: "Leather Cap",     hp: 10,  cost: 200,    color: 0x8b5a2b, minLevel: 1  },
+  { name: "Iron Helm",       hp: 30,  cost: 600,    color: 0xaaaaaa, minLevel: 5  },
+  { name: "Steel Helm",      hp: 60,  cost: 1500,   color: 0xcccccc, minLevel: 10 },
+  { name: "Dragon Helm",     hp: 110, cost: 3500,   color: 0xcc4400, minLevel: 18 },
+  { name: "Shadow Helm",     hp: 180, cost: 8000,   color: 0x330044, minLevel: 26 },
+  { name: "Celestial Crown", hp: 300, cost: 18000,  color: 0xeeeeff, minLevel: 36 },
 ];
 
 export const bootList = [
-  { name: "Traveler Boots", speed: 0.5, cost: 150, color: 0x8b5a2b },
-  { name: "Knight Boots", speed: 1, cost: 350, color: 0xaaaaaa },
-  { name: "Dragon Boots", speed: 2, cost: 700, color: 0xcc4400 },
+  { name: "Traveler Boots",  speed: 0.5, cost: 150,    color: 0x8b5a2b, minLevel: 1  },
+  { name: "Knight Boots",    speed: 1.0, cost: 500,    color: 0xaaaaaa, minLevel: 5  },
+  { name: "Swift Boots",     speed: 1.5, cost: 1200,   color: 0x44aaff, minLevel: 10 },
+  { name: "Dragon Boots",    speed: 2.0, cost: 3000,   color: 0xcc4400, minLevel: 18 },
+  { name: "Shadow Treads",   speed: 2.8, cost: 7000,   color: 0x220033, minLevel: 26 },
+  { name: "Void Striders",   speed: 3.5, cost: 15000,  color: 0x9900ff, minLevel: 36 },
 ];
 
 export const enemyTemplates = [
@@ -336,6 +349,7 @@ export const statusEffects = {
 
 export const craftingRecipes = [
   { result: 'health_potion', count: 1, ingredients: { wood_scrap: 2, slime_gel: 1 } },
+  { result: 'stamina_potion', count: 1, ingredients: { slime_gel: 1, bone: 2 } },
   { result: 'antidote', count: 1, ingredients: { bone: 3, magic_dust: 1 } },
   { result: 'cooling_tea', count: 1, ingredients: { iron_shard: 2, golem_core: 1 } },
   { result: 'health_crystal', count: 1, ingredients: { demon_horn: 1, hell_fire: 1, holy_gem: 1 } },

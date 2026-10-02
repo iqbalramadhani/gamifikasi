@@ -10,19 +10,20 @@ import { state } from './state.js';
 import { loadAllModels, loadedModels } from './model-loader.js';
 import { initSetup, initMap, initHometown, initEntities, initNPCs, initWildsNPCs, initWilds2, getTerrainHeight, getTerrainHeightWilds2, updateVillagers } from './scenes.js';
 import { spawnBoss, spawnParticles, checkItems, blocked } from './helpers.js';
-import { spawnEnemy, spawnEnemy2, usePotion } from './combat.js';
+import { spawnEnemy, spawnEnemy2, usePotion, useStaminaPotion } from './combat.js';
 import {
-  move, attack, updateProjectiles, updateEnemies, updateBoss,
+  move, attack, triggerSpinAttack, updateAutoCombat, updateProjectiles, updateEnemies, updateBoss,
 } from './combat.js';
 import {
   updateUI, checkInteractions,
-  openShop, closeShop, buyPotion, buyInventoryItem, buyMysteryBox,
+  openShop, closeShop, buyPotion, buyStaminaPotion, buyInventoryItem, buyMysteryBox,
   openBlacksmith, closeBlacksmith, updateBlacksmithUI, buyWeapon, buyArmor, buyHelmet, buyBoots,
   levelUp, openStats, closeStats, addStat,
   openQuestBoard, acceptQuest, claimQuest, closeQuestBoard, updateQuestUI,
   openInventory, closeInventory, updateInventoryUI, sellAllLoot,
   openTutorial, closeTutorial, useConsumable,
   autoUsePotions, updateAutoUseSettings,
+  toggleAutoAttack, updateAutoAttackSettings, syncAutoAttackUI,
   openFullMap, closeFullMap, drawFullMap,
   zoomMinimapIn, zoomMinimapOut, clearAutoWalkTargetUI,
 } from './ui.js';
@@ -55,10 +56,12 @@ window.spawnEnemy2 = spawnEnemy2;
 window.spawnParticles = spawnParticles;
 window.spawnBoss = spawnBoss;
 window.usePotion = usePotion;
+window.useStaminaPotion = useStaminaPotion;
 window.levelUp = levelUp;
 window.openShop = openShop;
 window.closeShop = closeShop;
 window.buyPotion = buyPotion;
+window.buyStaminaPotion = buyStaminaPotion;
 window.buyInventoryItem = buyInventoryItem;
 window.buyMysteryBox = buyMysteryBox;
 window.openBlacksmith = openBlacksmith;
@@ -140,13 +143,19 @@ window.startGame = async () => {
     if (typeof window.equipWeapon === 'function') window.equipWeapon(idx);
   }
 
-  // Sinkronkan UI awal (termasuk tombol heal / potion)
+  // Sinkronkan UI awal (termasuk tombol heal / potion / sp pot)
   const navPotionsEl = document.getElementById('nav-potions');
   if (navPotionsEl) navPotionsEl.textContent = state.potions;
   const btnPotion = document.getElementById('btn-potion');
   if (btnPotion) {
     btnPotion.textContent = `🧪 Heal (C) [${state.potions}]`;
     btnPotion.style.opacity = state.potions > 0 ? '1.0' : '0.5';
+  }
+  const spCount = state.inventory?.['stamina_potion'] || 0;
+  const btnSpPotion = document.getElementById('btn-sp-potion');
+  if (btnSpPotion) {
+    btnSpPotion.textContent = `⚡ SP (B) [${spCount}]`;
+    btnSpPotion.style.opacity = spCount > 0 ? '1.0' : '0.5';
   }
   if (typeof updateUI === 'function') updateUI(true);
 
@@ -161,10 +170,14 @@ window.togglePause = () => {
 
 window.openSettings = () => {
   syncAutoUseSliders();
+  syncAutoAttackSettings();
   document.getElementById('settings-menu').style.display = 'flex';
 };
 window.closeSettings = () => { document.getElementById('settings-menu').style.display = 'none'; };
 window.updateAutoUseSettings = updateAutoUseSettings;
+window.toggleAutoAttack = toggleAutoAttack;
+window.updateAutoAttackSettings = updateAutoAttackSettings;
+window.triggerSpinAttack = triggerSpinAttack;
 
 // Sync slider + label ke nilai state terakhir (mis. setelah load save)
 function syncAutoUseSliders() {
@@ -181,6 +194,27 @@ function syncAutoUseSliders() {
     if (sVal) sVal.innerText = state.autoSPThreshold;
   }
 }
+
+function syncAutoAttackSettings() {
+  const btn = document.getElementById('set-auto-attack-btn');
+  const spinCb = document.getElementById('set-auto-spin');
+  const rangeSlider = document.getElementById('set-auto-range');
+  const rangeVal = document.getElementById('val-auto-range');
+
+  if (btn) {
+    btn.textContent = state.autoAttack ? 'ON' : 'OFF';
+    btn.style.background = state.autoAttack ? '#27ae60' : '#555';
+  }
+  if (spinCb) {
+    spinCb.checked = !!state.autoAttackSpin;
+  }
+  if (rangeSlider) {
+    rangeSlider.value = state.autoAttackRange || 140;
+    if (rangeVal) rangeVal.textContent = state.autoAttackRange || 140;
+  }
+  syncAutoAttackUI();
+}
+window.syncAutoAttackSettings = syncAutoAttackSettings;
 window.updateCameraSettings = () => {
   state.cameraOffsetY = parseInt(document.getElementById('cam-y').value);
   state.cameraOffsetZ = parseInt(document.getElementById('cam-z').value);
@@ -227,10 +261,10 @@ function gameLoop(timestamp) {
 
     state.player.defending = !!state.keys['shift'] && state.player.stamina > 0;
     if (state.player.defending) {
-      state.player.stamina -= 0.5 * dt;
-    } else {
-      state.player.stamina = Math.min(state.player.maxStamina, state.player.stamina + 0.3 * dt);
+      state.player.stamina = Math.max(0, state.player.stamina - 0.5 * dt);
     }
+    // Catatan: Auto-regenerasi SP dimatikan sesuai permintaan user.
+    // Pemain harus membeli dan menggunakan Stamina Potion (SP Pot) dari shop atau drop.
     if (state.shieldMesh) state.shieldMesh.visible = state.player.defending;
 
     if (state.keys['q']) state.cameraAngle += 0.04 * dt;
@@ -290,6 +324,7 @@ function gameLoop(timestamp) {
 
     move(dt);
     if (state.keys[' ']) attack();
+    updateAutoCombat(dt);
 
     state.player.attackCooldown = Math.max(0, state.player.attackCooldown - dt);
     state.player.dashCooldown = Math.max(0, state.player.dashCooldown - dt);

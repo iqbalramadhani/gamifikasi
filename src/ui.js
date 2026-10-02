@@ -9,7 +9,7 @@ import { updatePortalAnimations, getTerrainHeight, getTerrainHeightWilds2 } from
 // ─── UI throttled update ──────────────────────────────────────────────────────
 
 let uiThrottle = 0;
-let lastHp = -1, lastGold = -1, lastPotions = -1;
+let lastHp = -1, lastGold = -1, lastPotions = -1, lastSpPotions = -1;
 
 export function updateUI(force = false) {
   checkItems();
@@ -55,6 +55,14 @@ export function updateUI(force = false) {
     lastPotions = s.potions;
   }
 
+  const spPotionsCount = s.inventory?.['stamina_potion'] || 0;
+  const btnSpPotion = document.getElementById('btn-sp-potion');
+  if (btnSpPotion && (force || lastSpPotions !== spPotionsCount)) {
+    btnSpPotion.textContent = `⚡ SP (B) [${spPotionsCount}]`;
+    btnSpPotion.style.opacity = spPotionsCount > 0 ? '1.0' : '0.5';
+    lastSpPotions = spPotionsCount;
+  }
+
   const expEl = document.getElementById('exp');
   const maxExpEl = document.getElementById('max-exp');
   const levelEl = document.getElementById('player-level');
@@ -68,7 +76,7 @@ export function updateUI(force = false) {
       btnDash.style.opacity = '0.4';
       btnDash.textContent = `⏳ ${(s.player.dashCooldown / 60).toFixed(1)}s`;
     } else {
-      btnDash.style.opacity = '1.0';
+      btnDash.style.opacity = s.player.stamina >= 30 ? '1.0' : '0.5';
       btnDash.textContent = `⚡ Dash (Z)`;
     }
   }
@@ -79,7 +87,7 @@ export function updateUI(force = false) {
       btnSpin.style.opacity = '0.4';
       btnSpin.textContent = `⏳ ${(s.player.spinCooldown / 60).toFixed(1)}s`;
     } else {
-      btnSpin.style.opacity = '1.0';
+      btnSpin.style.opacity = s.player.stamina >= 50 ? '1.0' : '0.5';
       btnSpin.textContent = `🌀 Spin (X)`;
     }
   }
@@ -90,9 +98,21 @@ export function updateUI(force = false) {
       btnTriple.style.opacity = '0.4';
       btnTriple.textContent = `⏳ ${(s.player.tripleCooldown / 60).toFixed(1)}s`;
     } else {
-      btnTriple.style.opacity = '1.0';
+      btnTriple.style.opacity = s.player.stamina >= 60 ? '1.0' : '0.5';
       btnTriple.textContent = `⚔️ Triple (R)`;
     }
+  }
+
+  const btnAuto = document.getElementById('btn-auto-attack');
+  if (btnAuto) {
+    btnAuto.textContent = s.autoAttack ? '⚔️ Auto (T): ON' : '⚔️ Auto (T): OFF';
+    btnAuto.classList.toggle('active', !!s.autoAttack);
+  }
+  const badgeAuto = document.getElementById('auto-attack-badge');
+  const statusAuto = document.getElementById('auto-attack-status');
+  if (badgeAuto && statusAuto) {
+    statusAuto.textContent = s.autoAttack ? 'ON' : 'OFF';
+    badgeAuto.classList.toggle('active', !!s.autoAttack);
   }
 
   drawMinimap();
@@ -728,6 +748,32 @@ export function buyPotion() {
   }
 }
 
+export function buyStaminaPotion() {
+  const s = state;
+  const cost = 20;
+  if (s.gold >= cost) {
+    s.gold -= cost;
+    if (!s.inventory) s.inventory = {};
+    s.inventory['stamina_potion'] = (s.inventory['stamina_potion'] || 0) + 1;
+    playSound('coin');
+    const btn = document.getElementById('btn-sp-potion');
+    if (btn) {
+      btn.textContent = `⚡ SP (B) [${s.inventory['stamina_potion']}]`;
+      btn.style.opacity = '1.0';
+    }
+    const shopGoldEl = document.getElementById('shop-gold');
+    if (shopGoldEl) shopGoldEl.textContent = s.gold;
+    const msgEl = document.getElementById('message');
+    if (msgEl) msgEl.textContent = '✅ Berhasil membeli Stamina Potion!';
+    updateUI(true);
+    updateInventoryUI();
+    if (typeof window.saveGame === 'function') window.saveGame(true);
+  } else {
+    const msgEl = document.getElementById('message');
+    if (msgEl) msgEl.textContent = 'Gold tidak cukup!';
+  }
+}
+
 export function buyInventoryItem(id, cost) {
   const s = state;
   if (s.gold >= cost) {
@@ -740,7 +786,8 @@ export function buyInventoryItem(id, cost) {
     const msgEl = document.getElementById('message');
     const name = consumableItems[id]?.name || id;
     if (msgEl) msgEl.textContent = `✅ Berhasil membeli ${name}!`;
-    updateUI();
+    updateUI(true);
+    updateInventoryUI();
     if (typeof window.saveGame === 'function') window.saveGame(true);
   } else {
     const msgEl = document.getElementById('message');
@@ -803,10 +850,12 @@ export function updateBlacksmithUI() {
   const highestW = Math.max(...s.ownedWeapons);
   const wNext = weaponList[highestW + 1];
   if (wNext && highestW + 1 < weaponList.length - 1) { // exclude excalibur
-    document.getElementById('weapon-desc').textContent = `${wNext.name} (DMG +${wNext.damage})`;
+    const lvReq = wNext.minLevel || 1;
+    const lvOk = (s.player.level || 1) >= lvReq;
+    document.getElementById('weapon-desc').textContent = `${wNext.name} (DMG +${wNext.damage}) | Lv.${lvReq}`;
     document.getElementById('weapon-cost').textContent = wNext.cost;
-    document.getElementById('btn-buy-weapon').disabled = s.gold < wNext.cost;
-    document.getElementById('btn-buy-weapon').textContent = 'Tempa Senjata';
+    document.getElementById('btn-buy-weapon').disabled = s.gold < wNext.cost || !lvOk;
+    document.getElementById('btn-buy-weapon').textContent = !lvOk ? `🔒 Butuh Lv.${lvReq}` : 'Tempa Senjata';
   } else {
     document.getElementById('weapon-desc').textContent = 'Max Level';
     document.getElementById('weapon-cost').textContent = '-';
@@ -817,10 +866,12 @@ export function updateBlacksmithUI() {
   const highestA = Math.max(...s.ownedArmors);
   const aNext = armorList[highestA + 1];
   if (aNext) {
-    document.getElementById('armor-desc').textContent = `${aNext.name} (HP +${aNext.hp})`;
+    const lvReq = aNext.minLevel || 1;
+    const lvOk = (s.player.level || 1) >= lvReq;
+    document.getElementById('armor-desc').textContent = `${aNext.name} (HP +${aNext.hp}) | Lv.${lvReq}`;
     document.getElementById('armor-cost').textContent = aNext.cost;
-    document.getElementById('btn-buy-armor').disabled = s.gold < aNext.cost;
-    document.getElementById('btn-buy-armor').textContent = 'Tempa Armor';
+    document.getElementById('btn-buy-armor').disabled = s.gold < aNext.cost || !lvOk;
+    document.getElementById('btn-buy-armor').textContent = !lvOk ? `🔒 Butuh Lv.${lvReq}` : 'Tempa Armor';
   } else {
     document.getElementById('armor-desc').textContent = 'Max Level';
     document.getElementById('armor-cost').textContent = '-';
@@ -831,10 +882,12 @@ export function updateBlacksmithUI() {
   const highestH = Math.max(...s.ownedHelmets);
   const hNext = helmetList[highestH + 1];
   if (hNext) {
-    document.getElementById('helmet-desc').textContent = `${hNext.name} (HP +${hNext.hp})`;
+    const lvReq = hNext.minLevel || 1;
+    const lvOk = (s.player.level || 1) >= lvReq;
+    document.getElementById('helmet-desc').textContent = `${hNext.name} (HP +${hNext.hp}) | Lv.${lvReq}`;
     document.getElementById('helmet-cost').textContent = hNext.cost;
-    document.getElementById('btn-buy-helmet').disabled = s.gold < hNext.cost;
-    document.getElementById('btn-buy-helmet').textContent = 'Tempa Helm';
+    document.getElementById('btn-buy-helmet').disabled = s.gold < hNext.cost || !lvOk;
+    document.getElementById('btn-buy-helmet').textContent = !lvOk ? `🔒 Butuh Lv.${lvReq}` : 'Tempa Helm';
   } else {
     document.getElementById('helmet-desc').textContent = 'Max Level';
     document.getElementById('helmet-cost').textContent = '-';
@@ -845,10 +898,12 @@ export function updateBlacksmithUI() {
   const highestB = Math.max(...s.ownedBoots);
   const bNext = bootList[highestB + 1];
   if (bNext) {
-    document.getElementById('boots-desc').textContent = `${bNext.name} (Speed +${bNext.speed})`;
+    const lvReq = bNext.minLevel || 1;
+    const lvOk = (s.player.level || 1) >= lvReq;
+    document.getElementById('boots-desc').textContent = `${bNext.name} (Speed +${bNext.speed}) | Lv.${lvReq}`;
     document.getElementById('boots-cost').textContent = bNext.cost;
-    document.getElementById('btn-buy-boots').disabled = s.gold < bNext.cost;
-    document.getElementById('btn-buy-boots').textContent = 'Tempa Boots';
+    document.getElementById('btn-buy-boots').disabled = s.gold < bNext.cost || !lvOk;
+    document.getElementById('btn-buy-boots').textContent = !lvOk ? `🔒 Butuh Lv.${lvReq}` : 'Tempa Boots';
   } else {
     document.getElementById('boots-desc').textContent = 'Max Level';
     document.getElementById('boots-cost').textContent = '-';
@@ -859,19 +914,21 @@ export function updateBlacksmithUI() {
 
 export function buyWeapon() {
   const s = state;
-  // Blacksmith sells the NEXT unowned weapon in the sequence, up to max index (excluding Legendary)
   const highestOwned = Math.max(...s.ownedWeapons);
   const wNextIdx = highestOwned + 1;
   const wNext = weaponList[wNextIdx];
-  if (wNext && s.gold >= wNext.cost && wNextIdx < weaponList.length - 1) { // exclude excalibur
+  const lvReq = wNext?.minLevel || 1;
+  if (wNext && s.gold >= wNext.cost && wNextIdx < weaponList.length - 1 && (s.player.level || 1) >= lvReq) {
     s.gold -= wNext.cost;
     s.ownedWeapons.push(wNextIdx);
-    
     playSound('boss_spawn');
     equipWeapon(wNextIdx);
     updateBlacksmithUI();
     updateUI();
     if (typeof window.saveGame === 'function') window.saveGame(true);
+  } else if ((s.player.level || 1) < lvReq) {
+    const msgEl = document.getElementById('message');
+    if (msgEl) msgEl.textContent = `🔒 ${wNext.name} membutuhkan Level ${lvReq}!`;
   }
 }
 
@@ -880,7 +937,8 @@ export function buyHelmet() {
   const highestOwned = Math.max(...s.ownedHelmets);
   const hNextIdx = highestOwned + 1;
   const hNext = helmetList[hNextIdx];
-  if (hNext && s.gold >= hNext.cost) {
+  const lvReq = hNext?.minLevel || 1;
+  if (hNext && s.gold >= hNext.cost && (s.player.level || 1) >= lvReq) {
     s.gold -= hNext.cost;
     s.ownedHelmets.push(hNextIdx);
     playSound('coin');
@@ -888,6 +946,9 @@ export function buyHelmet() {
     updateBlacksmithUI();
     updateUI();
     if (typeof window.saveGame === 'function') window.saveGame(true);
+  } else if (hNext && (s.player.level || 1) < lvReq) {
+    const msgEl = document.getElementById('message');
+    if (msgEl) msgEl.textContent = `🔒 ${hNext.name} membutuhkan Level ${lvReq}!`;
   }
 }
 
@@ -896,7 +957,8 @@ export function buyBoots() {
   const highestOwned = Math.max(...s.ownedBoots);
   const bNextIdx = highestOwned + 1;
   const bNext = bootList[bNextIdx];
-  if (bNext && s.gold >= bNext.cost) {
+  const lvReq = bNext?.minLevel || 1;
+  if (bNext && s.gold >= bNext.cost && (s.player.level || 1) >= lvReq) {
     s.gold -= bNext.cost;
     s.ownedBoots.push(bNextIdx);
     playSound('coin');
@@ -904,6 +966,9 @@ export function buyBoots() {
     updateBlacksmithUI();
     updateUI();
     if (typeof window.saveGame === 'function') window.saveGame(true);
+  } else if (bNext && (s.player.level || 1) < lvReq) {
+    const msgEl = document.getElementById('message');
+    if (msgEl) msgEl.textContent = `🔒 ${bNext.name} membutuhkan Level ${lvReq}!`;
   }
 }
 
@@ -1019,15 +1084,18 @@ export function buyArmor() {
   const highestOwned = Math.max(...s.ownedArmors);
   const aNextIdx = highestOwned + 1;
   const aNext = armorList[aNextIdx];
-  if (aNext && s.gold >= aNext.cost) {
+  const lvReq = aNext?.minLevel || 1;
+  if (aNext && s.gold >= aNext.cost && (s.player.level || 1) >= lvReq) {
     s.gold -= aNext.cost;
     s.ownedArmors.push(aNextIdx);
-    
     playSound('boss_spawn');
     equipArmor(aNextIdx);
     updateBlacksmithUI();
     updateUI();
     if (typeof window.saveGame === 'function') window.saveGame(true);
+  } else if (aNext && (s.player.level || 1) < lvReq) {
+    const msgEl = document.getElementById('message');
+    if (msgEl) msgEl.textContent = `🔒 ${aNext.name} membutuhkan Level ${lvReq}!`;
   }
 }
 
@@ -1341,6 +1409,7 @@ export function updateInventoryUI() {
     craftEl.innerHTML = '';
     const recipes = [
       { name: 'Health Potion', icon: '🧪', ingredients: { wood_scrap: 2, slime_gel: 1 }, result: 'health_potion' },
+      { name: 'Stamina Potion', icon: '⚡', ingredients: { slime_gel: 1, bone: 2 }, result: 'stamina_potion' },
       { name: 'Antidote', icon: '🧪', ingredients: { bone: 3, magic_dust: 1 }, result: 'antidote' },
       { name: 'Cooling Tea', icon: '🍵', ingredients: { iron_shard: 2, golem_core: 1 }, result: 'cooling_tea' },
       { name: 'Health Crystal', icon: '💎', ingredients: { demon_horn: 1, hell_fire: 1, holy_gem: 1 }, result: 'health_crystal' },
@@ -1491,6 +1560,12 @@ export function useConsumable(id) {
     }
     return;
   }
+  if (id === 'stamina_potion') {
+    if (typeof window.useStaminaPotion === 'function') {
+      window.useStaminaPotion();
+    }
+    return;
+  }
   const def = consumableItems[id];
   if (!def || !s.inventory || !s.inventory[id] || s.inventory[id] <= 0) return;
 
@@ -1502,6 +1577,7 @@ export function useConsumable(id) {
   }
 
   s.inventory[id]--;
+  if (s.inventory[id] <= 0) delete s.inventory[id];
 
   if (def.effect === 'heal') {
     s.player.hp = Math.min(s.player.maxHp, s.player.hp + def.value);
@@ -1563,7 +1639,11 @@ export function autoUsePotions() {
 
   const spPct = (s.player.stamina / s.player.maxStamina) * 100;
   if (spPct <= s.autoSPThreshold) {
-    useConsumable('stamina_potion');
+    if (typeof window.useStaminaPotion === 'function') {
+      window.useStaminaPotion();
+    } else {
+      useConsumable('stamina_potion');
+    }
   }
 }
 
@@ -1579,6 +1659,68 @@ export function updateAutoUseSettings() {
     state.autoSPThreshold = +sEl.value;
     const sVal = document.getElementById('val-auto-sp');
     if (sVal) sVal.innerText = sEl.value;
+  }
+}
+
+// ─── Mode Auto-Attack ─────────────────────────────────────────────────────────
+
+export function toggleAutoAttack(forceVal = null) {
+  state.autoAttack = forceVal !== null ? !!forceVal : !state.autoAttack;
+  playSound(state.autoAttack ? 'dash' : 'click');
+  const msgEl = document.getElementById('message');
+  if (msgEl) {
+    msgEl.textContent = state.autoAttack
+      ? '⚔️ Mode Auto-Attack: AKTIF (Karakter otomatis menyerang musuh di dekatnya!)'
+      : '⚔️ Mode Auto-Attack: NONAKTIF';
+  }
+  syncAutoAttackUI();
+  updateUI(true);
+  if (typeof window.saveGame === 'function') {
+    window.saveGame(true);
+  }
+}
+
+export function updateAutoAttackSettings() {
+  const spinEl = document.getElementById('set-auto-spin');
+  const rangeEl = document.getElementById('set-auto-range');
+  if (spinEl) {
+    state.autoAttackSpin = !!spinEl.checked;
+  }
+  if (rangeEl) {
+    state.autoAttackRange = +rangeEl.value;
+    const rVal = document.getElementById('val-auto-range');
+    if (rVal) rVal.innerText = rangeEl.value;
+  }
+  if (typeof window.saveGame === 'function') {
+    window.saveGame(true);
+  }
+}
+
+export function syncAutoAttackUI() {
+  const s = state;
+  const btn = document.getElementById('btn-auto-attack');
+  if (btn) {
+    btn.textContent = s.autoAttack ? '⚔️ Auto (T): ON' : '⚔️ Auto (T): OFF';
+    btn.classList.toggle('active', !!s.autoAttack);
+  }
+  const badge = document.getElementById('auto-attack-badge');
+  const status = document.getElementById('auto-attack-status');
+  if (badge && status) {
+    status.textContent = s.autoAttack ? 'ON' : 'OFF';
+    badge.classList.toggle('active', !!s.autoAttack);
+  }
+  const menuBtn = document.getElementById('set-auto-attack-btn');
+  if (menuBtn) {
+    menuBtn.textContent = s.autoAttack ? 'ON' : 'OFF';
+    menuBtn.style.background = s.autoAttack ? '#27ae60' : '#555';
+  }
+  const spinEl = document.getElementById('set-auto-spin');
+  if (spinEl) spinEl.checked = !!s.autoAttackSpin;
+  const rangeEl = document.getElementById('set-auto-range');
+  if (rangeEl) {
+    rangeEl.value = s.autoAttackRange || 140;
+    const rVal = document.getElementById('val-auto-range');
+    if (rVal) rVal.innerText = s.autoAttackRange || 140;
   }
 }
 
@@ -1656,9 +1798,10 @@ window.zoomCamera = function(dir) {
 window.addEventListener('keydown', e => {
   const key = e.key.toLowerCase();
   state.keys[key] = true;
-  if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'shift', 'z', 'x', 'r', 'c', 'v', 'tab', 'f', 'i', 'j', 'm', '=', '-'].includes(key)) {
+  if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'shift', 'z', 'x', 'r', 'c', 'v', 'b', 'tab', 'f', 'i', 'j', 'm', 't', '=', '-'].includes(key)) {
     e.preventDefault();
   }
+  if (key === 't') toggleAutoAttack();
   if (key === 'escape' && typeof window.togglePause === 'function') window.togglePause();
   if (key === 'i') {
     const invEl = document.getElementById('inventory-menu');

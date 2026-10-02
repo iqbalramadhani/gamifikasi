@@ -158,6 +158,9 @@ body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000;
 .badge-gold { background: rgba(212, 172, 13, 0.3); border-color: rgba(241, 196, 15, 0.5); }
 .badge-potion { background: rgba(192, 57, 43, 0.45); border-color: rgba(231, 76, 60, 0.6); }
 .badge-bounty { background: rgba(142, 68, 173, 0.45); border-color: rgba(155, 89, 182, 0.6); }
+.badge-auto { background: rgba(52, 73, 94, 0.4); border-color: rgba(149, 165, 166, 0.4); cursor: pointer; transition: all 0.2s ease; user-select: none; }
+.badge-auto:hover { border-color: #f39c12; }
+.badge-auto.active { background: rgba(46, 204, 113, 0.35); border-color: #2ecc71; color: #2ecc71; box-shadow: 0 0 10px rgba(46, 204, 113, 0.5); }
 
 .stamina-bar-container {
   width: 70px; height: 5px; background: rgba(0,0,0,0.5); border-radius: 3px; overflow: hidden; margin-left: 3px;
@@ -231,6 +234,8 @@ body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000;
 }
 #controls button:active { background: rgba(255,255,255,0.3); }
 #controls .action-btn { width: auto; padding: 0 20px; font-size: 18px; font-weight: bold; }
+#btn-auto-attack { transition: all 0.2s ease; }
+#btn-auto-attack.active { background: linear-gradient(135deg, #27ae60, #2ecc71) !important; border-color: #a9dfbf !important; box-shadow: 0 0 12px rgba(46, 204, 113, 0.6); }
 
 button.ui-btn {
   padding: 10px; font-size: 18px; border: none; border-radius: 5px; cursor: pointer;

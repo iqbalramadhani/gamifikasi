@@ -1750,38 +1750,7 @@ export function initWildsNPCs() {
   s.bossHpGroup.position.set(s.bossX, 80 + getTerrainHeight(s.bossX, s.bossY), s.bossY);
   s.wildsGroup.add(s.bossHpGroup);
 
-  // FENCES (Circular Arena)
-  const arenaRadius = 250;
-  const numFences = 36; 
-  
-  for (let i = 0; i < numFences; i++) {
-    const angle = (i / numFences) * Math.PI * 2;
-    
-    // Create an entrance gap pointing towards the center of the map
-    // The angle towards the center (-1, -1 vector) is -3*PI/4, which is 225 degrees (around i = 22 or 23).
-    if (i >= 20 && i <= 25) continue;
-
-    const fx = s.bossX + Math.cos(angle) * arenaRadius;
-    const fy = s.bossY + Math.sin(angle) * arenaRadius;
-
-    let mesh;
-    if (loadedModels.fence) {
-      mesh = SkeletonUtils.clone(loadedModels.fence);
-      mesh.scale.set(15, 15, 15); 
-    } else {
-      mesh = new THREE.Mesh(
-        new THREE.BoxGeometry(45, 40, 10),
-        new THREE.MeshLambertMaterial({ color: 0x5c4033 })
-      );
-    }
-    
-    mesh.position.set(fx, getTerrainHeight(fx, fy), fy);
-    mesh.rotation.y = -angle; // Face outward/tangent
-    s.wildsGroup.add(mesh);
-    s.obstaclesWilds.push({ x: fx, y: fy, r: 25 });
-  }
-
-  // Spawn Boss Children inside fence
+  // Spawn Boss Children inside arena
   setTimeout(() => {
     spawnEnemy(s.bossX + 80, s.bossY + 80, 0.5, true);
     spawnEnemy(s.bossX - 80, s.bossY + 80, 0.5, true);
@@ -1789,7 +1758,7 @@ export function initWildsNPCs() {
     spawnEnemy(s.bossX - 80, s.bossY - 80, 0.5, true);
     spawnEnemy(s.bossX + 130, s.bossY, 0.5, true);
     spawnEnemy(s.bossX - 130, s.bossY, 0.5, true);
-  }, 1000); // Slight delay to ensure combat.js is fully initialized
+  }, 1000);
 }
 
 // ─── Scorched Dunes (wilds2) — desert map, level 10+ ─────────────────────────

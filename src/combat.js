@@ -343,6 +343,8 @@ export function move(dt) {
   if (s.keys.arrowright) dx -= 1;
 
   if (s.keys.c) { s.keys.c = false; usePotion(); }
+  if (s.keys.b) { s.keys.b = false; useStaminaPotion(); }
+  if (s.keys.x) { triggerSpinAttack(); }
 
   if (hasAnyKey(s.keys, ['arrowup', 'arrowdown', 'arrowleft', 'arrowright']) && s.autoWalkTarget) {
     clearAutoWalkTarget();
@@ -418,67 +420,43 @@ export function move(dt) {
     dy = rotDy;
 
     // Dash
-    if (s.keys.z && s.player.dashCooldown <= 0 && s.player.stamina >= 30) {
-      s.player.stamina -= 30;
-      s.player.dashCooldown = 180;
-      s.player.isDashing = 15;
-      playSound('dash');
-      spawnParticles(s.player.x, s.player.y, 0xaaaaaa, 5, 'dust');
+    if (s.keys.z && s.player.dashCooldown <= 0) {
+      if (s.player.stamina >= 30) {
+        s.player.stamina -= 30;
+        s.player.dashCooldown = 180;
+        s.player.isDashing = 15;
+        playSound('dash');
+        spawnParticles(s.player.x, s.player.y, 0xaaaaaa, 5, 'dust');
+      } else {
+        const msgEl = document.getElementById('message');
+        if (msgEl) msgEl.textContent = '❌ SP tidak cukup untuk Dash (Butuh 30 SP)! Minum SP Potion [B]';
+      }
     }
 
     // Spin attack
-    if (s.keys.x && s.player.spinCooldown <= 0 && s.player.stamina >= 50) {
-      s.player.stamina -= 50;
-      s.player.spinCooldown = 300;
-      s.player.isSpinning = 30;
-      s.cameraShake = Math.max(s.cameraShake || 0, 8);
-      playSound('spin');
-      for (let i = s.enemies.length - 1; i >= 0; i--) {
-        const e = s.enemies[i];
-        if (Math.hypot(e.x - s.player.x, e.y - s.player.y) < s.player.r + e.r + 100) {
-          const spinCrit = calcCritDamage(s.player.attackDamage * 3);
-          const dealtDmg = applyEliteOnHit(e, spinCrit.value);
-          e.hp -= dealtDmg;
-          e.slowTimer = 90;
-          e.stunTimer = 20;
-          const spinColor = spinCrit.isCrit ? '#ffff00' : '#ff4444';
-          const spinLabel = spinCrit.isCrit ? `CRIT! -${dealtDmg}` : `-${dealtDmg}`;
-          spawnDamageText(e.x, e.mesh.position.y + 35, e.y, spinLabel, spinColor);
-          if (e.hp <= 0) killEnemy(i);
-          else {
-            if (spinCrit.isCrit) spawnParticles(e.x, e.y, 0xffff00, 8, 'hit');
-            else spawnParticles(e.x, e.y, 0xffaa00, 5, 'hit');
-          }
-        }
-      }
-
-      if (s.interactables) {
-        for (let i = s.interactables.length - 1; i >= 0; i--) {
-          const it = s.interactables[i];
-          if (it.scene !== s.currentScene || it.isVFX) continue;
-          if (Math.hypot(it.x - s.player.x, it.y - s.player.y) < s.player.r + 40) {
-             triggerInteractable(it, i);
-          }
-        }
-      }
-      if (s.bossActive && Math.hypot(s.bossX - s.player.x, s.bossY - s.player.y) < s.player.r + 150) {
-        const bossSpinCrit = calcCritDamage(s.player.attackDamage * 3);
-        s.bossHp -= bossSpinCrit.value;
-        playSound('hit');
-        const bsColor = bossSpinCrit.isCrit ? '#ffff00' : '#ff4444';
-        const bsLabel = bossSpinCrit.isCrit ? `CRIT! -${bossSpinCrit.value}` : `-${bossSpinCrit.value}`;
-        spawnDamageText(s.bossX, 50, s.bossY, bsLabel, bsColor);
+    if (s.keys.x) {
+      if (s.player.spinCooldown <= 0 && s.player.stamina < 50) {
+        s.keys.x = false;
+        const msgEl = document.getElementById('message');
+        if (msgEl) msgEl.textContent = '❌ SP tidak cukup untuk Spin Attack (Butuh 50 SP)! Minum SP Potion [B]';
+      } else {
+        triggerSpinAttack();
       }
     }
 
     // Triple Slash (R) — skill baru, animasi sword_slash_3, 3 hit
-    if (s.keys.r && s.player.tripleCooldown <= 0 && s.player.stamina >= 60) {
+    if (s.keys.r && s.player.tripleCooldown <= 0) {
       s.keys.r = false;
-      s.player.stamina -= 60;
-      s.player.tripleCooldown = 300;
-      s.player.isTripling = 283;
-      s.player.tripleHitDelay = [94, 94, 94];
-      playSound('spin');
+      if (s.player.stamina >= 60) {
+        s.player.stamina -= 60;
+        s.player.tripleCooldown = 300;
+        s.player.isTripling = 283;
+        s.player.tripleHitDelay = [94, 94, 94];
+        playSound('spin');
+      } else {
+        const msgEl = document.getElementById('message');
+        if (msgEl) msgEl.textContent = '❌ SP tidak cukup untuk Triple Slash (Butuh 60 SP)! Minum SP Potion [B]';
+      }
     }
 
     let currentSpeed = s.player.defending ? s.player.speed * 0.4 : s.player.speed;
@@ -881,6 +859,209 @@ export function triggerInteractable(it, index) {
   }
 }
 
+// ─── Spin Attack Skill ────────────────────────────────────────────────────────
+
+export function triggerSpinAttack() {
+  const s = state;
+  if (s.player.spinCooldown > 0 || s.player.stamina < 50 || s.gameOver || s.isPaused || !s.isGameStarted) return false;
+  s.player.stamina -= 50;
+  s.player.spinCooldown = 300;
+  s.player.isSpinning = 30;
+  s.cameraShake = Math.max(s.cameraShake || 0, 8);
+  playSound('spin');
+
+  for (let i = s.enemies.length - 1; i >= 0; i--) {
+    const e = s.enemies[i];
+    if (Math.hypot(e.x - s.player.x, e.y - s.player.y) < s.player.r + e.r + 100) {
+      const spinCrit = calcCritDamage(s.player.attackDamage * 3);
+      const dealtDmg = applyEliteOnHit(e, spinCrit.value);
+      e.hp -= dealtDmg;
+      e.slowTimer = 90;
+      e.stunTimer = 20;
+      const spinColor = spinCrit.isCrit ? '#ffff00' : '#ff4444';
+      const spinLabel = spinCrit.isCrit ? `CRIT! -${dealtDmg}` : `-${dealtDmg}`;
+      spawnDamageText(e.x, e.mesh.position.y + 35, e.y, spinLabel, spinColor);
+      if (e.hp <= 0) killEnemy(i);
+      else {
+        if (spinCrit.isCrit) spawnParticles(e.x, e.y, 0xffff00, 8, 'hit');
+        else spawnParticles(e.x, e.y, 0xffaa00, 5, 'hit');
+      }
+    }
+  }
+
+  if (s.interactables) {
+    for (let i = s.interactables.length - 1; i >= 0; i--) {
+      const it = s.interactables[i];
+      if (it.scene !== s.currentScene || it.isVFX) continue;
+      if (Math.hypot(it.x - s.player.x, it.y - s.player.y) < s.player.r + 40) {
+         triggerInteractable(it, i);
+      }
+    }
+  }
+  if (s.bossActive && Math.hypot(s.bossX - s.player.x, s.bossY - s.player.y) < s.player.r + 150) {
+    const bossSpinCrit = calcCritDamage(s.player.attackDamage * 3);
+    s.bossHp -= bossSpinCrit.value;
+    playSound('hit');
+    const bsColor = bossSpinCrit.isCrit ? '#ffff00' : '#ff4444';
+    const bsLabel = bossSpinCrit.isCrit ? `CRIT! -${bossSpinCrit.value}` : `-${bossSpinCrit.value}`;
+    spawnDamageText(s.bossX, 50, s.bossY, bsLabel, bsColor);
+  }
+  return true;
+}
+
+// ─── Auto-Combat Mode ─────────────────────────────────────────────────────────
+
+export function updateAutoCombat(dt) {
+  const s = state;
+  if (!s.autoAttack || s.gameOver || s.isPaused || !s.isGameStarted) return;
+  if (s.player.defending || s.player.isTripling > 0) return;
+  if (s.currentScene === 'hometown') return; // Safe zone, no enemies to attack
+
+  const range = s.autoAttackRange || 140;
+  const nearbyEnemies = [];
+
+  // Pindai musuh standar yang masih hidup dalam jangkauan
+  // Musuh ranged di-scan dengan radius lebih besar agar bisa di-chase dari jarak jauh
+  const RANGED_CHASE_RANGE = 400;
+  const RANGED_TYPES = new Set(['archer', 'sc_archer']);
+  const RANGED_ELITE_ABILITIES = ['mage', 'sc_mage', 'sc_dragon'];
+  if (s.enemies && s.enemies.length > 0) {
+    for (let i = 0; i < s.enemies.length; i++) {
+      const e = s.enemies[i];
+      if (!e || e.hp <= 0) continue;
+      const dist = Math.hypot(e.x - s.player.x, e.y - s.player.y);
+      const isRanged = RANGED_TYPES.has(e.type) ||
+        (e.isElite && RANGED_ELITE_ABILITIES.includes(e.type));
+      const scanRadius = isRanged ? RANGED_CHASE_RANGE : range + (e.r || 16);
+      if (dist <= scanRadius) {
+        nearbyEnemies.push({ entity: e, dist, isBoss: false });
+      }
+    }
+  }
+
+  // Pindai boss jika aktif dalam jangkauan
+  if (s.bossActive && s.bossHp > 0) {
+    const bossDist = Math.hypot(s.bossX - s.player.x, s.bossY - s.player.y);
+    if (bossDist <= range + 40) {
+      nearbyEnemies.push({
+        entity: { x: s.bossX, y: s.bossY, r: 40, hp: s.bossHp },
+        dist: bossDist,
+        isBoss: true
+      });
+    }
+  }
+
+  if (nearbyEnemies.length === 0) {
+    // ── Auto-Loot: Jalan ke drop loot terdekat saat tidak ada musuh ──────────
+    if (s.lootDrops && s.lootDrops.length > 0) {
+      const isMovingManual = hasAnyKey(s.keys, ['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd']);
+      if (!isMovingManual) {
+        const AUTO_LOOT_RANGE = 350; // radius scan loot
+        let nearestLoot = null;
+        let nearestDist = Infinity;
+
+        for (const drop of s.lootDrops) {
+          if (drop.taken) continue;
+          const d = Math.hypot(drop.x - s.player.x, drop.y - s.player.y);
+          if (d < AUTO_LOOT_RANGE && d < nearestDist) {
+            nearestDist = d;
+            nearestLoot = drop;
+          }
+        }
+
+        if (nearestLoot) {
+          // Sudah dalam jangkauan pickup checkItems() — tidak perlu jalan lebih
+          if (nearestDist > 38) {
+            s.autoWalkTarget = { x: nearestLoot.x, y: nearestLoot.y };
+          } else {
+            s.autoWalkTarget = null;
+          }
+          return;
+        }
+      }
+    }
+    // Tidak ada musuh maupun loot — bersihkan auto-walk dan diam
+    if (s.autoWalkTarget) s.autoWalkTarget = null;
+    return;
+  }
+
+  // Urutkan musuh dari yang paling dekat dengan pemain
+  nearbyEnemies.sort((a, b) => a.dist - b.dist);
+  const closest = nearbyEnemies[0];
+
+  // Cek apakah musuh terdekat adalah tipe jarak jauh (ranged)
+  const closestEntity = closest.entity;
+  const isRangedEnemy = !closest.isBoss && (
+    closestEntity.type === 'archer' ||
+    closestEntity.type === 'sc_archer' ||
+    (closestEntity.isElite && ['mage', 'sc_mage', 'sc_dragon'].includes(closestEntity.type))
+  );
+
+  // Hitung vektor arah menuju musuh terdekat
+  const toDx = closestEntity.x - s.player.x;
+  const toDy = closestEntity.y - s.player.y;
+  const normLen = Math.hypot(toDx, toDy) || 1;
+  const normX = toDx / normLen;
+  const normY = toDy / normLen;
+
+  const isMovingManual = hasAnyKey(s.keys, ['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd']);
+
+  // Auto-Face ke musuh terdekat jika pemain tidak menginput tombol arah pergerakan
+  if (!isMovingManual) {
+    s.player.facingX = normX;
+    s.player.facingY = normY;
+    s.lastFacingX = normX;
+    s.lastFacingY = normY;
+  }
+
+  const meleeStrikeRange = s.player.r + (closestEntity.r || 16) + 20;
+
+
+
+  // gunakan sistem autoWalkTarget agar animasi jalan, footstep, & obstacle avoidance
+  // diproses oleh updatePlayer() seperti gerakan normal.
+  if (isRangedEnemy && closest.dist > meleeStrikeRange && !isMovingManual) {
+    // Tetapkan target tepat di tepi radius melee (bukan di posisi musuh itu sendiri)
+    // agar karakter berhenti begitu sudah cukup dekat untuk menyerang.
+    const stopDist = meleeStrikeRange - 5;
+    s.autoWalkTarget = {
+      x: closestEntity.x - normX * stopDist,
+      y: closestEntity.y - normY * stopDist,
+    };
+    // Tunda serangan sampai sudah masuk jangkauan
+    return;
+  }
+
+  // Sudah dalam jangkauan — batalkan auto-walk jika masih aktif
+  if (s.autoWalkTarget) s.autoWalkTarget = null;
+
+  // ─── Prioritas Skill ───────────────────────────────────────────────────────
+  // Skill dipakai selama tersedia (cooldown siap + stamina cukup),
+  // tidak perlu syarat jumlah musuh.
+
+  // 1. Spin Attack — pakai jika tersedia
+  if (s.player.spinCooldown <= 0 && s.player.stamina >= 50) {
+    triggerSpinAttack();
+    return;
+  }
+
+  // 2. Triple Slash — pakai jika tersedia dan musuh dalam jangkauan melee
+  const tripleSlashReady = (s.player.tripleCooldown || 0) <= 0;
+  if (tripleSlashReady && s.player.stamina >= 60 && s.player.isTripling <= 0 && closest.dist <= meleeStrikeRange) {
+    s.player.stamina -= 60;
+    s.player.tripleCooldown = 300;
+    s.player.isTripling = 283;
+    s.player.tripleHitDelay = [94, 94, 94];
+    playSound('spin');
+    return;
+  }
+
+  // 3. Normal attack — fallback
+  if (s.player.attackCooldown <= 0) {
+    attack();
+  }
+}
+
 // ─── Potion ───────────────────────────────────────────────────────────────────
 
 export function usePotion() {
@@ -914,6 +1095,38 @@ export function usePotion() {
   if (navPotionsEl) navPotionsEl.textContent = s.potions;
   const msgEl = document.getElementById('message');
   if (msgEl) msgEl.textContent = `🧪 Health Potion digunakan! (+40 HP)`;
+  if (typeof window.updateUI === 'function') window.updateUI(true);
+  if (typeof window.updateInventoryUI === 'function') window.updateInventoryUI();
+}
+
+export function useStaminaPotion() {
+  const s = state;
+  const count = s.inventory?.['stamina_potion'] || 0;
+  if (count <= 0) {
+    const msgEl = document.getElementById('message');
+    if (msgEl) msgEl.textContent = '❌ Tidak ada Stamina Potion! Beli di Altar Shop.';
+    return;
+  }
+  if (s.player.stamina >= s.player.maxStamina) {
+    const msgEl = document.getElementById('message');
+    if (msgEl) msgEl.textContent = '⚡ SP sudah penuh!';
+    return;
+  }
+  s.inventory['stamina_potion']--;
+  if (s.inventory['stamina_potion'] <= 0) {
+    delete s.inventory['stamina_potion'];
+  }
+  s.player.stamina = s.player.maxStamina;
+  playSound('coin');
+  spawnParticles(s.player.x, s.player.y, 0x00ffff, 10, 'heal');
+  const btn = document.getElementById('btn-sp-potion');
+  const rem = s.inventory?.['stamina_potion'] || 0;
+  if (btn) {
+    btn.textContent = `⚡ SP (B) [${rem}]`;
+    btn.style.opacity = rem > 0 ? '1.0' : '0.5';
+  }
+  const msgEl = document.getElementById('message');
+  if (msgEl) msgEl.textContent = `⚡ Stamina Potion digunakan! (SP Pulih Penuh)`;
   if (typeof window.updateUI === 'function') window.updateUI(true);
   if (typeof window.updateInventoryUI === 'function') window.updateInventoryUI();
 }
@@ -1492,7 +1705,7 @@ function teleportToHometown(msg) {
 
 export function updateBoss(dt) {
   const s = state;
-  if (!s.bossActive || !s.bossMesh) return;
+  if (!s.bossActive || s.bossDefeated || !s.bossMesh) return;
 
   const dist = Math.hypot(s.player.x - s.bossX, s.player.y - s.bossY);
   const angle = Math.atan2(s.player.y - s.bossY, s.player.x - s.bossX);
@@ -1675,33 +1888,93 @@ export function updateBoss(dt) {
     }
   }
 
-  if (s.bossHp <= 0) {
+  if (s.bossHp <= 0 && !s.bossDefeated) {
+    s.bossDefeated = true;
+    s.bossActive = false;
     s.scene.remove(s.bossMesh);
     s.scene.remove(s.bossHpGroup);
-    s.bossActive = false;
-    s.gameOver = true;
-    if (typeof window.saveGame === 'function') window.saveGame(true);
-    playSound('coin');
-    spawnParticles(s.bossX, s.bossY, 0xffd700, 100, 'death');
-    const name = s.currentScene === 'wilds2' ? 'Arena Champion' : 'The Golden Golem';
-    document.getElementById('message').textContent = `👑 ${name} telah dikalahkan! Kamu mendapatkan senjata legendaris Excalibur!`;
+    s.bossMesh = null;
+    s.bossHpGroup = null;
 
-    if (!s.ownedWeapons.includes(4)) {
-      s.ownedWeapons.push(4);
+    const isWilds2 = s.currentScene === 'wilds2';
+    const name = isWilds2 ? 'Arena Champion' : 'The Golden Golem';
+    playSound('coin');
+    spawnParticles(s.bossX, s.bossY, 0xffd700, 150, 'death');
+
+    if (!s.inventory) s.inventory = {};
+
+    // ── Reward: Senjata legendaris Excalibur ──────────────────────────────────
+    if (!s.ownedWeapons.includes(4)) s.ownedWeapons.push(4);
+
+    // ── Reward: Gold ──────────────────────────────────────────────────────────
+    const goldReward = isWilds2 ? 800 : 500;
+    s.gold = (s.gold || 0) + goldReward;
+    const goldEl = document.getElementById('gold');
+    if (goldEl) goldEl.textContent = s.gold;
+    spawnDamageText(s.bossX, 40, s.bossY, `+${goldReward} Gold`, '#ffd700');
+
+    // ── Reward: EXP ───────────────────────────────────────────────────────────
+    const expReward = isWilds2 ? 800 : 500;
+    s.player.exp = (s.player.exp || 0) + expReward;
+    spawnDamageText(s.bossX, 65, s.bossY, `+${expReward} EXP`, '#00e5ff');
+    if (typeof window.levelUp === 'function' && s.player.exp >= s.player.nextExp) window.levelUp();
+
+    // ── Reward: Potion ────────────────────────────────────────────────────────
+    const potionCount = isWilds2 ? 5 : 3;
+    s.potions = (s.potions || 0) + potionCount;
+    s.inventory['health_potion'] = s.potions;
+    spawnDamageText(s.bossX, 90, s.bossY, `+${potionCount} Potion`, '#ff4444');
+    const btnPotion = document.getElementById('btn-potion');
+    if (btnPotion) { btnPotion.textContent = `🧪 Heal (C) [${s.potions}]`; btnPotion.style.opacity = '1.0'; }
+    const navPotions = document.getElementById('nav-potions');
+    if (navPotions) navPotions.textContent = s.potions;
+
+    // ── Reward: Item langka yang dijamin drop ─────────────────────────────────
+    // Golem: demon_horn + hell_fire + holy_gem + golem_core
+    // Champion: + sc_dragon_claw + sc_mage_orb + stamina_potion + health_crystal
+    const guaranteedLoot = isWilds2
+      ? ['demon_horn', 'hell_fire', 'holy_gem', 'golem_core', 'sc_dragon_claw', 'sc_mage_orb', 'stamina_potion', 'health_crystal']
+      : ['demon_horn', 'hell_fire', 'holy_gem', 'golem_core'];
+
+    const lootNames = { demon_horn: '👿 Demon Horn', hell_fire: '🔥 Hell Fire', holy_gem: '🌟 Holy Gem',
+      golem_core: '🪨 Golem Core', sc_dragon_claw: '🐲 Dragon Claw', sc_mage_orb: '🔮 Mage Orb',
+      stamina_potion: '⚡ Stamina Potion', health_crystal: '💎 Health Crystal' };
+
+    const droppedNames = [];
+    guaranteedLoot.forEach((itemId, i) => {
+      s.inventory[itemId] = (s.inventory[itemId] || 0) + 1;
+      const label = lootNames[itemId] || itemId;
+      spawnDamageText(s.bossX + (i % 3 - 1) * 40, 115 + Math.floor(i / 3) * 25, s.bossY + (i % 2 - 0.5) * 30, `+1 ${label}`, '#ffee44');
+      droppedNames.push(label);
+    });
+
+    // ── Reward: 3 item acak dari lootTable (nilai tinggi) ─────────────────────
+    const rareLoot = Object.values(lootTable).filter(l => l.value >= 10);
+    for (let i = 0; i < 3; i++) {
+      const picked = rareLoot[Math.floor(Math.random() * rareLoot.length)];
+      s.inventory[picked.id] = (s.inventory[picked.id] || 0) + 1;
+      spawnDamageText(s.bossX + (i - 1) * 50, 165, s.bossY, `+1 ${picked.icon} ${picked.name}`, '#ffcc00');
+      droppedNames.push(`${picked.icon} ${picked.name}`);
     }
 
-    // Boss always drops a potion
-    const potGeo = new THREE.CylinderGeometry(3, 3, 8, 8);
-    const potMat = new THREE.MeshLambertMaterial({ color: 0xff0000 });
-    const potMesh = new THREE.Mesh(potGeo, potMat);
-    potMesh.position.set(s.bossX + 10, 10, s.bossY + 10);
-    s.scene.add(potMesh);
-    s.potionItems.push({ x: s.bossX + 10, y: s.bossY + 10, mesh: potMesh, taken: false });
+    // ── Notifikasi ────────────────────────────────────────────────────────────
+    const msgEl = document.getElementById('message');
+    if (msgEl) {
+      msgEl.textContent = `👑 ${name} dikalahkan! +${goldReward}🪙 +${expReward}✨ +${potionCount}🧪 ⚔️Excalibur | Loot: ${droppedNames.slice(0, 4).join(', ')}...`;
+    }
 
-    // Show win screen
-    setTimeout(() => {
-      document.getElementById('win').style.display = 'flex';
-    }, 1000);
+    // ── Quest boss ────────────────────────────────────────────────────────────
+    if (s.quests) {
+      const bossQuest = s.quests.find(q => q.id === 3 && !q.completed);
+      if (bossQuest) {
+        bossQuest.progress = (bossQuest.progress || 0) + 1;
+        if (typeof window.checkQuestCompletion === 'function') window.checkQuestCompletion();
+      }
+    }
+
+    if (typeof window.saveGame === 'function') window.saveGame(true);
+    if (typeof window.updateUI === 'function') window.updateUI();
+    if (typeof window.updateInventoryUI === 'function') window.updateInventoryUI();
   }
 }
 
