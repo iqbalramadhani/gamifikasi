@@ -1,395 +1,326 @@
-import * as THREE from 'three';
-import { state } from './state.js';
-import { playSound } from './audio.js';
-import { spawnParticles } from './helpers.js';
-import { mapSize } from './constants.js';
-import { initMap, initWildsNPCs, initWilds2 } from './scenes.js';
+import * as BABYLON from "babylonjs";
+import { state } from "./state.js";
+import { blocked, spawnParticles } from "./helpers.js";
+import { mapSize, weaponList, armorList } from "./constants.js";
+import { initWildsNPCs, initWilds2, getTerrainHeight, getTerrainHeightWilds2 } from "./scenes.js";
 
-// ─── Weather / day-night cycle ────────────────────────────────────────────────
-
-export function updateWeather(dt) {
+export function updateDayNightCycle() {
   const s = state;
-  if (s.bossActive) {
-    s.dayTime = 0.8; // Force storm
-  } else {
-    s.dayTime += 0.0003 * dt;
-    if (s.dayTime > 1) s.dayTime = 0;
-  }
+  s.dayTime += 0.0008;
+  const sunAngle = s.dayTime * 0.15;
+  const sunIntensity = Math.sin(sunAngle);
+  const brightness = Math.max(0.2, sunIntensity);
 
-  // Scorched Dunes: fixed hot sand atmosphere, no day-night cycle / rain
-  if (s.currentScene === 'wilds2') {
-    let r = 217, g = 178, b = 106; // hazy sand sky
-    if (s.bossActive) { r = 150; g = 50; b = 30; }
-    if (s.dirLight) s.dirLight.intensity = s.bossActive ? 0.4 : 1.0;
-    if (s.scene) {
-      s.scene.background.setRGB(r / 255, g / 255, b / 255);
-      s.scene.fog.color.setRGB(r / 255, g / 255, b / 255);
-    }
-    if (s.rainParticles) s.rainParticles.material.opacity = 0;
-    return;
-  }
-
-  let lightIntensity = 0.8;
-  let r = 45, g = 79, b = 48; // 0x2d4f30 (siang)
-
-  if (s.dayTime > 0.4) {
-    const nightFactor = Math.sin((s.dayTime - 0.4) * Math.PI * (1 / 0.6));
-    const nf = nightFactor < 0 ? 0 : nightFactor;
-    lightIntensity = 0.8 - (nf * 0.6);
-    r -= nf * 35;
-    g -= nf * 59;
-    b += nf * 20;
-  }
-  if (s.bossActive) {
-    r = 80; g = 10; b = 10; // Blood moon
-    lightIntensity = 0.3;
-  }
-
-  if (s.dirLight) s.dirLight.intensity = lightIntensity;
   if (s.scene) {
-    s.scene.background.setRGB(r / 255, g / 255, b / 255);
-    s.scene.fog.color.setRGB(r / 255, g / 255, b / 255);
+    const r = 0.35 + brightness * 0.5;
+    const g = 0.50 + brightness * 0.35;
+    const b = 0.70 + brightness * 0.25;
+    s.scene.clearColor = new BABYLON.Color4(r, g, b, 1);
+    s.scene.fogColor = new BABYLON.Color3(r, g, b);
   }
 
-  if (s.rainParticles) {
-    if (s.bossActive || (s.dayTime > 0.6 && s.dayTime < 0.9)) {
-      s.rainParticles.material.opacity = 0.6;
-      const positions = s.rainParticles.geometry.attributes.position.array;
-      for (let i = 0; i < 1500; i++) {
-        positions[i * 3 + 1] -= 15;
-        if (positions[i * 3 + 1] < 0) positions[i * 3 + 1] = 500;
-      }
-      s.rainParticles.geometry.attributes.position.needsUpdate = true;
-      s.rainParticles.position.x = s.player.x;
-      s.rainParticles.position.z = s.player.y;
-    } else {
-      s.rainParticles.material.opacity = 0;
+  if (s.dirLight) {
+    s.dirLight.intensity = 0.5 + brightness;
+  }
+}
+
+export function updateWeather() {
+  const s = state;
+  const isRaining = s.currentScene === "wilds" && Math.sin(s.dayTime * 0.01) > 0.3;
+
+  if (s.rainParticles && s.rainParticles.isEnabled !== undefined) {
+    s.rainParticles.isEnabled = isRaining;
+    if (isRaining) s.rainParticles.emitRate = 500;
+  }
+}
+
+export function updateParticles() {
+  const s = state;
+
+  // Weapon aura: per frame, update position + rotation to match player's weapon
+  const weaponTier = weaponList[s.currentWeapon];
+  const auraColor = s.currentWeapon === 0
+    ? "#999999"
+    : (weaponList[s.currentWeapon]?.color || "#ff0000");
+
+  if (s.playerAuraLight && s.playerAuraLight.intensity !== undefined) {
+    s.playerAuraLight.intensity = s.currentWeapon === 0 ? 0.1 : (0.3 + s.currentWeapon * 0.15);
+  }
+
+  s.particles.forEach(p => {
+    p.mesh.position.x += p.dx;
+    p.mesh.position.y += p.dy;
+    p.mesh.position.z += p.dz;
+    p.life -= p.decay;
+
+    if (p.life <= 0) {
+      p.mesh.setEnabled(false);
+      p.dead = true;
     }
-  }
+  });
 
-  // Ambient Particles (Fireflies, Leaves, Sand, Fountain Splashes, Chimney Smoke)
-  if (!s.ambientTimer) s.ambientTimer = 0;
-  s.ambientTimer += dt;
-  if (s.ambientTimer > 5) {
-    s.ambientTimer = 0;
-    if (s.currentScene === 'hometown') {
-      // Fountain water droplets leaping
-      spawnParticles(500 + (Math.random() - 0.5) * 50, 500 + (Math.random() - 0.5) * 50, 0x5dade2, 1, 'heal');
-      
-      // Chimney smoke
-      const chimneys = [
-        { x: 260, y: 140 },
-        { x: 620, y: 740 },
-        { x: 60, y: 440 },
-        { x: 940, y: 660 },
-      ];
-      const ch = chimneys[Math.floor(Math.random() * chimneys.length)];
-      if (Math.random() < 0.6) {
-        spawnParticles(ch.x, ch.y, 0xd5d8dc, 1, 'dust');
-      }
+  s.particles = s.particles.filter(p => !p.dead);
 
-      // Evening golden fireflies
-      if (s.dayTime > 0.38) {
-        if (Math.random() < 0.5) {
-          spawnParticles(s.player.x + (Math.random() - 0.5) * 500, s.player.y + (Math.random() - 0.5) * 500, 0xf1c40f, 1, 'heal');
+  // Aura bursts (weapon slash VFX)
+  if (s.auraBursts) {
+    const children = s.auraBursts.getDescendants ? s.auraBursts.getDescendants() : [];
+    for (const m of children) {
+      if (m._burstLife !== undefined) {
+        m._burstLife -= 0.08;
+        m.scaling.setAll(Math.max(0, m._burstLife * m._burstBaseScale));
+        if (m.material && m.material.alpha !== undefined) {
+          m.material.alpha = m._burstLife;
+        }
+        if (m._burstLife <= 0) {
+          m.setEnabled(false);
         }
       }
-    } else if (s.currentScene === 'wilds') {
-      if (s.dayTime > 0.4) {
-        if (Math.random() < 0.5) spawnParticles(s.player.x + (Math.random()-0.5)*800, s.player.y + (Math.random()-0.5)*800, 0x88ff88, 1, 'heal'); // Firefly
-      } else {
-        if (Math.random() < 0.3) spawnParticles(s.player.x + (Math.random()-0.5)*800, s.player.y + (Math.random()-0.5)*800, 0x228b22, 1, 'dust'); // Leaf
-      }
-    } else if (s.currentScene === 'wilds2') {
-      if (Math.random() < 0.5) spawnParticles(s.player.x + (Math.random()-0.5)*800, s.player.y + (Math.random()-0.5)*800, 0xd2b48c, 1, 'dust'); // Sand
-    }
-  }
-
-  // Animate interactables VFX (Mystic Ruins core)
-  if (s.interactables) {
-    const time = Date.now() * 0.002;
-    for (const it of s.interactables) {
-      if (it.isVFX && it.type === 'ruin_core' && it.scene === s.currentScene) {
-        it.mesh.position.y = 30 + Math.sin(time + it.x) * 5;
-        it.mesh.rotation.y = time;
-        it.mesh.rotation.x = time * 0.5;
-      }
     }
   }
 }
 
-// ─── Particles update ─────────────────────────────────────────────────────────
-
-export function updateParticles(dt) {
-  const s = state;
-  for (let i = s.particles.length - 1; i >= 0; i--) {
-    const p = s.particles[i];
-    p.life -= p.decay * dt;
-    if (p.life <= 0) {
-      s.scene.remove(p.mesh);
-      s.particles.splice(i, 1);
-      continue;
-    }
-    p.mesh.position.x += p.dx * dt;
-    p.mesh.position.y += p.dz * dt;
-    p.mesh.position.z += p.dy * dt;
-    p.mesh.material.opacity = p.life;
-    p.mesh.scale.setScalar(Math.max(0, p.life));
-  }
-
-  // Animasi Weapon Aura — 3 layer: core wisps (helix), sparks (billboard), burst pool
-  if (s.weaponAuraGroup && s.playerSwordMesh) {
-    const tGlobal = Date.now() * 0.004;
-    const swordWorld = new THREE.Vector3();
-    s.playerSwordMesh.getWorldPosition(swordWorld);
-
-    const bladeDir = new THREE.Vector3(0, 0, -1);
-    bladeDir.applyQuaternion(s.playerSwordMesh.getWorldQuaternion(new THREE.Quaternion()));
-    const worldUp = new THREE.Vector3(0, 1, 0);
-    const right = new THREE.Vector3().crossVectors(bladeDir, worldUp).normalize();
-    if (right.lengthSq() < 0.01) right.set(1, 0, 0);
-    const perp = new THREE.Vector3().crossVectors(bladeDir, right).normalize();
-
-    const startOffset = -15;
-    const bladeLen = 38;
-    const dtN = dt * 60;
-
-    // Attack pulse: attackCooldown 90→0 decays over ~1.5 s
-    const atk  = Math.max(0, Math.min(1, s.player.attackCooldown / 90));
-    const sMul = 1 + 2.5 * atk;   // flow speed boost during attack
-    const rMul = 1 + 0.6 * atk;   // radius swell during attack
-
-    const _meshUp = new THREE.Vector3(0, 1, 0);
-    const _flowDir = new THREE.Vector3();
-
-    for (const p of s.weaponAuraGroup.children) {
-      const u = p.userData;
-      u.t -= u.vt * dtN * sMul;
-      if (u.t < -0.2) u.t = 1.1;
-      const along = Math.max(u.t, 0);
-
-      // Blade profile: parabolic — narrow at hilt & tip, widest at mid-blade
-      const profile = 0.12 + 1.55 * 4 * along * (1 - along) * 0.25;
-      const radius  = u.r * profile * rMul;
-      // Helix: u.twist revolutions over blade length + time-driven spin
-      const angle   = u.t * u.twist * Math.PI * 2
-                    + tGlobal * u.angSpeed * sMul
-                    + u.animOffset;
-      const pos     = startOffset + along * bladeLen;
-
-      p.position.set(
-        swordWorld.x + bladeDir.x*pos + right.x*Math.cos(angle)*radius + perp.x*Math.sin(angle)*radius,
-        swordWorld.y + bladeDir.y*pos + right.y*Math.cos(angle)*radius + perp.y*Math.sin(angle)*radius,
-        swordWorld.z + bladeDir.z*pos + right.z*Math.cos(angle)*radius + perp.z*Math.sin(angle)*radius,
-      );
-
-      if (p.geometry.type === 'CylinderGeometry') {
-        // Core wisps: align tube axis to local flow direction
-        _flowDir.set(bladeDir.x, bladeDir.y, bladeDir.z)
-          .addScaledVector(right, Math.cos(angle) * 0.35)
-          .addScaledVector(perp,  Math.sin(angle) * 0.35)
-          .normalize();
-        p.quaternion.setFromUnitVectors(_meshUp, _flowDir);
-        p.material.opacity = 0.4 + 0.45 * atk + 0.08 * Math.sin(tGlobal * 6);
-      } else {
-        // Spark planes: billboard to camera
-        if (s.camera) p.quaternion.copy(s.camera.quaternion);
-        p.material.opacity = u.baseOp * (1 + 1.2 * atk);
-      }
-    }
-
-    // Attack burst pool
-    if (s.auraBursts) {
-      for (const b of s.auraBursts.children) {
-        const bu = b.userData;
-        if (bu.life <= 0) continue;
-        bu.life -= dt;
-        if (bu.life <= 0) { b.visible = false; continue; }
-        const prog   = 1 - bu.life / bu.maxLife;
-        const radial = bu.spd * prog * 8;
-        const bPos   = startOffset + 0.9 * bladeLen;
-        b.position.set(
-          swordWorld.x + bladeDir.x*bPos + right.x*Math.cos(bu.ang)*radial + perp.x*Math.sin(bu.ang)*radial,
-          swordWorld.y + bladeDir.y*bPos + right.y*Math.cos(bu.ang)*radial + perp.y*Math.sin(bu.ang)*radial,
-          swordWorld.z + bladeDir.z*bPos + right.z*Math.cos(bu.ang)*radial + perp.z*Math.sin(bu.ang)*radial,
-        );
-        b.material.opacity = (bu.life / bu.maxLife) * 0.8;
-        b.scale.setScalar(1.4 - 0.4 * prog);
-      }
-    }
-  }
+function lerpAngle(a, b, t) {
+  let diff = b - a;
+  while (diff > Math.PI) diff -= Math.PI * 2;
+  while (diff < -Math.PI) diff += Math.PI * 2;
+  return a + diff * t;
 }
 
-// ─── Pet (fairy companion) ────────────────────────────────────────────────────
-
-export function updatePet(dt) {
+export function updatePet() {
   const s = state;
   if (!s.petActive || !s.petMesh) return;
 
-  s.petAngle += 0.05 * dt;
+  s.petAngle += 0.03;
+  const orbitX = s.player.x + Math.cos(s.petAngle) * 25;
+  const orbitZ = s.player.y + Math.sin(s.petAngle) * 25;
 
-  const targetX = s.player.x + Math.cos(s.petAngle) * 20;
-  const targetZ = s.player.y + Math.sin(s.petAngle) * 20;
-  const targetY = 25 + Math.sin(s.petAngle * 2) * 5;
+  if (blocked(orbitX, orbitZ, 5)) {
+    s.petAngle += 0.5;
+    return;
+  }
 
-  s.petMesh.position.x += (targetX - s.petMesh.position.x) * 0.1 * dt;
-  s.petMesh.position.y += (targetY - s.petMesh.position.y) * 0.1 * dt;
-  s.petMesh.position.z += (targetZ - s.petMesh.position.z) * 0.1 * dt;
-  s.petMesh.rotation.y += 0.1 * dt;
+  s.petMesh.position.x = orbitX;
+  s.petMesh.position.z = orbitZ;
+  s.petMesh.position.y = 40 + Math.sin(Date.now() / 500) * 3;
+}
 
-  // Pet occasionally fires at nearby enemies
-  s.petAttackTimer = (s.petAttackTimer ?? 0) + dt;
-  if (s.petAttackTimer > 60) {
-    s.petAttackTimer = 0;
-    let closest = null;
-    let minDist = 150;
-    for (const e of s.enemies) {
-      const d = Math.hypot(e.x - s.petMesh.position.x, e.y - s.petMesh.position.z);
-      if (d < minDist) { minDist = d; closest = e; }
+export function updateVillagers() {
+  const s = state;
+  const t = Date.now() * 0.001;
+
+  s.villagers.forEach(v => {
+    if (!v.mesh) return;
+
+    if (v.talking) {
+      v.talkTimer -= 1;
+      if (v.talkTimer <= 0) {
+        v.talking = false;
+        v.currentTarget = null;
+      }
+    } else if (v.currentTarget) {
+      const dx = v.currentTarget.x - v.mesh.position.x;
+      const dz = v.currentTarget.z - v.mesh.position.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist < 25) {
+        v.currentTarget = null;
+        v.waitTimer = 60 + Math.floor(Math.random() * 300);
+      } else {
+        const angle = Math.atan2(dx, dz);
+        v.mesh.rotation.y = lerpAngle(v.mesh.rotation.y, angle, 0.05);
+        const speed = v.walkSpeed || 1.5;
+        let nx = v.mesh.position.x + Math.sin(angle) * speed;
+        let nz = v.mesh.position.z + Math.cos(angle) * speed;
+        if (!blocked(nx, nz, 10) && s.obstaclesHometown.every(o => Math.hypot(o.x - nx, o.y - nz) >= o.r + 10)) {
+          v.mesh.position.x = nx;
+          v.mesh.position.z = nz;
+        } else {
+          v.currentTarget = null;
+        }
+      }
     }
-    if (closest) {
-      const petAngle = Math.atan2(closest.y - s.petMesh.position.z, closest.x - s.petMesh.position.x);
-      const m = new THREE.Mesh(
-        new THREE.SphereGeometry(3, 4, 4),
-        new THREE.MeshBasicMaterial({ color: 0xffffaa })
-      );
-      m.position.copy(s.petMesh.position);
-      s.scene.add(m);
-      s.projectiles.push({
-        x: m.position.x, y: m.position.z,
-        dx: Math.cos(petAngle) * 15, dy: Math.sin(petAngle) * 15,
-        mesh: m, isPet: true,
-      });
-      playSound('shoot');
+
+    if (!v.talking && !v.currentTarget) {
+      v.waitTimer -= 1;
+      if (v.waitTimer <= 0) {
+        const targets = s.villagerWalkTargets;
+        if (targets && targets.length > 0) {
+          v.currentTarget = targets[Math.floor(Math.random() * targets.length)];
+        }
+      }
     }
+
+    if (v.legL && v.legR && v.armL && v.armR) {
+      if (v.currentTarget && !v.talking) {
+        const cycle = t * 5;
+        v.legL.rotation.x = Math.sin(cycle) * 0.4;
+        v.legR.rotation.x = Math.sin(cycle + Math.PI) * 0.4;
+        v.armL.rotation.x = Math.sin(cycle + Math.PI) * 0.2;
+        v.armR.rotation.x = Math.sin(cycle) * 0.2;
+      } else {
+        v.legL.rotation.x = 0;
+        v.legR.rotation.x = 0;
+        v.armL.rotation.x = 0;
+        v.armR.rotation.x = 0;
+      }
+    }
+
+    if (v.talking && !v.currentTarget) {
+      v.bobOffset = Math.sin(t * 3) * 1.5;
+    } else {
+      v.bobOffset = 0;
+    }
+    if (v.baseY !== undefined) {
+      v.mesh.position.y = v.baseY + v.bobOffset;
+    }
+  });
+
+  s.villageAnimals.forEach(a => {
+    if (!a.mesh) return;
+    a.angle += a.speed;
+    const ax = a.center.x + Math.cos(a.angle) * a.radius;
+    const az = a.center.y + Math.sin(a.angle) * a.radius;
+    if (blocked(ax, az, 8)) return;
+    a.mesh.position.x = ax;
+    a.mesh.position.z = az;
+    a.mesh.rotation.y = -a.angle + (a.headingOffset || 0);
+  });
+}
+
+export function teleportTo(targetScene) {
+  const s = state;
+
+  if (targetScene === "wilds" && !s.wildsLoaded) {
+    initWildsNPCs();
+    s.wildsLoaded = true;
+  }
+
+  if (targetScene === "wilds2" && !s.wilds2Loaded) {
+    initWilds2();
+    s.wilds2Loaded = true;
+  }
+
+  s.currentScene = targetScene;
+
+  if (s.hometownGroup) s.hometownGroup.setEnabled(targetScene === "hometown");
+  if (s.wildsGroup) s.wildsGroup.setEnabled(targetScene === "wilds");
+  if (s.wilds2Group) s.wilds2Group.setEnabled(targetScene === "wilds2");
+
+  if (s.mainFloor) s.mainFloor.setEnabled(targetScene !== "wilds2");
+
+  if (targetScene === "hometown") {
+    s.player.x = 500;
+    s.player.y = 500;
+  } else if (targetScene === "wilds2") {
+    s.player.x = 200;
+    s.player.y = mapSize - 200;
+  } else {
+    s.player.x = s.player.x; // keep position in wilds
+  }
+
+  if (s.playerMesh) {
+    const terrainH = targetScene === "wilds2" ? getTerrainHeightWilds2(s.player.x, s.player.y) : getTerrainHeight(s.player.x, s.player.y);
+    s.playerMesh.position.x = s.player.x;
+    s.playerMesh.position.z = s.player.y;
+    s.playerMesh.position.y = 15 + terrainH;
+  }
+
+  if (s.petMesh) {
+    s.petMesh.setEnabled(true);
+  }
+
+  // Reset camera to follow player at new position
+  const s2 = state;
+  const initAngle = Math.atan2(s2.player.facingX, s2.player.facingY);
+  if (s.camera) {
+    s.camera.position.x = s2.player.x - Math.sin(initAngle) * s2.cameraOffsetZ;
+    s.camera.position.y = s2.cameraOffsetY;
+    s.camera.position.z = s2.player.y - Math.cos(initAngle) * s2.cameraOffsetZ;
+    s.camera.setTarget(new BABYLON.Vector3(s2.player.x, s2.cameraLookAtY, s2.player.y));
+  }
+
+  document.getElementById("message").textContent =
+    targetScene === "wilds" ? "🌍 Welcome to The Wilds!" :
+    targetScene === "wilds2" ? "🏜️ Welcome to Scorched Dunes!" :
+    "🏘️ Welcome to Hometown";
+
+  const msgEl = document.getElementById("message");
+  if (msgEl) msgEl.textContent =
+    targetScene === "wilds" ? "🌍 Welcome to The Wilds!" :
+    targetScene === "wilds2" ? "🏜️ Welcome to Scorched Dunes!" :
+    "🏘️ Welcome to Hometown";
+}
+
+export function usePotion() {
+  const s = state;
+  if (!s.inventory || s.inventory["health_potion"] <= 0) return false;
+
+  if (s.player.hp >= s.player.maxHp) return false;
+
+  s.inventory["health_potion"]--;
+  s.player.hp = Math.min(s.player.maxHp, s.player.hp + 30);
+  spawnParticles(s.player.x, s.player.y, 0x44ff44, 8, "heal");
+  s.msg("💚 Potion dipakai. HP +30");
+  s.flashHeal();
+  return true;
+}
+
+export function autoUsePotions() {
+  const s = state;
+  if (s.player.hp <= (s.player.maxHp * s.autoHealThreshold) / 100) {
+    usePotion();
+  }
+  if (s.player.stamina <= (s.player.maxStamina * s.autoSPThreshold) / 100) {
+    useConsumable("stamina_potion");
   }
 }
 
-// ─── Teleport between scenes ──────────────────────────────────────────────────
-
-export function teleportTo(sceneName) {
-  console.log('Teleporting to', sceneName);
+export function useConsumable(itemId) {
   const s = state;
-  s.currentScene = sceneName;
+  const now = Date.now();
+  if (now - s.lastCrystalUse < 800) return;
 
-  if (sceneName === 'wilds') {
-    if (!s.wildsLoaded) {
-      console.log('Lazy loading The Wilds...');
-      initMap();
-      initWildsNPCs();
-      s.wildsLoaded = true;
-    }
-    
-    if (s.hometownGroup) s.hometownGroup.visible = false;
-    if (s.wilds2Group) s.wilds2Group.visible = false;
-    if (s.wildsGroup) s.wildsGroup.visible = true;
-    if (s.mainFloor) s.mainFloor.visible = true;
+  if (!s.inventory || !s.inventory[itemId]) return;
 
-    s.player.x = Math.floor(mapSize / 2);
-    s.player.y = Math.floor(mapSize / 2) + 100;
-
-    // Clear existing enemies
-    s.enemies.forEach(e => {
-      if (e.mixer) {
-        e.mixer.stopAllAction();
-        e.mixer.uncacheRoot(e.mesh);
-      }
-      s.scene.remove(e.mesh);
-      s.scene.remove(e.hpGroup);
-    });
-    s.enemies.length = 0;
-    if (s.dyingEnemies) {
-      s.dyingEnemies.forEach(de => {
-        if (de.mixer) {
-          de.mixer.stopAllAction();
-          de.mixer.uncacheRoot(de.mesh);
-        }
-        s.scene.remove(de.mesh);
-      });
-      s.dyingEnemies.length = 0;
-    }
-
-    // Spawn initial wave of enemies in the Wilds scattered around the map
-    const initialSpawns = Math.min(30, 10 + s.player.level * 2);
-    for (let i = 0; i < initialSpawns; i++) {
-      if (typeof window.spawnEnemy === 'function') window.spawnEnemy();
-    }
-
-    document.getElementById('message').textContent = 'Merasuki The Wilds...';
-  } else if (sceneName === 'wilds2') {
-    if (!s.wilds2Loaded) {
-      console.log('Lazy loading Scorched Dunes...');
-      initWilds2();
-      s.wilds2Loaded = true;
-    }
-
-    if (s.hometownGroup) s.hometownGroup.visible = false;
-    if (s.wildsGroup) s.wildsGroup.visible = false;
-    if (s.wilds2Group) s.wilds2Group.visible = true;
-    if (s.mainFloor) s.mainFloor.visible = false; // desert: hide grass floor
-
-    s.player.x = Math.floor(mapSize / 2);
-    s.player.y = Math.floor(mapSize / 2) + 800; // Pindahkan jauh ke depan piramida agar tidak tersangkut
-
-    // Clear existing enemies
-    s.enemies.forEach(e => {
-      if (e.mixer) {
-        e.mixer.stopAllAction();
-        e.mixer.uncacheRoot(e.mesh);
-      }
-      s.scene.remove(e.mesh);
-      s.scene.remove(e.hpGroup);
-    });
-    s.enemies.length = 0;
-    if (s.dyingEnemies) {
-      s.dyingEnemies.forEach(de => {
-        if (de.mixer) {
-          de.mixer.stopAllAction();
-          de.mixer.uncacheRoot(de.mesh);
-        }
-        s.scene.remove(de.mesh);
-      });
-      s.dyingEnemies.length = 0;
-    }
-
-    // Spawn initial wave of tier-2 enemies in the desert
-    const initialSpawns = Math.min(80, 40 + s.player.level * 3); // Lebih banyak musuh
-    for (let i = 0; i < initialSpawns; i++) {
-      if (typeof window.spawnEnemy2 === 'function') window.spawnEnemy2();
-    }
-
-    document.getElementById('message').textContent = 'Memasuki Scorched Dunes...';
-  } else {
-    if (s.wildsGroup) s.wildsGroup.visible = false;
-    if (s.wilds2Group) s.wilds2Group.visible = false;
-    if (s.hometownGroup) s.hometownGroup.visible = true;
-    if (s.mainFloor) s.mainFloor.visible = true;
-
-    s.player.x = 500;
-    s.player.y = 800;
-    document.getElementById('message').textContent = 'Kembali ke Safe Haven.';
+  if (itemId === "stamina_potion") {
+    if (s.player.stamina >= s.player.maxStamina) return;
+    s.inventory[itemId]--;
+    s.lastCrystalUse = now;
+    s.player.stamina = Math.min(s.player.maxStamina, s.player.stamina + 50);
+    spawnParticles(s.player.x, s.player.y, 0x88ccff, 6, "heal");
+    s.msg("💙 Stamina Potion dipakai. SP +50");
+    s.flashHeal();
+    return;
   }
 
-  // Update player mesh position to match new coordinates
-  if (s.playerMesh) {
-    s.playerMesh.position.set(s.player.x, 15, s.player.y);
+  if (itemId === "antidote") {
+    s.inventory[itemId]--;
+    s.lastCrystalUse = now;
+    s.player.statusEffect = null;
+    spawnParticles(s.player.x, s.player.y, 0x44ff88, 6, "heal");
+    s.msg("🌿 Antidote dipakai. Efek negatif dihapus");
+    s.flashHeal();
+    return;
   }
 
-  // Reposition camera to follow the player after teleport
-  const camX = s.player.x;
-  const camZ = s.player.y - s.cameraOffsetZ;
-  const camY = s.cameraOffsetY;
-  if (s.camera) {
-    s.camera.position.set(camX, camY, camZ);
-    s.camera.lookAt(s.player.x, s.cameraLookAtY, s.player.y);
+  if (itemId === "cooling_tea") {
+    s.inventory[itemId]--;
+    s.lastCrystalUse = now;
+    const boost = s.upgrades.spdLevel;
+    s.player.speed = 4.5 + boost * 0.4;
+    spawnParticles(s.player.x, s.player.y, 0x44ccff, 6, "heal");
+    s.msg("🍵 Cooling Tea dipakai. Kecepatan +");
+    s.flashHeal();
+    return;
   }
 
-  // Reset facing direction if necessary
-  if (!s.player.facingX && !s.player.facingY) {
-    s.player.facingX = 1;
-    s.player.facingY = 0;
+  if (itemId === "health_crystal") {
+    s.inventory[itemId]--;
+    s.lastCrystalUse = now;
+    s.player.hp = s.player.maxHp;
+    s.player.stamina = s.player.maxStamina;
+    spawnParticles(s.player.x, s.player.y, 0xff44ff, 10, "heal");
+    s.msg("💎 Health Crystal dipakai. HP & SP penuh");
+    s.flashHeal();
+    return;
   }
-
-  playSound('coin');
-  if (typeof window.saveGame === 'function') window.saveGame(true);
 }

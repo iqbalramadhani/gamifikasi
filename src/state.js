@@ -4,10 +4,11 @@
 export const state = {
   // --- Scenery / scene graph refs ---
   scene: null,
+  sceneMount: null, // TransformNode parented into scene — mount point for hot-path dynamic entities (enemies, projectiles, loot, particles)
   camera: null,
-  renderer: null,
+  renderer: null, // Babylon Engine instance
   dirLight: null,
-  composer: null,
+  composer: null, // always null — Babylon render loop replaces this; kept only so any stale reference stays safe
   controls: null,
 
   playerMesh: null,
@@ -25,6 +26,10 @@ export const state = {
   playerBladeMat: null,
   playerSwordMesh: null,
   playerAuraLight: null,
+  // Phase 1: procedural placeholder (no skeleton anim yet); kept null-safe so callers guard with `if (...)`.
+  playerMixer: null,
+  playerActions: null,
+  activeAction: null,
 
   // Camera presets (read-write from settings UI)
   cameraOffsetY: 150,
@@ -130,6 +135,12 @@ export const state = {
   bossPhase: 1,
   bossSpawnX: 10000, // Home position per active boss (Golem: map corner, Soldier: pyramid)
   bossSpawnY: 10500,
+  // Phase 1: boss animation placeholder (mirrors createEnemyMixer return shape); null-safe guarded at call sites.
+  bossMixer: null,
+  bossActions: null,
+  bossCurrentAction: null,
+  bossDyingMesh: null,
+  bossDyingMixer: null,
 
   // Weather / time
   dayTime: 0,

@@ -1,14 +1,26 @@
-import * as THREE from 'three';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+import * as BABYLON from "babylonjs";
+import "@babylonjs/loaders"; // registers GLTF + FBX sceneLoader plugins
 import { state } from './state.js';
 import { mapSize } from './constants.js';
 import { loadedModels } from './model-loader.js';
 import { spawnEnemy, spawnEnemy2 } from './combat.js';
 import { scatterInteractables } from './landmarks.js';
 import { playSound } from './audio.js';
+
+function mat(scene, name, hex, opts = {}) {
+  const m = new BABYLON.StandardMaterial(name, scene);
+  if (hex !== undefined) m.diffuseColor = BABYLON.Color3.FromHexString(hex);
+  if (opts.emissive !== undefined) m.emissiveColor = BABYLON.Color3.FromHexString(opts.emissive);
+  if (opts.opacity !== undefined) m.alpha = opts.opacity;
+  if (opts.disableLighting) m.disableLighting = true;
+  return m;
+}
+
+function cloneModel(key, name, scene) {
+  const src = loadedModels[key];
+  if (!src) return null;
+  return src.clone(name, true, false);
+}
 
 export function getTerrainHeight(x, y) {
   // Area kota (Hometown) harus sepenuhnya datar
@@ -24,73 +36,50 @@ export function getTerrainHeight(x, y) {
 
 // ─── Initialization helpers ───────────────────────────────────────────────────
 
-/** Create the Three.js scene, camera, renderer, lights, fog, rain, bloom pass. */
+/** Create the Babylon.js scene, camera, engine, lights, fog. */
 export function initSetup() {
   const s = state;
 
-  s.scene = new THREE.Scene();
-  s.scene.background = new THREE.Color(0x87CEEB); // Langit biru
-
-  s.camera = new THREE.PerspectiveCamera(
-    50, window.innerWidth / window.innerHeight, 0.1, 3000
-  );
-
   const canvas = document.getElementById('canvas');
-  s.renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
-  s.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
-  s.renderer.setSize(window.innerWidth, window.innerHeight);
-  s.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  s.renderer.toneMappingExposure = 1.0;
-  s.renderer.shadowMap.enabled = true;
-  s.renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Memperhalus bayangan
+  s.renderer = new BABYLON.Engine(canvas, true);
+  s.scene = new BABYLON.Scene(s.renderer);
+  s.scene.clearColor = new BABYLON.Color4(0.53, 0.81, 0.92, 1); // Langit biru
 
-  s.composer = new EffectComposer(s.renderer);
-  s.composer.addPass(new RenderPass(s.scene, s.camera));
+  // Dynamic entity mount (hot-path add/remove target)
+  s.sceneMount = new BABYLON.TransformNode("sceneMount", s.scene);
 
-  const bloomPass = new UnrealBloomPass(
-    new THREE.Vector2(window.innerWidth, window.innerHeight),
-    1.5, 0.4, 0.85
-  );
-  bloomPass.threshold = 0.4;
-  bloomPass.strength = 0.8;
-  bloomPass.radius = 0.3;
-  // s.composer.addPass(bloomPass); // Dinonaktifkan sesuai permintaan pengguna
+  s.camera = new BABYLON.UniversalCamera("chaseCam", new BABYLON.Vector3(0, s.cameraOffsetY, 0), s.scene);
+  s.camera.minZ = 0.1;
+  s.camera.maxZ = 3000;
+  s.camera.fov = (50 * Math.PI) / 180;
+  s.camera.setTarget(new BABYLON.Vector3(s.player.x, s.cameraLookAtY, s.player.y));
+  s.camera.parent = null; // keep as free camera
+
+  s.composer = null; // no post-processing in Phase 1
 
   window.addEventListener('resize', () => {
-    s.camera.aspect = window.innerWidth / window.innerHeight;
-    s.camera.updateProjectionMatrix();
-    s.renderer.setSize(window.innerWidth, window.innerHeight);
-    s.composer.setSize(window.innerWidth, window.innerHeight);
+    s.renderer.resize();
   });
 
-  // Chase-camera defaults (no OrbitControls)
+  // Chase-camera initial position
   s.controls = null;
 
   const initFacingAngle = Math.atan2(s.player.facingX, s.player.facingY);
-  s.camera.position.set(
-    s.player.x - Math.sin(initFacingAngle) * s.cameraOffsetZ,
-    s.cameraOffsetY,
-    s.player.y - Math.cos(initFacingAngle) * s.cameraOffsetZ
-  );
-  s.camera.lookAt(s.player.x, s.cameraLookAtY, s.player.y);
+  s.camera.position.x = s.player.x - Math.sin(initFacingAngle) * s.cameraOffsetZ;
+  s.camera.position.y = s.cameraOffsetY;
+  s.camera.position.z = s.player.y - Math.cos(initFacingAngle) * s.cameraOffsetZ;
+  s.camera.setTarget(new BABYLON.Vector3(s.player.x, s.cameraLookAtY, s.player.y));
 
   // Lighting (Pencahayaan Atmosferik)
-  const ambientLight = new THREE.AmbientLight(0xdcebf4, 0.5); // Cahaya ambien biru pucat
-  s.scene.add(ambientLight);
+  const hemiLight = new BABYLON.HemisphericLight("hemi", new BABYLON.Vector3(0, 1, 0), s.scene);
+  hemiLight.intensity = 0.5;
+  hemiLight.groundColor = new BABYLON.Color3(0.55, 0.55, 0.55);
+  hemiLight.diffuse = BABYLON.Color3.FromHexString("#dcebf4");
 
-  s.dirLight = new THREE.DirectionalLight(0xfff5e6, 1.2); // Matahari sedikit hangat
+  s.dirLight = new BABYLON.DirectionalLight("dir", new BABYLON.Vector3(0.4, -0.8, 0.3), s.scene);
+  s.dirLight.intensity = 1.0;
+  s.dirLight.diffuse = BABYLON.Color3.FromHexString("#fff5e6");
   s.dirLight.position.set(mapSize / 2 + 800, 1000, mapSize / 2 - 400);
-  s.dirLight.castShadow = true;
-  s.dirLight.shadow.mapSize.width = 2048; // Resolusi bayangan HD
-  s.dirLight.shadow.mapSize.height = 2048;
-  s.dirLight.shadow.camera.near = 50;
-  s.dirLight.shadow.camera.far = 2500;
-  s.dirLight.shadow.camera.left = -3000;
-  s.dirLight.shadow.camera.right = 3000;
-  s.dirLight.shadow.camera.top = 3000;
-  s.dirLight.shadow.camera.bottom = -3000;
-  s.dirLight.shadow.bias = -0.001; // Mencegah shadow acne
-  s.scene.add(s.dirLight);
 
   // Generate Procedural Grass Texture
   const texCanvas = document.createElement('canvas');
@@ -104,82 +93,76 @@ export function initSetup() {
     ctx.globalAlpha = Math.random() * 0.8 + 0.2;
     ctx.fillRect(Math.random() * 512, Math.random() * 512, 2 + Math.random()*2, 8 + Math.random()*8);
   }
-  const grassTex = new THREE.CanvasTexture(texCanvas);
-  grassTex.wrapS = THREE.RepeatWrapping;
-  grassTex.wrapT = THREE.RepeatWrapping;
-  grassTex.repeat.set(mapSize / 150, mapSize / 150);
+  const grassTex = new BABYLON.DynamicTexture("grassTex", texCanvas, s.scene, false, true);
+  grassTex.wrapMode = BABYLON.Texture.WRAPMODE_WRAP;
+  grassTex.uScale = mapSize / 150;
+  grassTex.vScale = mapSize / 150;
 
   // Floor (Terrain Bergelombang)
-  const floorGeo = new THREE.PlaneGeometry(mapSize, mapSize, 200, 200);
-  const posAttribute = floorGeo.attributes.position;
-  
-  for (let i = 0; i < posAttribute.count; i++) {
-    const vx = posAttribute.getX(i);
-    const vy = posAttribute.getY(i);
-    const worldX = vx + (mapSize / 2); 
-    const worldY = (mapSize / 2) - vy;
-    posAttribute.setZ(i, getTerrainHeight(worldX, worldY));
-  }
-  floorGeo.computeVertexNormals(); // Wajib agar pencahayaan benar setelah vertex diubah
+  const floor = BABYLON.MeshBuilder.CreateGround("mainFloor", { width: mapSize, depth: mapSize, subdivisions: 200 }, s.scene);
+  const floorMat = mat(s.scene, "floorMat", null, {});
+  floorMat.diffuseTexture = grassTex;
+  floor.material = floorMat;
 
-  // Material PBR (Physically Based Rendering)
-  const floorMat = new THREE.MeshStandardMaterial({ 
-    map: grassTex,
-    roughness: 0.9,
-    metalness: 0.05
-  });
-  
-  const floor = new THREE.Mesh(floorGeo, floorMat);
-  floor.rotation.x = -Math.PI / 2;
+  // Displace vertices per-terrain-height (Babylon ground is already Y-up, no rotation needed)
+  const floorPositions = floor.getVerticesData(BABYLON.VertexBuffer.PositionKind);
+  for (let i = 0; i < floorPositions.length; i += 3) {
+    const vx = floorPositions[i];
+    const vz = floorPositions[i + 2];
+    const worldX = vx + (mapSize / 2);
+    const worldY = (mapSize / 2) - vz;
+    floorPositions[i + 1] = getTerrainHeight(worldX, worldY); // Y = up in Babylon
+  }
+  floor.updateVerticesData(BABYLON.VertexBuffer.PositionKind, floorPositions);
+  floor.createNormals(true);
   floor.position.set(mapSize / 2, 0, mapSize / 2);
-  floor.receiveShadow = true;
-  s.scene.add(floor);
   s.mainFloor = floor;
 
   // Fog menyatu dengan langit
-  s.scene.fog = new THREE.FogExp2(0x87CEEB, 0.0002);
+  s.scene.fogMode = BABYLON.Scene.FOGMODE_EXP2;
+  s.scene.fogDensity = 0.0002;
+  s.scene.fogColor = new BABYLON.Color3(0.53, 0.81, 0.92);
 
-  // Rain (starts invisible)
-  const rainCount = 5000;
-  const rainGeo = new THREE.BufferGeometry();
-  const rainPositions = new Float32Array(rainCount * 3);
-  for (let i = 0; i < rainCount; i++) {
-    rainPositions[i * 3]     = (Math.random() - 0.5) * mapSize;
-    rainPositions[i * 3 + 1] = Math.random() * 500;
-    rainPositions[i * 3 + 2] = (Math.random() - 0.5) * mapSize;
-  }
-  rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPositions, 3));
-  const rainMat = new THREE.PointsMaterial({
-    color: 0xaaaaaa, size: 1.0, transparent: true, opacity: 0,
-  });
-  s.rainParticles = new THREE.Points(rainGeo, rainMat);
-  s.scene.add(s.rainParticles);
+  // Rain (Particle system, starts disabled)
+  s.rainParticles = new BABYLON.ParticleSystem("rain", 5000, s.scene);
+  s.rainParticles.emitter = new BABYLON.Vector3(0, 300, 0);
+  s.rainParticles.createSphereSpriteMaterial(
+    new BABYLON.Color3(0.67, 0.67, 0.67),
+    new BABYLON.Color3(0.67, 0.67, 0.67),
+    new BABYLON.Color3(0, 0, 0),
+    1.0
+  );
+  s.rainParticles.particleMinimumLifeTime = 1.0;
+  s.rainParticles.particleMaximumLifeTime = 1.5;
+  s.rainParticles.emitRate = 0;
+  s.rainParticles.minEmitPower = new BABYLON.Vector3(-mapSize/2, 0, -mapSize/2);
+  s.rainParticles.maxEmitPower = new BABYLON.Vector3(mapSize/2, 0, mapSize/2);
+  s.rainParticles.direction1 = new BABYLON.Vector3(0, -300, 0);
+  s.rainParticles.direction2 = new BABYLON.Vector3(0, -500, 0);
+  s.rainParticles.gravity = new BABYLON.Vector3(0, -300, 0);
+  s.rainParticles.isEnabled = false;
 }
 
 // ─── Wilds map generation ──────────────────────────────────────────────────────
 
 export function initMap() {
   const s = state;
-  s.wildsGroup = new THREE.Group();
-  s.scene.add(s.wildsGroup);
+  s.wildsGroup = new BABYLON.TransformNode("wildsGroup", s.scene);
 
   const ms = mapSize;
 
   // Altar in the center
-  const altarGroup = new THREE.Group();
-  const altarBase = new THREE.Mesh(
-    new THREE.CylinderGeometry(40, 40, 10, 8),
-    new THREE.MeshLambertMaterial({ color: 0x555555 })
-  );
+  const altarGroup = new BABYLON.TransformNode("altarGroup", s.scene);
+  const altarBase = BABYLON.MeshBuilder.CreateCylinder("altarBase", { diameter: 80, height: 10, tessellation: 8 }, s.scene);
+  altarBase.material = mat(s.scene, "altarBaseMat", "#555555");
   altarBase.position.y = 5;
-  const altarPillar = new THREE.Mesh(
-    new THREE.CylinderGeometry(15, 20, 30, 8),
-    new THREE.MeshLambertMaterial({ color: 0x444444 })
-  );
+  altarBase.parent = altarGroup;
+  const altarPillar = BABYLON.MeshBuilder.CreateCylinder("altarPillar", { diameterTop: 30, diameterBottom: 40, height: 30, tessellation: 8 }, s.scene);
+  altarPillar.material = mat(s.scene, "altarPillarMat", "#444444");
   altarPillar.position.y = 20;
-  altarGroup.add(altarBase, altarPillar);
+  altarPillar.parent = altarGroup;
   altarGroup.position.set(ms / 2, 0, ms / 2);
-  s.wildsGroup.add(altarGroup);
+  s.wildsGroup.addChild(altarGroup);
   s.obstaclesWilds.push({ x: ms / 2, y: ms / 2, r: 40, h: 40 });
 
   // Extra rocks scattered around altar area
@@ -193,23 +176,21 @@ export function initMap() {
     const rr = 10 + Math.random() * 15;
     let rockGroup;
     if (Math.random() < 0.5 && loadedModels.rocks_high)
-      rockGroup = SkeletonUtils.clone(loadedModels.rocks_high);
+      rockGroup = loadedModels.rocks_high.clone(`rock_high_${i}`, true, false);
     else if (loadedModels.rocks_low)
-      rockGroup = SkeletonUtils.clone(loadedModels.rocks_low);
+      rockGroup = loadedModels.rocks_low.clone(`rock_low_${i}`, true, false);
     if (rockGroup) {
       const sc = 20 + Math.random() * 15;
-      rockGroup.scale.set(sc, sc, sc);
+      rockGroup.scaling.set(sc, sc, sc);
       rockGroup.position.set(rx, getTerrainHeight(rx, ry), ry);
       rockGroup.rotation.y = Math.random() * Math.PI;
-      s.wildsGroup.add(rockGroup);
+      rockGroup.parent = s.wildsGroup;
     } else {
-      const rock = new THREE.Mesh(
-        new THREE.DodecahedronGeometry(rr, 0),
-        new THREE.MeshLambertMaterial({ color: 0x777777 })
-      );
+      const rock = BABYLON.MeshBuilder.CreateIcosphere(`rock_${i}`, { diameter: rr * 2, segments: 2 }, s.scene);
+      rock.material = mat(s.scene, `rockMat_${i}`, "#777777");
       rock.position.set(rx, rr + getTerrainHeight(rx, ry), ry);
       rock.rotation.y = Math.random() * Math.PI;
-      s.wildsGroup.add(rock);
+      rock.parent = s.wildsGroup;
     }
     s.obstaclesWilds.push({ x: rx, y: ry, r: rr * 0.8, h: rr });
   }
@@ -242,37 +223,33 @@ export function initMap() {
           const r = 15 + Math.random() * 25;
           let rockGroup;
           if (rand < 0.2 && loadedModels.rocks_high)
-            rockGroup = SkeletonUtils.clone(loadedModels.rocks_high);
+            rockGroup = loadedModels.rocks_high.clone(`rock_high_${c}_${i}`, true, false);
           else if (rand < 0.5 && loadedModels.rocks_low)
-            rockGroup = SkeletonUtils.clone(loadedModels.rocks_low);
+            rockGroup = loadedModels.rocks_low.clone(`rock_low_${c}_${i}`, true, false);
           else if (loadedModels.stones)
-            rockGroup = SkeletonUtils.clone(loadedModels.stones);
+            rockGroup = loadedModels.stones.clone(`stone_${c}_${i}`, true, false);
 
           if (rockGroup) {
             const sc = 30 + Math.random() * 10;
-            rockGroup.scale.set(sc, sc, sc);
+            rockGroup.scaling.set(sc, sc, sc);
             rockGroup.position.set(x, getTerrainHeight(x, y), y);
             rockGroup.rotation.y = Math.random() * Math.PI;
-            s.wildsGroup.add(rockGroup);
+            rockGroup.parent = s.wildsGroup;
           } else {
-            const rock = new THREE.Mesh(
-              new THREE.DodecahedronGeometry(r, 0),
-              new THREE.MeshLambertMaterial({ color: 0x777777 })
-            );
+            const rock = BABYLON.MeshBuilder.CreateIcosphere(`rock_${c}_${i}`, { diameter: r * 2, segments: 2 }, s.scene);
+            rock.material = mat(s.scene, `rockMat_${c}_${i}`, "#777777");
             rock.position.set(x, r + getTerrainHeight(x, y), y);
             rock.rotation.y = Math.random() * Math.PI;
-            s.wildsGroup.add(rock);
+            rock.parent = s.wildsGroup;
           }
           s.obstaclesWilds.push({ x, y, r: r * 0.8, h: r });
         } else {
-          const log = new THREE.Mesh(
-            new THREE.CylinderGeometry(8, 8, 50, 8),
-            new THREE.MeshLambertMaterial({ color: 0x4a3219 })
-          );
+          const log = BABYLON.MeshBuilder.CreateCylinder(`log_${c}_${i}`, { diameter: 16, height: 50, tessellation: 8 }, s.scene);
+          log.material = mat(s.scene, `logMat_${c}_${i}`, "#4a3219");
           log.rotation.z = Math.PI / 2;
           log.rotation.y = Math.random() * Math.PI;
           log.position.set(x, 7 + getTerrainHeight(x, y), y);
-          s.wildsGroup.add(log);
+          log.parent = s.wildsGroup;
           s.obstaclesWilds.push({ x, y, r: 25, h: 16 });
         }
       } else {
@@ -280,44 +257,39 @@ export function initMap() {
           const isHigh = Math.random() < 0.5;
           let treeGroup;
           if (isHigh && loadedModels.tree_high)
-            treeGroup = SkeletonUtils.clone(loadedModels.tree_high);
+            treeGroup = loadedModels.tree_high.clone(`tree_high_${c}_${i}`, true, false);
           else if (!isHigh && loadedModels.tree)
-            treeGroup = SkeletonUtils.clone(loadedModels.tree);
+            treeGroup = loadedModels.tree.clone(`tree_${c}_${i}`, true, false);
 
           if (treeGroup) {
-            treeGroup.scale.set(50, 50, 50);
+            treeGroup.scaling.set(50, 50, 50);
           } else {
-            treeGroup = new THREE.Group();
-            const trunk = new THREE.Mesh(
-              new THREE.CylinderGeometry(6, 6, 30, 8),
-              new THREE.MeshLambertMaterial({ color: 0x5c4033 })
-            );
+            treeGroup = new BABYLON.TransformNode(`tree_${c}_${i}`, s.scene);
+            const trunk = BABYLON.MeshBuilder.CreateCylinder(`trunk_${c}_${i}`, { diameter: 12, height: 30, tessellation: 8 }, s.scene);
+            trunk.material = mat(s.scene, `trunkMat_${c}_${i}`, "#5c4033");
             trunk.position.y = 15;
-            const leaves = new THREE.Mesh(
-              new THREE.ConeGeometry(25, 55, 8),
-              new THREE.MeshLambertMaterial({ color: 0x226b2b })
-            );
+            trunk.parent = treeGroup;
+            const leaves = BABYLON.MeshBuilder.CreateCylinder(`leaves_${c}_${i}`, { diameterTop: 0, diameterBottom: 50, height: 55, tessellation: 8 }, s.scene);
+            leaves.material = mat(s.scene, `leavesMat_${c}_${i}`, "#226b2b");
             leaves.position.y = 42;
-            treeGroup.add(trunk, leaves);
+            leaves.parent = treeGroup;
           }
           treeGroup.position.set(x, getTerrainHeight(x, y), y);
-          s.wildsGroup.add(treeGroup);
+          treeGroup.parent = s.wildsGroup;
           s.obstaclesWilds.push({ x, y, r: 12, h: 60 });
         } else {
           const r = 12 + Math.random() * 12;
           let plantMesh;
           if (loadedModels.plant) {
-            plantMesh = SkeletonUtils.clone(loadedModels.plant);
-            plantMesh.scale.set(20, 20, 20);
+            plantMesh = loadedModels.plant.clone(`plant_${c}_${i}`, true, false);
+            plantMesh.scaling.set(20, 20, 20);
             plantMesh.position.set(x, getTerrainHeight(x, y), y);
           } else {
-            plantMesh = new THREE.Mesh(
-              new THREE.SphereGeometry(r, 8, 8),
-              new THREE.MeshLambertMaterial({ color: 0x1d5c22 })
-            );
+            plantMesh = BABYLON.MeshBuilder.CreateSphere(`plant_${c}_${i}`, { diameter: r * 2, segments: 8 }, s.scene);
+            plantMesh.material = mat(s.scene, `plantMat_${c}_${i}`, "#1d5c22");
             plantMesh.position.set(x, r - 2 + getTerrainHeight(x, y), y);
           }
-          s.wildsGroup.add(plantMesh);
+          plantMesh.parent = s.wildsGroup;
           s.obstaclesWilds.push({ x, y, r: r * 0.7, h: r });
         }
       }
@@ -333,11 +305,11 @@ export function initMap() {
       if (Math.hypot(tx - ms / 2, ty - ms / 2) < 500) continue;
       if (tx > 200 && tx < 800 && ty > 200 && ty < 800) continue;
       if (s.obstaclesWilds.some(o => Math.hypot(o.x - tx, o.y - ty) < o.r + 30)) continue;
-      const tent = SkeletonUtils.clone(loadedModels.tent);
-      tent.scale.set(25, 25, 25);
+      const tent = loadedModels.tent.clone(`tent_${t}`, true, false);
+      tent.scaling.set(25, 25, 25);
       tent.rotation.y = Math.random() * Math.PI * 2;
       tent.position.set(tx, getTerrainHeight(tx, ty), ty);
-      s.wildsGroup.add(tent);
+      tent.parent = s.wildsGroup;
       s.obstaclesWilds.push({ x: tx, y: ty, r: 25, h: 30 });
     }
   }
@@ -349,11 +321,11 @@ export function initMap() {
     [0, ms].forEach(z => {
       let rockGroup;
       if (loadedModels.rocks_high) {
-        rockGroup = SkeletonUtils.clone(loadedModels.rocks_high);
-        rockGroup.scale.set(180, 250, 180); // Skala diperlebar dan ditinggikan
+        rockGroup = loadedModels.rocks_high.clone(`border_rock_${i}_${z}`, true, false);
+        rockGroup.scaling.set(180, 250, 180); // Skala diperlebar dan ditinggikan
         rockGroup.position.set(i, -20, z);
         rockGroup.rotation.y = Math.random() * Math.PI;
-        s.wildsGroup.add(rockGroup);
+        rockGroup.parent = s.wildsGroup;
       }
       s.obstaclesWilds.push({ x: i, y: z, r: 250, h: 250 }); // Obstacle diperbesar
     });
@@ -362,11 +334,11 @@ export function initMap() {
       [0, ms].forEach(x => {
         let rockGroup;
         if (loadedModels.rocks_high) {
-          rockGroup = SkeletonUtils.clone(loadedModels.rocks_high);
-          rockGroup.scale.set(180, 250, 180);
+          rockGroup = loadedModels.rocks_high.clone(`border_rock_${i}_${x}`, true, false);
+          rockGroup.scaling.set(180, 250, 180);
           rockGroup.position.set(x, -20, i);
           rockGroup.rotation.y = Math.random() * Math.PI;
-          s.wildsGroup.add(rockGroup);
+          rockGroup.parent = s.wildsGroup;
         }
         s.obstaclesWilds.push({ x: x, y: i, r: 250, h: 250 });
       });
@@ -381,8 +353,7 @@ export function initMap() {
 
 export function initHometown() {
   const s = state;
-  s.hometownGroup = new THREE.Group();
-  s.scene.add(s.hometownGroup);
+  s.hometownGroup = new BABYLON.TransformNode("hometownGroup", s.scene);
 
   const hx = 500, hy = 500;
 
@@ -391,22 +362,20 @@ export function initHometown() {
     for (let dx = -3; dx <= 3; dx++) {
       for (let dz = -3; dz <= 3; dz++) {
         if (Math.hypot(dx, dz) > 3.5) continue;
-        const dirt = SkeletonUtils.clone(loadedModels.patch_dirt);
-        dirt.scale.set(45, 45, 45);
+        const dirt = loadedModels.patch_dirt.clone(`dirt_${dx}_${dz}`, true, false);
+        dirt.scaling.set(45, 45, 45);
         const px = hx + dx * 75;
         const pz = hy + dz * 75;
         dirt.position.set(px, -2.8, pz);
-        s.hometownGroup.add(dirt);
+        dirt.parent = s.hometownGroup;
       }
     }
   } else {
-    const plazaMesh = new THREE.Mesh(
-      new THREE.CircleGeometry(320, 32),
-      new THREE.MeshLambertMaterial({ color: 0x6e6e6e })
-    );
+    const plazaMesh = BABYLON.MeshBuilder.CreateDisc("plazaDisc", { radius: 320, tessellation: 32 }, s.scene);
+    plazaMesh.material = mat(s.scene, "plazaMat", "#6e6e6e");
     plazaMesh.rotation.x = -Math.PI / 2;
     plazaMesh.position.set(hx, 0.5, hy);
-    s.hometownGroup.add(plazaMesh);
+    plazaMesh.parent = s.hometownGroup;
   }
 
   // Dirt paths connecting plaza to buildings
@@ -417,11 +386,11 @@ export function initHometown() {
         const t = i / steps;
         const px = startX + (endX - startX) * t;
         const pz = startZ + (endZ - startZ) * t;
-        const dirt = SkeletonUtils.clone(loadedModels.patch_dirt);
-        dirt.scale.set(45, 45, 45);
+        const dirt = loadedModels.patch_dirt.clone(`dirt_path_${Math.round(t * 100)}_${i}`, true, false);
+        dirt.scaling.set(45, 45, 45);
         dirt.position.set(px, -2.8, pz);
         dirt.rotation.y = Math.atan2(endX - startX, endZ - startZ);
-        s.hometownGroup.add(dirt);
+        dirt.parent = s.hometownGroup;
       }
     }
   // From fountain to each building
@@ -445,42 +414,36 @@ export function initHometown() {
   }
 
   // Fountain (Grand 2-Tier Central Plaza Fountain)
-  const fountainMat = new THREE.MeshLambertMaterial({ color: 0xaaaaaa });
-  const fountain = new THREE.Mesh(
-    new THREE.CylinderGeometry(56, 64, 18, 24), fountainMat
-  );
+  const fountainMat = mat(s.scene, "fountainMat", "#aaaaaa");
+  const fountain = BABYLON.MeshBuilder.CreateCylinder("fountainBase", { diameterTop: 112, diameterBottom: 128, height: 18, tessellation: 24 }, s.scene);
+  fountain.material = fountainMat;
   fountain.position.set(hx, 9, hy);
-  s.hometownGroup.add(fountain);
+  fountain.parent = s.hometownGroup;
 
-  const waterMat = new THREE.MeshLambertMaterial({
-    color: 0x00aaff, transparent: true, opacity: 0.8,
-  });
-  const water = new THREE.Mesh(
-    new THREE.CylinderGeometry(52, 52, 3, 24), waterMat
-  );
+  const waterMat = mat(s.scene, "waterMat", "#00aaff", { opacity: 0.8 });
+  const water = BABYLON.MeshBuilder.CreateCylinder("fountainWater", { diameter: 104, height: 3, tessellation: 24 }, s.scene);
+  water.material = waterMat;
   water.position.set(hx, 17, hy);
-  s.hometownGroup.add(water);
+  water.parent = s.hometownGroup;
 
-  const pillar = new THREE.Mesh(
-    new THREE.CylinderGeometry(8, 10, 45, 12), fountainMat
-  );
+  const pillar = BABYLON.MeshBuilder.CreateCylinder("fountainPillar", { diameterTop: 16, diameterBottom: 20, height: 45, tessellation: 12 }, s.scene);
+  pillar.material = fountainMat;
   pillar.position.set(hx, 25, hy);
-  s.hometownGroup.add(pillar);
+  pillar.parent = s.hometownGroup;
 
   // Upper bowl tier
-  const upperBowl = new THREE.Mesh(
-    new THREE.CylinderGeometry(22, 26, 8, 16), fountainMat
-  );
+  const upperBowl = BABYLON.MeshBuilder.CreateCylinder("fountainUpperBowl", { diameterTop: 44, diameterBottom: 52, height: 8, tessellation: 16 }, s.scene);
+  upperBowl.material = fountainMat;
   upperBowl.position.set(hx, 46, hy);
-  const upperWater = new THREE.Mesh(
-    new THREE.CylinderGeometry(20, 20, 2, 16), waterMat
-  );
+  upperBowl.parent = s.hometownGroup;
+  const upperWater = BABYLON.MeshBuilder.CreateCylinder("fountainUpperWater", { diameter: 40, height: 2, tessellation: 16 }, s.scene);
+  upperWater.material = waterMat;
   upperWater.position.set(hx, 49, hy);
-  const spoutTop = new THREE.Mesh(
-    new THREE.CylinderGeometry(4, 5, 10, 8), fountainMat
-  );
+  upperWater.parent = s.hometownGroup;
+  const spoutTop = BABYLON.MeshBuilder.CreateCylinder("fountainSpout", { diameterTop: 8, diameterBottom: 10, height: 10, tessellation: 8 }, s.scene);
+  spoutTop.material = fountainMat;
   spoutTop.position.set(hx, 53, hy);
-  s.hometownGroup.add(upperBowl, upperWater, spoutTop);
+  spoutTop.parent = s.hometownGroup;
 
   s.obstaclesHometown.push({ x: hx, y: hy, r: 64, h: 60 });
 
@@ -489,25 +452,23 @@ export function initHometown() {
     if (s.obstaclesHometown.some(o => Math.hypot(o.x - x, o.y - z) < o.r + r + 10)) return;
     const rand = Math.random();
     if (rand < 0.5 && loadedModels.stones) {
-      const stone = SkeletonUtils.clone(loadedModels.stones);
+      const stone = loadedModels.stones.clone(`deco_stone_${Math.random().toString(36).slice(2, 7)}`, true, false);
       const sc = 35 + Math.random() * 15;
-      stone.scale.set(sc, sc, sc);
+      stone.scaling.set(sc, sc, sc);
       stone.position.set(x, 0, z);
       stone.rotation.y = Math.random() * Math.PI;
-      s.hometownGroup.add(stone);
+      stone.parent = s.hometownGroup;
     } else if (rand < 0.8 && loadedModels.plant) {
-      const plant = SkeletonUtils.clone(loadedModels.plant);
-      plant.scale.set(28, 28, 28);
+      const plant = loadedModels.plant.clone(`deco_plant_${Math.random().toString(36).slice(2, 7)}`, true, false);
+      plant.scaling.set(28, 28, 28);
       plant.position.set(x, 0, z);
-      s.hometownGroup.add(plant);
+      plant.parent = s.hometownGroup;
     } else {
       const rockR = (r || 16);
-      const rock = new THREE.Mesh(
-        new THREE.DodecahedronGeometry(rockR, 0),
-        new THREE.MeshLambertMaterial({ color: 0x888888 })
-      );
+      const rock = BABYLON.MeshBuilder.CreateIcosphere(`deco_rock_${Math.random().toString(36).slice(2, 7)}`, { diameter: rockR * 2, segments: 2 }, s.scene);
+      rock.material = mat(s.scene, "decoRockMat", "#888888");
       rock.position.set(x, rockR + getTerrainHeight(x, z), z);
-      s.hometownGroup.add(rock);
+      rock.parent = s.hometownGroup;
     }
     s.obstaclesHometown.push({ x, y: z, r: (r || 16) * 0.7, h: (r || 16) });
   }
@@ -550,57 +511,58 @@ export function initHometown() {
   function makeBuilding(modelKey) {
     // --- struct + roof ---
     if (modelKey === 'struct_roof' && loadedModels.building_struct && loadedModels.building_roof) {
-      const grp = new THREE.Group();
-      const bs = SkeletonUtils.clone(loadedModels.building_struct);
-      const br = SkeletonUtils.clone(loadedModels.building_roof);
-      grp.add(bs, br);
-      grp.scale.set(80, 80, 80);
+      const grp = new BABYLON.TransformNode(`building_struct_roof_${modelKey}`, s.scene);
+      const bs = loadedModels.building_struct.clone(`building_struct_${Math.random().toString(36).slice(2, 7)}`, true, false);
+      const br = loadedModels.building_roof.clone(`building_roof_${Math.random().toString(36).slice(2, 7)}`, true, false);
+      bs.parent = grp;
+      br.parent = grp;
+      grp.scaling.set(80, 80, 80);
       return grp;
     }
     // --- building platform ---
     if ((modelKey === 'building_platform' || modelKey === 'struct_roof') && loadedModels.building_platform) {
-      const grp = SkeletonUtils.clone(loadedModels.building_platform);
-      grp.scale.set(65, 65, 65);
+      const grp = loadedModels.building_platform.clone(`building_platform_${Math.random().toString(36).slice(2, 7)}`, true, false);
+      grp.scaling.set(65, 65, 65);
       return grp;
     }
     // --- house (default & fallback) ---
     if (loadedModels.house) {
-      const grp = SkeletonUtils.clone(loadedModels.house);
-      grp.scale.set(60, 60, 60);
+      const grp = loadedModels.house.clone(`house_${Math.random().toString(36).slice(2, 7)}`, true, false);
+      grp.scaling.set(60, 60, 60);
       return grp;
     }
     // --- last resort: struct alone ---
     if (loadedModels.building_struct) {
-      const grp = new THREE.Group();
-      const bs = SkeletonUtils.clone(loadedModels.building_struct);
-      if (loadedModels.building_roof) grp.add(SkeletonUtils.clone(loadedModels.building_roof));
-      grp.add(bs);
-      grp.scale.set(80, 80, 80);
+      const grp = new BABYLON.TransformNode(`building_struct_only`, s.scene);
+      const bs = loadedModels.building_struct.clone(`building_struct_alone_${Math.random().toString(36).slice(2, 7)}`, true, false);
+      if (loadedModels.building_roof) {
+        const br = loadedModels.building_roof.clone(`building_roof_alone_${Math.random().toString(36).slice(2, 7)}`, true, false);
+        br.parent = grp;
+      }
+      bs.parent = grp;
+      grp.scaling.set(80, 80, 80);
       return grp;
     }
     // --- prosedural geometry jika SEMUA model gagal ---
     console.warn('[makeBuilding] Semua model gagal dimuat, pakai prosedural geometry');
-    const grp = new THREE.Group();
-    const base = new THREE.Mesh(
-      new THREE.BoxGeometry(110, 75, 110),
-      new THREE.MeshLambertMaterial({ color: 0xddd3c6 })
-    );
+    const grp = new BABYLON.TransformNode(`building_procedural`, s.scene);
+    const base = BABYLON.MeshBuilder.CreateBox(`building_base_${Math.random().toString(36).slice(2, 7)}`, { width: 110, height: 75, depth: 110 }, s.scene);
+    base.material = mat(s.scene, "buildingBaseMat", "#ddd3c6");
     base.position.y = 37.5;
-    const roof = new THREE.Mesh(
-      new THREE.ConeGeometry(85, 55, 4),
-      new THREE.MeshLambertMaterial({ color: 0x8b2e2e })
-    );
+    base.parent = grp;
+    const roof = BABYLON.MeshBuilder.CreateCylinder(`building_roof_${Math.random().toString(36).slice(2, 7)}`, { diameterTop: 0, diameterBottom: 170, height: 55, tessellation: 4 }, s.scene);
+    roof.material = mat(s.scene, "buildingRoofMat", "#8b2e2e");
     roof.position.y = 100;
     roof.rotation.y = Math.PI / 4;
-    grp.add(base, roof);
+    roof.parent = grp;
     return grp;
   }
 
-  housePositions.forEach(p => {
+  housePositions.forEach((p, idx) => {
     const hGroup = makeBuilding(p.model);
     hGroup.position.set(hx + p.x, 0, hy + p.z);
     hGroup.rotation.y = p.r;
-    s.hometownGroup.add(hGroup);
+    hGroup.parent = s.hometownGroup;
     s.obstaclesHometown.push({ x: hx + p.x, y: hy + p.z, r: 70, h: 140 });
   });
 
@@ -612,11 +574,11 @@ export function initHometown() {
         { x: cx, z: cz + hw, ry: Math.PI },
       ];
       for (const side of sides) {
-        const fence = SkeletonUtils.clone(loadedModels.fence);
-        fence.scale.set(45, 45, 45);
+        const fence = loadedModels.fence.clone(`fence_${cx}_${cz}_${Math.random().toString(36).slice(2, 5)}`, true, false);
+        fence.scaling.set(45, 45, 45);
         fence.rotation.y = side.ry;
         fence.position.set(side.x, 0, side.z);
-        s.hometownGroup.add(fence);
+        fence.parent = s.hometownGroup;
       }
     }
     addBuildingFence(hx - 300, hy - 300, 85);
@@ -632,11 +594,11 @@ export function initHometown() {
 
   // Target dummy
   if (loadedModels.target) {
-    const target = SkeletonUtils.clone(loadedModels.target);
-    target.scale.set(52, 52, 52);
+    const target = loadedModels.target.clone("target_dummy", true, false);
+    target.scaling.set(52, 52, 52);
     target.position.set(hx + 160, 0, hy - 300);
     target.rotation.y = Math.PI / 4;
-    s.hometownGroup.add(target);
+    target.parent = s.hometownGroup;
     s.obstaclesHometown.push({ x: hx + 160, y: hy - 300, r: 22, h: 55 });
   }
 
@@ -651,11 +613,11 @@ export function initHometown() {
       { x: hx - 160, z: hy - 160, ry: -Math.PI * 0.75 },
     ];
     for (const fp of fencePositions) {
-      const fence = SkeletonUtils.clone(loadedModels.fence);
-      fence.scale.set(38, 38, 38);
+      const fence = loadedModels.fence.clone(`fence_perim_${Math.random().toString(36).slice(2, 5)}`, true, false);
+      fence.scaling.set(38, 38, 38);
       fence.rotation.y = fp.ry;
       fence.position.set(fp.x, 0, fp.z);
-      s.hometownGroup.add(fence);
+      fence.parent = s.hometownGroup;
       s.obstaclesHometown.push({ x: fp.x, y: fp.z, r: 20, h: 30 });
     }
   }
@@ -672,7 +634,7 @@ export function initHometown() {
       const eGroup = makeBuilding(eb.model);
       eGroup.position.set(eb.x, 0, eb.z);
       eGroup.rotation.y = Math.random() * Math.PI * 2;
-      s.hometownGroup.add(eGroup);
+      eGroup.parent = s.hometownGroup;
       s.obstaclesHometown.push({ x: eb.x, y: eb.z, r: 70, h: 140 });
     }
   }
@@ -680,114 +642,108 @@ export function initHometown() {
   // Shop stall
   let stallGroup;
   if (loadedModels.tent) {
-    stallGroup = SkeletonUtils.clone(loadedModels.tent);
-    stallGroup.scale.set(60, 60, 60);
+    stallGroup = loadedModels.tent.clone(`stall_tent`, true, false);
+    stallGroup.scaling.set(60, 60, 60);
   } else {
-    stallGroup = new THREE.Group();
-    const poleMat = new THREE.MeshLambertMaterial({ color: 0x5c4033 });
-    const stallPoleGeo = new THREE.CylinderGeometry(3, 3, 65, 4);
-    [[-32, 32.5, -32], [32, 32.5, -32], [-32, 32.5, 32], [32, 32.5, 32]].forEach(([px, py, pz]) => {
-      const p = new THREE.Mesh(stallPoleGeo, poleMat);
+    stallGroup = new BABYLON.TransformNode("stallGroup", s.scene);
+    const poleMat = mat(s.scene, "poleMat", "#5c4033");
+    [[-32, 32.5, -32], [32, 32.5, -32], [-32, 32.5, 32], [32, 32.5, 32]].forEach(([px, py, pz], i) => {
+      const p = BABYLON.MeshBuilder.CreateCylinder(`stallPole_${i}`, { diameter: 6, height: 65, tessellation: 4 }, s.scene);
+      p.material = poleMat;
       p.position.set(px, py, pz);
-      stallGroup.add(p);
+      p.parent = stallGroup;
     });
-    const awning = new THREE.Mesh(
-      new THREE.PlaneGeometry(85, 85),
-      new THREE.MeshLambertMaterial({ color: 0xffaa00, side: THREE.DoubleSide })
-    );
+    const awning = BABYLON.MeshBuilder.CreateGround("stallAwning", { width: 85, depth: 85, updatable: true }, s.scene);
+    awning.material = mat(s.scene, "awningMat", "#ffaa00", { opacity: 1 });
+    awning.material.backFaceCulling = false;
     awning.rotation.x = -Math.PI / 2 + 0.2;
     awning.position.y = 66;
-    stallGroup.add(awning);
-    const table = new THREE.Mesh(
-      new THREE.BoxGeometry(50, 22, 24),
-      new THREE.MeshLambertMaterial({ color: 0x6e4a2b })
-    );
+    awning.parent = stallGroup;
+    const table = BABYLON.MeshBuilder.CreateBox("stallTable", { width: 50, height: 22, depth: 24 }, s.scene);
+    table.material = mat(s.scene, "tableMat", "#6e4a2b");
     table.position.set(0, 11, 15);
-    stallGroup.add(table);
+    table.parent = stallGroup;
   }
   stallGroup.position.set(hx - 200, 0, hy - 200);
-  s.hometownGroup.add(stallGroup);
+  stallGroup.parent = s.hometownGroup;
 
   // Healer shrine
   let shrineGroup;
   if (loadedModels.building_platform) {
-    shrineGroup = SkeletonUtils.clone(loadedModels.building_platform);
-    shrineGroup.scale.set(65, 65, 65);
+    shrineGroup = loadedModels.building_platform.clone(`shrine_platform`, true, false);
+    shrineGroup.scaling.set(65, 65, 65);
   } else {
-    shrineGroup = new THREE.Group();
-    const sBaseMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
-    const sBase = new THREE.Mesh(
-      new THREE.CylinderGeometry(40, 40, 8, 8), sBaseMat
-    );
+    shrineGroup = new BABYLON.TransformNode("shrineGroup", s.scene);
+    const sBaseMat = mat(s.scene, "shrineBaseMat", "#ffffff");
+    const sBase = BABYLON.MeshBuilder.CreateCylinder("shrineBase", { diameter: 80, height: 8, tessellation: 8 }, s.scene);
+    sBase.material = sBaseMat;
     sBase.position.y = 4;
-    shrineGroup.add(sBase);
-    const stallPoleGeo = new THREE.CylinderGeometry(3, 3, 60, 4);
+    sBase.parent = shrineGroup;
     for (let i = 0; i < 4; i++) {
-      const sp = new THREE.Mesh(stallPoleGeo, sBaseMat);
+      const sp = BABYLON.MeshBuilder.CreateCylinder(`shrinePole_${i}`, { diameter: 6, height: 60, tessellation: 4 }, s.scene);
+      sp.material = sBaseMat;
       const ang = (i / 4) * Math.PI * 2 + Math.PI / 4;
       sp.position.set(Math.cos(ang) * 32, 30, Math.sin(ang) * 32);
-      shrineGroup.add(sp);
+      sp.parent = shrineGroup;
     }
-    const sRoof = new THREE.Mesh(
-      new THREE.ConeGeometry(48, 30, 4),
-      new THREE.MeshLambertMaterial({ color: 0x00aaff })
-    );
+    const sRoof = BABYLON.MeshBuilder.CreateCylinder("shrineRoof", { diameterTop: 0, diameterBottom: 96, height: 30, tessellation: 4 }, s.scene);
+    sRoof.material = mat(s.scene, "shrineRoofMat", "#00aaff");
     sRoof.position.y = 75;
     sRoof.rotation.y = Math.PI / 4;
-    shrineGroup.add(sRoof);
+    sRoof.parent = shrineGroup;
   }
   shrineGroup.position.set(hx + 200, 0, hy - 200);
-  s.hometownGroup.add(shrineGroup);
+  shrineGroup.parent = s.hometownGroup;
 
   // Blacksmith
   let bsGroup;
   if (loadedModels.building_struct && loadedModels.building_roof) {
-    bsGroup = new THREE.Group();
-    bsGroup.add(SkeletonUtils.clone(loadedModels.building_struct));
-    bsGroup.add(SkeletonUtils.clone(loadedModels.building_roof));
-    bsGroup.scale.set(80, 80, 80);
+    bsGroup = new BABYLON.TransformNode("blacksmithGroup", s.scene);
+    const bsStruct = loadedModels.building_struct.clone(`blacksmith_struct`, true, false);
+    const bsRoof = loadedModels.building_roof.clone(`blacksmith_roof`, true, false);
+    bsStruct.parent = bsGroup;
+    bsRoof.parent = bsGroup;
+    bsGroup.scaling.set(80, 80, 80);
   } else {
-    bsGroup = new THREE.Group();
-    const anvil = new THREE.Mesh(
-      new THREE.BoxGeometry(24, 16, 16),
-      new THREE.MeshLambertMaterial({ color: 0x222222 })
-    );
+    bsGroup = new BABYLON.TransformNode("blacksmithProcedural", s.scene);
+    const anvil = BABYLON.MeshBuilder.CreateBox("blacksmithAnvil", { width: 24, height: 16, depth: 16 }, s.scene);
+    anvil.material = mat(s.scene, "anvilMat", "#222222");
     anvil.position.set(0, 8, 16);
-    bsGroup.add(anvil);
-    const furnace = new THREE.Mesh(
-      new THREE.BoxGeometry(32, 48, 32),
-      new THREE.MeshLambertMaterial({ color: 0x552222 })
-    );
+    anvil.parent = bsGroup;
+    const furnace = BABYLON.MeshBuilder.CreateBox("blacksmithFurnace", { width: 32, height: 48, depth: 32 }, s.scene);
+    furnace.material = mat(s.scene, "furnaceMat", "#552222");
     furnace.position.set(0, 24, -20);
-    bsGroup.add(furnace);
-    const fire = new THREE.Mesh(
-      new THREE.SphereGeometry(10, 8, 8),
-      new THREE.MeshLambertMaterial({ color: 0xffaa00, emissive: 0xff5500 })
-    );
+    furnace.parent = bsGroup;
+    const fire = BABYLON.MeshBuilder.CreateSphere("blacksmithFire", { diameter: 20, segments: 8 }, s.scene);
+    fire.material = mat(s.scene, "fireMat", "#ffaa00", { emissive: "#ff5500" });
     fire.position.set(0, 16, -8);
-    bsGroup.add(fire);
+    fire.parent = bsGroup;
   }
   bsGroup.position.set(hx - 200, 0, hy + 200);
-  s.hometownGroup.add(bsGroup);
+  bsGroup.parent = s.hometownGroup;
 
   // Quest Board
-  const qbGroup = new THREE.Group();
-  const board = new THREE.Mesh(
-    new THREE.BoxGeometry(22, 16, 2),
-    new THREE.MeshLambertMaterial({ color: 0x8b5a2b })
-  );
+  const qbGroup = new BABYLON.TransformNode("questBoardGroup", s.scene);
+  const board = BABYLON.MeshBuilder.CreateBox("questBoard", { width: 22, height: 16, depth: 2 }, s.scene);
+  board.material = mat(s.scene, "questBoardMat", "#8b5a2b");
   board.position.y = 11;
-  const postL = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 18), new THREE.MeshLambertMaterial({ color: 0x5c4033 }));
+  board.parent = qbGroup;
+  const postL = BABYLON.MeshBuilder.CreateCylinder("questPostL", { diameter: 2.4, height: 18, tessellation: 12 }, s.scene);
+  postL.material = mat(s.scene, "questPostMat", "#5c4033");
   postL.position.set(-9, 9, 0);
-  const postR = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 18), new THREE.MeshLambertMaterial({ color: 0x5c4033 }));
+  postL.parent = qbGroup;
+  const postR = BABYLON.MeshBuilder.CreateCylinder("questPostR", { diameter: 2.4, height: 18, tessellation: 12 }, s.scene);
+  postR.material = postL.material;
   postR.position.set(9, 9, 0);
-  const paper = new THREE.Mesh(new THREE.PlaneGeometry(7, 9), new THREE.MeshBasicMaterial({ color: 0xeeeeee }));
+  postR.parent = qbGroup;
+  const paper = BABYLON.MeshBuilder.CreateGround("questPaper", { width: 7, depth: 9, updatable: true }, s.scene);
+  paper.material = mat(s.scene, "questPaperMat", "#eeeeee");
   paper.position.set(0, 11, 1.1);
-  qbGroup.add(board, postL, postR, paper);
+  paper.parent = qbGroup;
   qbGroup.position.set(hx, 0, hy + 100);
-  qbGroup.scale.set(3.5, 3.5, 3.5);
+  qbGroup.scaling.set(3.5, 3.5, 3.5);
   qbGroup.rotation.y = Math.PI;
-  s.hometownGroup.add(qbGroup);
+  qbGroup.parent = s.hometownGroup;
   s.questBoardPos = { x: hx, z: hy + 100 };
   s.obstaclesHometown.push({ x: hx, y: hy + 100, r: 24, h: 45 });
 
@@ -800,10 +756,10 @@ export function initHometown() {
       { x: hx + 240, z: hy + 240 },
     ];
     for (const fp of flagPositions) {
-      const flag = SkeletonUtils.clone(loadedModels.flag);
-      flag.scale.set(40, 40, 40);
+      const flag = loadedModels.flag.clone(`flag_${fp.x}_${fp.z}`, true, false);
+      flag.scaling.set(40, 40, 40);
       flag.position.set(fp.x, 0, fp.z);
-      s.hometownGroup.add(flag);
+      flag.parent = s.hometownGroup;
       s.obstaclesHometown.push({ x: fp.x, y: fp.z, r: 16, h: 60 });
     }
   }
@@ -818,189 +774,125 @@ export function initEntities() {
   // Coins removed for inventory system
 
   // Player mesh
-  s.playerBodyMat = new THREE.MeshLambertMaterial({ color: 0xaaaaaa });
-  s.playerBladeMat = new THREE.MeshLambertMaterial({ color: 0xeeeeee });
+  s.playerBodyMat = mat(s.scene, "playerBodyMat", "#aaaaaa");
+  s.playerBladeMat = mat(s.scene, "playerBladeMat", "#eeeeee");
   window.playerBodyMat = s.playerBodyMat;
   window.playerBladeMat = s.playerBladeMat;
-  s.playerMesh = new THREE.Group();
+  s.playerMesh = new BABYLON.TransformNode("playerMesh", s.scene);
 
   if (loadedModels.player_model) {
-    const fbxModel = SkeletonUtils.clone(loadedModels.player_model);
-    fbxModel.scale.set(0.3, 0.3, 0.3); // Scale diperkecil sedikit agar pas
-    fbxModel.position.y = -15; 
-    fbxModel.traverse(child => {
-      if (child.isMesh) {
-        child.frustumCulled = false;
-      }
-    }); 
-    
-    // Setup Animasi
-    s.playerMixer = new THREE.AnimationMixer(fbxModel);
+    const fbxModel = loadedModels.player_model.clone("player_model_instance", true, false);
+    fbxModel.scaling.set(0.3, 0.3, 0.3); // Scale diperkecil sedikit agar pas
+    fbxModel.position.y = -15;
+
+    // Setup Animasi — Phase 1 placeholder: Babylon skeleton-anim layer not yet wired.
+    s.playerMixer = null;
     s.playerActions = {};
-    
-    if (loadedModels.sword_idle && loadedModels.sword_idle.animations && loadedModels.sword_idle.animations.length > 0) {
-      s.playerActions.idle = s.playerMixer.clipAction(loadedModels.sword_idle.animations[0]);
-    } else if (loadedModels.idle_anim && loadedModels.idle_anim.animations.length > 0) {
-      s.playerActions.idle = s.playerMixer.clipAction(loadedModels.idle_anim.animations[0]);
-    } else if (fbxModel.animations.length > 0) {
-      s.playerActions.idle = s.playerMixer.clipAction(fbxModel.animations[0]);
-    }
-    
-    if (loadedModels.sword_run && loadedModels.sword_run.animations && loadedModels.sword_run.animations.length > 0) {
-      s.playerActions.run = s.playerMixer.clipAction(loadedModels.sword_run.animations[0]);
-    } else if (loadedModels.run_anim && loadedModels.run_anim.animations.length > 0) {
-      s.playerActions.run = s.playerMixer.clipAction(loadedModels.run_anim.animations[0]);
-    }
-    if (loadedModels.sword_slash && loadedModels.sword_slash.animations && loadedModels.sword_slash.animations.length > 0) {
-      console.log("Successfully loaded sword_slash animation:", loadedModels.sword_slash.animations[0]);
-      s.playerActions.attack = s.playerMixer.clipAction(loadedModels.sword_slash.animations[0]);
-      s.playerActions.attack.setLoop(THREE.LoopOnce);
-      s.playerActions.attack.clampWhenFinished = true;
-    } else {
-      console.error("Failed to load sword_slash animations! loadedModels.sword_slash is:", loadedModels.sword_slash);
-      // Fallback
-      if (loadedModels.attack_anim && loadedModels.attack_anim.animations.length > 0) {
-        s.playerActions.attack = s.playerMixer.clipAction(loadedModels.attack_anim.animations[0]);
-        s.playerActions.attack.setLoop(THREE.LoopOnce);
-        s.playerActions.attack.clampWhenFinished = true;
+    s.activeAction = null;
+
+    // Cari tulang tangan kanan (MixamoRig:RightHand) untuk menempelkan pedang
+    let rightHand = null;
+    const fbxDescendants = fbxModel.getDescendants();
+    for (const c of fbxDescendants) {
+      if (c.name && c.name.toLowerCase().includes('righthand') && !rightHand) {
+        rightHand = c;
       }
     }
 
-    // sword_slash_3 → animasi skill Triple Slash (R)
-    if (loadedModels.sword_slash_3 && loadedModels.sword_slash_3.animations && loadedModels.sword_slash_3.animations.length > 0) {
-      const clip = loadedModels.sword_slash_3.animations[0];
-      s.playerActions.triple = s.playerMixer.clipAction(clip);
-      s.playerActions.triple.setLoop(THREE.LoopOnce);
-      s.playerActions.triple.clampWhenFinished = false;
-      s.playerActions.triple.setEffectiveWeight(1);
-      s.playerActions.triple.timeScale = 0.75;
-      console.log('[triple] clip.duration =', clip.duration, 's | effective frames @0.75:', Math.round(clip.duration / 0.75 * 60));
-    }
-    
-    if (s.playerActions.idle) {
-      s.playerActions.idle.play();
-      s.activeAction = s.playerActions.idle;
-    }
-    
-    // Cari tulang tangan kanan (MixamoRig:RightHand) untuk menempelkan pedang
-    let rightHand = null;
-    fbxModel.traverse(child => {
-      if (child.name.toLowerCase().includes('righthand') && !rightHand) {
-        rightHand = child;
-      }
-    });
-    
     if (loadedModels.sword) {
-      const gltfSword = SkeletonUtils.clone(loadedModels.sword);
+      const gltfSword = loadedModels.sword.clone("sword_instance", true, false);
       s.playerSwordMesh = gltfSword;
       // We no longer replace the material here; we'll let it use the arrow's native material.
       // ui.js will handle cloning and coloring it.
 
       if (rightHand) {
-        gltfSword.scale.set(100, 180, 320);
+        gltfSword.scaling.set(100, 180, 320);
         // Simpan skala awal agar tidak tertimpa saat ganti senjata
         s.swordBaseScale = { x: 100, y: 180, z: 320 };
         gltfSword.position.set(43, 8, -20);
-        gltfSword.rotation.set(Math.PI, Math.PI / 3, 0); 
-        gltfSword.rotateX(Math.PI);
-        rightHand.add(gltfSword);
+        gltfSword.rotation.set(Math.PI, Math.PI / 3, 0);
+        gltfSword.rotationQuaternion = BABYLON.Quaternion.FromAxisAngle(BABYLON.Axis.X, Math.PI);
+        rightHand.addChild(gltfSword);
       } else {
-        gltfSword.scale.set(15, 15, 15);
+        gltfSword.scaling.set(15, 15, 15);
         gltfSword.position.set(10, 0, 15);
-        s.playerMesh.add(gltfSword);
+        gltfSword.parent = s.playerMesh;
       }
     }
-    
-    s.playerMesh.add(fbxModel);
+
+    fbxModel.parent = s.playerMesh;
     s.gltfPlayerRef = fbxModel;
   } else if (loadedModels.player) {
-    s.gltfPlayerRef = SkeletonUtils.clone(loadedModels.player);
-    s.gltfPlayerRef.scale.set(35, 35, 35);
+    s.gltfPlayerRef = loadedModels.player.clone("player_instance", true, false);
+    s.gltfPlayerRef.scaling.set(35, 35, 35);
     s.gltfPlayerRef.position.y = -15;
-    
-    if (loadedModels.player.animations && loadedModels.player.animations.length > 0) {
-      s.playerMixer = new THREE.AnimationMixer(s.gltfPlayerRef);
-      s.playerActions = {};
-      
-      loadedModels.player.animations.forEach((clip) => {
-        const name = clip.name.toLowerCase();
-        if (name.includes('idle')) s.playerActions.idle = s.playerMixer.clipAction(clip);
-        else if (name.includes('run') || name.includes('walk')) s.playerActions.run = s.playerMixer.clipAction(clip);
-        else if (name.includes('attack')) {
-          s.playerActions.attack = s.playerMixer.clipAction(clip);
-          s.playerActions.attack.setLoop(THREE.LoopOnce);
-          s.playerActions.attack.clampWhenFinished = true;
-        }
-      });
-      if (!s.playerActions.idle && loadedModels.player.animations[0]) s.playerActions.idle = s.playerMixer.clipAction(loadedModels.player.animations[0]);
-      if (!s.playerActions.run && loadedModels.player.animations[1]) s.playerActions.run = s.playerMixer.clipAction(loadedModels.player.animations[1]);
-      
-      if (s.playerActions.idle) {
-        s.playerActions.idle.play();
-        s.activeAction = s.playerActions.idle;
-      }
-      
-      // Still try to find arm-right for sword attachment
-      s.playerArmR = s.gltfPlayerRef.getObjectByName('arm-right') || null;
-    } else {
-      s.playerLegL = s.gltfPlayerRef.getObjectByName('leg-left');
-      s.playerLegR = s.gltfPlayerRef.getObjectByName('leg-right');
-      s.playerArmL = s.gltfPlayerRef.getObjectByName('arm-left');
-      s.playerArmR = s.gltfPlayerRef.getObjectByName('arm-right');
-    }
-    
-    s.playerMesh.add(s.gltfPlayerRef);
+
+    // Phase 1: Babylon skeleton-anim layer not yet wired.
+    s.playerMixer = null;
+    s.playerActions = {};
+    s.activeAction = null;
+
+    // Still try to find arm-right / limb objects for sword attachment
+    const playerDescendants = s.gltfPlayerRef.getDescendants();
+    s.playerArmR = playerDescendants.find(c => c.name === 'arm-right') || null;
+    s.playerLegL = playerDescendants.find(c => c.name === 'leg-left') || null;
+    s.playerLegR = playerDescendants.find(c => c.name === 'leg-right') || null;
+    s.playerArmL = playerDescendants.find(c => c.name === 'arm-left') || null;
+
+    s.gltfPlayerRef.parent = s.playerMesh;
 
     if (loadedModels.sword) {
-      s.playerSwordMesh = SkeletonUtils.clone(loadedModels.sword);
-      s.playerBladeMat = new THREE.MeshLambertMaterial({ color: 0xcccccc });
-      s.playerSwordMesh.traverse(child => {
-        if (child.isMesh && child.material) {
-          child.material = s.playerBladeMat;
+      s.playerSwordMesh = loadedModels.sword.clone("sword_instance", true, false);
+      s.playerBladeMat = mat(s.scene, "playerBladeMat", "#cccccc");
+      const swordDescendants = s.playerSwordMesh.getDescendants();
+      for (const c of swordDescendants) {
+        if (c.material) {
+          c.material = s.playerBladeMat;
         }
-      });
+      }
       if (s.playerArmR) {
         // Attach to character's right arm
         s.playerSwordMesh.position.set(0, -0.4, 0.2);
         s.playerSwordMesh.rotation.x = Math.PI / 2;
-        s.playerArmR.add(s.playerSwordMesh);
+        s.playerArmR.addChild(s.playerSwordMesh);
       } else {
         // Fallback attachment
-        s.playerSwordMesh.scale.set(15, 15, 15);
+        s.playerSwordMesh.scaling.set(15, 15, 15);
         s.playerSwordMesh.position.set(10, 0, 15);
         s.playerSwordMesh.rotation.x = Math.PI / 2;
-        s.playerMesh.add(s.playerSwordMesh);
+        s.playerSwordMesh.parent = s.playerMesh;
       }
     } else {
       // Create programmatic sword as fallback
-      s.playerSwordMesh = new THREE.Group();
-      
-      const bladeGeo = new THREE.BoxGeometry(0.1, 1.2, 0.2);
-      s.playerBladeMat = new THREE.MeshLambertMaterial({ color: 0xcccccc });
-      const blade = new THREE.Mesh(bladeGeo, s.playerBladeMat);
+      s.playerSwordMesh = new BABYLON.TransformNode("playerSwordFallback", s.scene);
+
+      const blade = BABYLON.MeshBuilder.CreateBox("swordBlade", { width: 0.1, height: 1.2, depth: 0.2 }, s.scene);
+      s.playerBladeMat = mat(s.scene, "playerBladeMat", "#cccccc");
+      blade.material = s.playerBladeMat;
       blade.position.y = 0.6;
-      
-      const hiltGeo = new THREE.BoxGeometry(0.4, 0.1, 0.3);
-      const hiltMat = new THREE.MeshLambertMaterial({ color: 0x5c4033 });
-      const hilt = new THREE.Mesh(hiltGeo, hiltMat);
-      
-      const handleGeo = new THREE.BoxGeometry(0.1, 0.3, 0.1);
-      const handle = new THREE.Mesh(handleGeo, hiltMat);
+      blade.parent = s.playerSwordMesh;
+
+      const hiltMat = mat(s.scene, "swordHiltMat", "#5c4033");
+      const hilt = BABYLON.MeshBuilder.CreateBox("swordHilt", { width: 0.4, height: 0.1, depth: 0.3 }, s.scene);
+      hilt.material = hiltMat;
+      hilt.parent = s.playerSwordMesh;
+
+      const handle = BABYLON.MeshBuilder.CreateBox("swordHandle", { width: 0.1, height: 0.3, depth: 0.1 }, s.scene);
+      handle.material = hiltMat;
       handle.position.y = -0.15;
-  
-      s.playerSwordMesh.add(blade, hilt, handle);
-  
+      handle.parent = s.playerSwordMesh;
+
       if (s.playerArmR) {
         // Attach to character's right arm
         s.playerSwordMesh.position.set(0, -0.4, 0.2);
         s.playerSwordMesh.rotation.x = Math.PI / 2;
-        s.playerArmR.add(s.playerSwordMesh);
+        s.playerArmR.addChild(s.playerSwordMesh);
       } else {
         // Fallback attachment
-        s.playerSwordMesh.scale.set(15, 15, 15);
+        s.playerSwordMesh.scaling.set(15, 15, 15);
         s.playerSwordMesh.position.set(10, 0, 15);
         s.playerSwordMesh.rotation.x = Math.PI / 2;
-        s.playerMesh.add(s.playerSwordMesh);
+        s.playerSwordMesh.parent = s.playerMesh;
       }
     }
   } else {
@@ -1009,90 +901,92 @@ export function initEntities() {
   }
 
   s.playerMesh.position.set(s.player.x, 15, s.player.y);
-  s.scene.add(s.playerMesh);
-  
+  s.playerMesh.parent = s.scene;
+
   // Player HP Bar
-  const pHpBg = new THREE.Mesh(new THREE.PlaneGeometry(30, 4), new THREE.MeshBasicMaterial({ color: 0x000000 }));
-  s.playerHpFg = new THREE.Mesh(new THREE.PlaneGeometry(30, 4), new THREE.MeshBasicMaterial({ color: 0x008800 }));
+  const pHpBg = BABYLON.MeshBuilder.CreateGround("playerHpBg", { width: 30, depth: 4, updatable: true }, s.scene);
+  pHpBg.material = mat(s.scene, "playerHpBgMat", "#000000", { disableLighting: true });
+  s.playerHpFg = BABYLON.MeshBuilder.CreateGround("playerHpFg", { width: 30, depth: 4, updatable: true }, s.scene);
+  s.playerHpFg.material = mat(s.scene, "playerHpFgMat", "#008800", { disableLighting: true });
   s.playerHpFg.position.z = 0.2;
-  s.playerHpGroup = new THREE.Group();
-  s.playerHpGroup.add(pHpBg, s.playerHpFg);
-  s.scene.add(s.playerHpGroup);
+  s.playerHpGroup = new BABYLON.TransformNode("playerHpGroup", s.scene);
+  pHpBg.parent = s.playerHpGroup;
+  s.playerHpFg.parent = s.playerHpGroup;
+  s.playerHpGroup.billboardMode = BABYLON.Mesh.BILLBOARDMODE_ALL;
+  s.playerHpGroup.parent = s.scene;
 
 
   // Shield visual
-  const shieldGeo = new THREE.SphereGeometry(24, 16, 16);
-  const shieldMat = new THREE.MeshBasicMaterial({
-    color: 0x00aaff, transparent: true, opacity: 0.5, wireframe: true,
-  });
-  s.shieldMesh = new THREE.Mesh(shieldGeo, shieldMat);
-  s.shieldMesh.visible = false;
-  s.playerMesh.add(s.shieldMesh);
+  const shieldMesh = BABYLON.MeshBuilder.CreateSphere("shieldMesh", { diameter: 48, segments: 16 }, s.scene);
+  const shieldMat = mat(s.scene, "shieldMat", "#00aaff", { opacity: 0.5 });
+  shieldMat.wireframe = true;
+  shieldMesh.material = shieldMat;
+  s.shieldMesh = shieldMesh;
+  s.shieldMesh.setEnabled(false);
+  s.shieldMesh.parent = s.playerMesh;
 
   // Companion fairy pet
-  s.petMesh = new THREE.Mesh(
-    new THREE.SphereGeometry(3, 8, 8),
-    new THREE.MeshBasicMaterial({ color: 0xffffaa, wireframe: true })
-  );
-  s.scene.add(s.petMesh);
+  s.petMesh = BABYLON.MeshBuilder.CreateSphere("petMesh", { diameter: 6, segments: 8 }, s.scene);
+  const petMat = mat(s.scene, "petMat", "#ffffaa");
+  petMat.wireframe = true;
+  s.petMesh.material = petMat;
+  s.petMesh.parent = s.scene;
 }
 
 function createFallbackPlayer() {
-  const g = new THREE.Group();
-  const legMat = new THREE.MeshLambertMaterial({ color: 0x555555 });
+  const s = state;
+  const g = new BABYLON.TransformNode("fallbackPlayer", s.scene);
+  const legMat = mat(s.scene, "legMat", "#555555");
 
-  g.leftHip = new THREE.Group();
+  g.leftHip = new BABYLON.TransformNode("fallbackLeftHip", s.scene);
   g.leftHip.position.set(0, -3, -3.5);
-  g.leftHip.add(new THREE.Mesh(new THREE.BoxGeometry(6, 12, 6), legMat));
-  g.leftHip.children[0].position.set(0, -6, 0);
-  g.add(g.leftHip);
+  const leftHipBox = BABYLON.MeshBuilder.CreateBox("leftHipBox", { width: 6, height: 12, depth: 6 }, s.scene);
+  leftHipBox.material = legMat;
+  leftHipBox.position.set(0, -6, 0);
+  leftHipBox.parent = g.leftHip;
+  g.leftHip.parent = g;
 
-  g.rightHip = new THREE.Group();
+  g.rightHip = new BABYLON.TransformNode("fallbackRightHip", s.scene);
   g.rightHip.position.set(0, -3, 3.5);
-  g.rightHip.add(new THREE.Mesh(new THREE.BoxGeometry(6, 12, 6), legMat));
-  g.rightHip.children[0].position.set(0, -6, 0);
-  g.add(g.rightHip);
+  const rightHipBox = BABYLON.MeshBuilder.CreateBox("rightHipBox", { width: 6, height: 12, depth: 6 }, s.scene);
+  rightHipBox.material = legMat;
+  rightHipBox.position.set(0, -6, 0);
+  rightHipBox.parent = g.rightHip;
+  g.rightHip.parent = g;
 
-  const body = new THREE.Mesh(
-    new THREE.BoxGeometry(14, 20, 14),
-    window.playerBodyMat
-  );
+  const body = BABYLON.MeshBuilder.CreateBox("fallbackBody", { width: 14, height: 20, depth: 14 }, s.scene);
+  body.material = window.playerBodyMat;
   body.position.y = 7;
-  g.add(body);
+  body.parent = g;
 
-  const headMat = new THREE.MeshLambertMaterial({ color: 0xffccaa });
-  const head = new THREE.Mesh(new THREE.SphereGeometry(6, 16, 16), headMat);
+  const headMat = mat(s.scene, "headMat", "#ffccaa");
+  const head = BABYLON.MeshBuilder.CreateSphere("fallbackHead", { diameter: 12, segments: 16 }, s.scene);
+  head.material = headMat;
   head.position.y = 21;
-  g.add(head);
+  head.parent = g;
 
-  const helm = new THREE.Mesh(
-    new THREE.SphereGeometry(6.5, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2),
-    new THREE.MeshLambertMaterial({ color: 0x778899 })
-  );
+  // Helm: use a full sphere as visual fallback (no hemisphere primitive in Babylon MeshBuilder)
+  const helm = BABYLON.MeshBuilder.CreateSphere("fallbackHelm", { diameter: 13, segments: 16 }, s.scene);
+  helm.material = mat(s.scene, "helmMat", "#778899");
   helm.position.y = 21;
-  g.add(helm);
+  helm.parent = g;
 
-  const swordGroup = new THREE.Group();
-  const hilt = new THREE.Mesh(
-    new THREE.BoxGeometry(2, 6, 2),
-    new THREE.MeshLambertMaterial({ color: 0x5c4033 })
-  );
-  const blade = new THREE.Mesh(
-    new THREE.BoxGeometry(16, 2, 4),
-    window.playerBladeMat
-  );
+  const swordGroup = new BABYLON.TransformNode("fallbackSwordGroup", s.scene);
+  const hilt = BABYLON.MeshBuilder.CreateBox("fallbackHilt", { width: 2, height: 6, depth: 2 }, s.scene);
+  hilt.material = mat(s.scene, "fallbackHiltMat", "#5c4033");
+  hilt.parent = swordGroup;
+  const blade = BABYLON.MeshBuilder.CreateBox("fallbackBlade", { width: 16, height: 2, depth: 4 }, s.scene);
+  blade.material = window.playerBladeMat;
   blade.position.x = 9;
-  swordGroup.add(hilt, blade);
+  blade.parent = swordGroup;
   swordGroup.position.set(0, 7, 9);
-  g.add(swordGroup);
+  swordGroup.parent = g;
 
-  const pShield = new THREE.Mesh(
-    new THREE.CylinderGeometry(8, 8, 2, 16),
-    new THREE.MeshLambertMaterial({ color: 0x8b4513 })
-  );
+  const pShield = BABYLON.MeshBuilder.CreateCylinder("fallbackShield", { diameter: 16, height: 2, tessellation: 16 }, s.scene);
+  pShield.material = mat(s.scene, "pShieldMat", "#8b4513");
   pShield.rotation.x = Math.PI / 2;
   pShield.position.set(0, 7, -9);
-  g.add(pShield);
+  pShield.parent = g;
 
   return g;
 }
@@ -1119,82 +1013,87 @@ export function spawnAtFreePos() {
  * then shift it down so its bottom sits exactly at y=0.
  */
 function scaleNPCToHeight(mesh, targetHeight) {
-  const box = new THREE.Box3().setFromObject(mesh);
-  const nativeHeight = box.max.y - box.min.y;
-  if (nativeHeight <= 0) return;
-  const sc = targetHeight / nativeHeight;
-  mesh.scale.set(sc, sc, sc);
-  // After scaling, re-measure and align feet to y=0
-  const box2 = new THREE.Box3().setFromObject(mesh);
-  mesh.position.y -= box2.min.y;
+  // Phase 1: Babylon's getBoundingInfo isn't reliable on freshly-cloned complex nodes,
+  // so use a fixed heuristic — the GLB chars in this project are ~50 units tall natively.
+  const EST_NATIVE_HEIGHT = 50;
+  const sc = targetHeight / EST_NATIVE_HEIGHT;
+  mesh.scaling.set(sc, sc, sc);
 }
 
 function createPortal(color) {
-  const group = new THREE.Group();
+  const s = state;
+  const group = new BABYLON.TransformNode(`portal_group_${color}`, s.scene);
   const baseOffset = -30; // Mengimbangi posisi Y=30 dari map generator agar portal menyentuh tanah
 
   // 1. Cincin Rune Dasar (Di Tanah)
-  const ringMat = new THREE.MeshStandardMaterial({
-    color: color, emissive: color, emissiveIntensity: 2.0,
-    metalness: 0.8, roughness: 0.2, side: THREE.DoubleSide,
-    transparent: true, opacity: 0.9
-  });
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(20, 1.5, 8, 32), ringMat);
+  const ringMat = mat(s.scene, `portalRingMat_${color}`, null, { opacity: 0.9 });
+  ringMat.diffuseColor = BABYLON.Color3.FromHexString("#" + color.toString(16).padStart(6, "0"));
+  ringMat.emissiveColor = ringMat.diffuseColor;
+  ringMat.backFaceCulling = false;
+  const ring = BABYLON.MeshBuilder.CreateTorus(`portalRing_${color}`, { diameter: 40, thickness: 3, tessellation: 32 }, s.scene);
+  ring.material = ringMat;
   ring.rotation.x = -Math.PI / 2;
-  ring.position.y = baseOffset + 1; 
-  group.add(ring);
+  ring.position.y = baseOffset + 1;
+  ring.parent = group;
 
   // 2. Inti Cahaya Bercahaya (Di Tanah)
-  const discMat = new THREE.MeshBasicMaterial({
-    color: 0xffffff, transparent: true, opacity: 0.8,
-    side: THREE.DoubleSide, blending: THREE.AdditiveBlending
-  });
-  const disc = new THREE.Mesh(new THREE.CircleGeometry(18, 32), discMat);
+  const discMat = mat(s.scene, `portalDiscMat_${color}`, "#ffffff", { opacity: 0.8, disableLighting: true });
+  discMat.emissiveColor = BABYLON.Color3.FromHexString("#ffffff");
+  discMat.backFaceCulling = false;
+  discMat.blendingMode = BABYLON.BlendMode.Add;
+  const disc = BABYLON.MeshBuilder.CreateDisc(`portalDisc_${color}`, { radius: 18, tessellation: 32 }, s.scene);
+  disc.material = discMat;
   disc.rotation.x = -Math.PI / 2;
   disc.position.y = baseOffset + 1.2;
-  group.add(disc);
+  disc.parent = group;
 
   // 3. Pilar Cahaya Vertikal
-  const beamMat = new THREE.MeshBasicMaterial({
-    color: color, transparent: true, opacity: 0.4,
-    side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false
-  });
-  const beam = new THREE.Mesh(new THREE.CylinderGeometry(16, 20, 200, 32, 1, true), beamMat);
+  const beamMat = mat(s.scene, `portalBeamMat_${color}`, null, { opacity: 0.4, disableLighting: true });
+  beamMat.diffuseColor = BABYLON.Color3.FromHexString("#" + color.toString(16).padStart(6, "0"));
+  beamMat.emissiveColor = beamMat.diffuseColor;
+  beamMat.backFaceCulling = false;
+  beamMat.blendingMode = BABYLON.BlendMode.Add;
+  const beam = BABYLON.MeshBuilder.CreateCylinder(`portalBeam_${color}`, { diameterTop: 32, diameterBottom: 40, height: 200, tessellation: 32 }, s.scene);
+  beam.material = beamMat;
   beam.position.y = baseOffset + 100; // Tengah dari silinder tinggi 200
-  group.add(beam);
-  
+  beam.parent = group;
+
   // 4. Inti Pilar yang Terang
-  const coreMat = new THREE.MeshBasicMaterial({
-    color: 0xffffff, transparent: true, opacity: 0.6,
-    side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false
-  });
-  const core = new THREE.Mesh(new THREE.CylinderGeometry(6, 6, 200, 16, 1, true), coreMat);
+  const coreMat = mat(s.scene, `portalCoreMat_${color}`, "#ffffff", { opacity: 0.6, disableLighting: true });
+  coreMat.emissiveColor = BABYLON.Color3.FromHexString("#ffffff");
+  coreMat.backFaceCulling = false;
+  coreMat.blendingMode = BABYLON.BlendMode.Add;
+  const core = BABYLON.MeshBuilder.CreateCylinder(`portalCore_${color}`, { diameter: 12, height: 200, tessellation: 16 }, s.scene);
+  core.material = coreMat;
   core.position.y = baseOffset + 100;
-  group.add(core);
+  core.parent = group;
 
   // 5. Cincin Energi Melayang
   const ribbons = [];
   for (let i = 0; i < 4; i++) {
-    const ribbonMat = new THREE.MeshBasicMaterial({
-      color: 0xffffff, transparent: true, opacity: 0.8,
-      side: THREE.DoubleSide, blending: THREE.AdditiveBlending
-    });
-    const ribbon = new THREE.Mesh(new THREE.TorusGeometry(22 - i * 1.5, 0.8, 8, 32), ribbonMat);
+    const ribbonMat = mat(s.scene, `portalRibbonMat_${color}_${i}`, "#ffffff", { opacity: 0.8, disableLighting: true });
+    ribbonMat.emissiveColor = BABYLON.Color3.FromHexString("#ffffff");
+    ribbonMat.backFaceCulling = false;
+    ribbonMat.blendingMode = BABYLON.BlendMode.Add;
+    const ribbon = BABYLON.MeshBuilder.CreateTorus(`portalRibbon_${color}_${i}`, { diameter: (22 - i * 1.5) * 2, thickness: 1.6, tessellation: 32 }, s.scene);
+    ribbon.material = ribbonMat;
     ribbon.rotation.x = -Math.PI / 2;
-    ribbon.userData = { 
-      offsetY: i * 45, 
+    ribbon.portalAnimData = {
+      offsetY: i * 45,
       speed: 30 + i * 10,
       scalePhase: i * Math.PI / 2,
       baseOffset
     };
-    group.add(ribbon);
+    ribbon.parent = group;
     ribbons.push(ribbon);
   }
 
   // 6. Pencahayaan Portal
-  const light = new THREE.PointLight(color, 4.0, 300, 1.5);
-  light.position.y = baseOffset + 20;
-  group.add(light);
+  const light = new BABYLON.PointLight(`portalLight_${color}`, new BABYLON.Vector3(0, baseOffset + 20, 0), s.scene);
+  light.diffuse = BABYLON.Color3.FromHexString("#" + color.toString(16).padStart(6, "0"));
+  light.intensity = 1.0;
+  light.range = 300;
+  light.parent = group;
 
   const portal = {
     group,
@@ -1220,32 +1119,32 @@ export function updatePortalAnimations() {
     // Pulse beam opacity & scale
     if (p.beam) {
       const pulse = 0.3 + Math.sin(t * 4) * 0.1;
-      p.beam.material.opacity = pulse;
-      p.beam.scale.set(1 + Math.sin(t * 6) * 0.05, 1, 1 + Math.cos(t * 6) * 0.05);
+      p.beam.material.alpha = pulse;
+      p.beam.scaling.set(1 + Math.sin(t * 6) * 0.05, 1, 1 + Math.cos(t * 6) * 0.05);
     }
-    
+
     // Rotate base ring
     if (p.ring) {
       p.ring.rotation.z = t * 1.5;
     }
-    
+
     // Animate the floating energy rings (ribbons)
     if (p.ribbons) {
       for (let i = 0; i < p.ribbons.length; i++) {
         const r = p.ribbons[i];
         // Move upward from baseOffset to baseOffset + 200 and loop
-        const heightPhase = (r.userData.offsetY + t * r.userData.speed) % 200;
-        r.position.y = r.userData.baseOffset + heightPhase;
-        
+        const heightPhase = (r.portalAnimData.offsetY + t * r.portalAnimData.speed) % 200;
+        r.position.y = r.portalAnimData.baseOffset + heightPhase;
+
         // Spin ring
         r.rotation.z = -(t * 3.0 + i);
-        
+
         // Pulse scale
-        const sScale = 1 + Math.sin(t * 5 + r.userData.scalePhase) * 0.15;
-        r.scale.set(sScale, sScale, sScale);
-        
+        const sScale = 1 + Math.sin(t * 5 + r.portalAnimData.scalePhase) * 0.15;
+        r.scaling.set(sScale, sScale, sScale);
+
         // Fade out as it reaches the top
-        r.material.opacity = 1.0 - (heightPhase / 200);
+        r.material.alpha = 1.0 - (heightPhase / 200);
       }
     }
   }
@@ -1259,108 +1158,113 @@ export function initNPCs() {
   // Portal to Wilds
   s.hometownPortal = createPortal(0x00ffff);
   s.hometownPortal.group.position.set(hx, 30, hy + 400);
-  s.hometownGroup.add(s.hometownPortal.group);
+  s.hometownPortal.group.parent = s.hometownGroup;
 
   // Shop NPC
   if (loadedModels.char_b) {
-    const shopMesh = SkeletonUtils.clone(loadedModels.char_b);
+    const shopMesh = loadedModels.char_b.clone("shopNPC_mesh", true, false);
     scaleNPCToHeight(shopMesh, NPC_HEIGHT);
-    s.shopNPC = new THREE.Group();
-    s.shopNPC.add(shopMesh);
+    s.shopNPC = new BABYLON.TransformNode("shopNPC", s.scene);
+    shopMesh.parent = s.shopNPC;
   } else {
-    s.shopNPC = new THREE.Mesh(
-      new THREE.CylinderGeometry(11, 11, 48, 8),
-      new THREE.MeshLambertMaterial({ color: 0xffd700 })
-    );
+    s.shopNPC = BABYLON.MeshBuilder.CreateCylinder("shopNPC_fallback", { diameter: 22, height: 48, tessellation: 8 }, s.scene);
+    s.shopNPC.material = mat(s.scene, "shopNPCMat", "#ffd700");
     s.shopNPC.position.y = 24;
   }
   s.shopNPC.position.set(hx - 200, 0, hy - 200);
-  s.hometownGroup.add(s.shopNPC);
+  s.shopNPC.parent = s.hometownGroup;
 
   // Healer NPC
   if (loadedModels.char_c) {
-    const healerMesh = SkeletonUtils.clone(loadedModels.char_c);
+    const healerMesh = loadedModels.char_c.clone("healerNPC_mesh", true, false);
     scaleNPCToHeight(healerMesh, NPC_HEIGHT);
-    s.healerNPC = new THREE.Group();
-    s.healerNPC.add(healerMesh);
+    s.healerNPC = new BABYLON.TransformNode("healerNPC", s.scene);
+    healerMesh.parent = s.healerNPC;
   } else {
-    s.healerNPC = new THREE.Mesh(
-      new THREE.CylinderGeometry(11, 11, 48, 8),
-      new THREE.MeshLambertMaterial({ color: 0xff66cc })
-    );
+    s.healerNPC = BABYLON.MeshBuilder.CreateCylinder("healerNPC_fallback", { diameter: 22, height: 48, tessellation: 8 }, s.scene);
+    s.healerNPC.material = mat(s.scene, "healerNPCMat", "#ff66cc");
     s.healerNPC.position.y = 24;
   }
   s.healerNPC.position.set(hx + 200, 0, hy - 200);
-  s.hometownGroup.add(s.healerNPC);
+  s.healerNPC.parent = s.hometownGroup;
 
   // Blacksmith NPC
   if (loadedModels.char_d) {
-    const bsMesh = SkeletonUtils.clone(loadedModels.char_d);
+    const bsMesh = loadedModels.char_d.clone("blacksmithNPC_mesh", true, false);
     scaleNPCToHeight(bsMesh, NPC_HEIGHT);
-    s.blacksmithNPC = new THREE.Group();
-    s.blacksmithNPC.add(bsMesh);
+    s.blacksmithNPC = new BABYLON.TransformNode("blacksmithNPC", s.scene);
+    bsMesh.parent = s.blacksmithNPC;
   } else {
-    s.blacksmithNPC = new THREE.Mesh(
-      new THREE.CylinderGeometry(12, 12, 48, 8),
-      new THREE.MeshLambertMaterial({ color: 0x333333 })
-    );
+    s.blacksmithNPC = BABYLON.MeshBuilder.CreateCylinder("blacksmithNPC_fallback", { diameter: 24, height: 48, tessellation: 8 }, s.scene);
+    s.blacksmithNPC.material = mat(s.scene, "blacksmithNPCMat", "#333333");
     s.blacksmithNPC.position.y = 24;
   }
   s.blacksmithNPC.position.set(hx - 200, 0, hy + 200);
-  s.hometownGroup.add(s.blacksmithNPC);
+  s.blacksmithNPC.parent = s.hometownGroup;
 
   // ── Village Inn / Tavern (Penginapan Desa) ──
-  const innGroup = new THREE.Group();
-  const counterMat = new THREE.MeshLambertMaterial({ color: 0x5c4033 });
-  const counter = new THREE.Mesh(new THREE.BoxGeometry(60, 20, 24), counterMat);
+  const innGroup = new BABYLON.TransformNode("innGroup", s.scene);
+  const counterMat = mat(s.scene, "innCounterMat", "#5c4033");
+  const counter = BABYLON.MeshBuilder.CreateBox("innCounter", { width: 60, height: 20, depth: 24 }, s.scene);
+  counter.material = counterMat;
   counter.position.set(0, 10, 0);
-  innGroup.add(counter);
+  counter.parent = innGroup;
 
   // Mugs & Stools
-  const mugMat = new THREE.MeshLambertMaterial({ color: 0xd4ac0d });
-  [-14, 0, 14].forEach(mx => {
-    const mug = new THREE.Mesh(new THREE.CylinderGeometry(2, 2, 4, 6), mugMat);
+  const mugMat = mat(s.scene, "innMugMat", "#d4ac0d");
+  [-14, 0, 14].forEach((mx, i) => {
+    const mug = BABYLON.MeshBuilder.CreateCylinder(`innMug_${i}`, { diameter: 4, height: 4, tessellation: 6 }, s.scene);
+    mug.material = mugMat;
     mug.position.set(mx, 22, 0);
-    innGroup.add(mug);
+    mug.parent = innGroup;
   });
-  const stoolMat = new THREE.MeshLambertMaterial({ color: 0x4a3219 });
-  [-16, 16].forEach(sx => {
-    const stool = new THREE.Mesh(new THREE.CylinderGeometry(5.5, 5.5, 11, 8), stoolMat);
+  const stoolMat = mat(s.scene, "innStoolMat", "#4a3219");
+  [-16, 16].forEach((sx, i) => {
+    const stool = BABYLON.MeshBuilder.CreateCylinder(`innStool_${i}`, { diameter: 11, height: 11, tessellation: 8 }, s.scene);
+    stool.material = stoolMat;
     stool.position.set(sx, 5.5, -20);
-    innGroup.add(stool);
+    stool.parent = innGroup;
   });
 
   // Warm Lantern Post
-  const lanternPost = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.5, 36), counterMat);
+  const lanternPost = BABYLON.MeshBuilder.CreateCylinder("innLanternPost", { diameterTop: 2.4, diameterBottom: 3, height: 36, tessellation: 12 }, s.scene);
+  lanternPost.material = counterMat;
   lanternPost.position.set(26, 18, -6);
-  const lanternLight = new THREE.PointLight(0xffaa44, 2.0, 160);
-  lanternLight.position.set(26, 36, -6);
-  innGroup.add(lanternPost, lanternLight);
+  lanternPost.parent = innGroup;
+  const lanternLight = new BABYLON.PointLight("innLanternLight", new BABYLON.Vector3(26, 36, -6), s.scene);
+  lanternLight.diffuse = BABYLON.Color3.FromHexString("#ffaa44");
+  lanternLight.intensity = 0.5;
+  lanternLight.range = 160;
+  lanternLight.parent = innGroup;
 
   // Signpost: Penginapan Desa
-  const signGroup = new THREE.Group();
-  const signBoard = new THREE.Mesh(new THREE.BoxGeometry(34, 14, 3), new THREE.MeshLambertMaterial({ color: 0x7f4f24 }));
+  const signGroup = new BABYLON.TransformNode("innSignGroup", s.scene);
+  const signBoard = BABYLON.MeshBuilder.CreateBox("innSignBoard", { width: 34, height: 14, depth: 3 }, s.scene);
+  signBoard.material = mat(s.scene, "innSignMat", "#7f4f24");
   signBoard.position.set(0, 26, 0);
-  const signPostMesh = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 30), counterMat);
+  signBoard.parent = signGroup;
+  const signPostMesh = BABYLON.MeshBuilder.CreateCylinder("innSignPost", { diameter: 2.4, height: 30, tessellation: 12 }, s.scene);
+  signPostMesh.material = counterMat;
   signPostMesh.position.set(0, 15, 0);
-  signGroup.add(signBoard, signPostMesh);
+  signPostMesh.parent = signGroup;
   signGroup.position.set(-28, 0, -12);
-  innGroup.add(signGroup);
+  signGroup.parent = innGroup;
 
   innGroup.position.set(hx + 300, 0, hy + 260);
   innGroup.rotation.y = Math.PI;
-  s.hometownGroup.add(innGroup);
+  innGroup.parent = s.hometownGroup;
   s.innSignPos = { x: hx + 300, z: hy + 260 };
   s.obstaclesHometown.push({ x: hx + 300, y: hy + 260, r: 40, h: 50 });
 
   // Innkeeper NPC (Paman Bob)
   if (loadedModels.char_h || loadedModels.char_a) {
-    const innMesh = SkeletonUtils.clone(loadedModels.char_h || loadedModels.char_a);
+    const innSrc = loadedModels.char_h || loadedModels.char_a;
+    const innMesh = innSrc.clone("innNPC_mesh", true, false);
     scaleNPCToHeight(innMesh, NPC_HEIGHT);
-    s.innNPC = new THREE.Group();
-    s.innNPC.add(innMesh);
+    s.innNPC = new BABYLON.TransformNode("innNPC", s.scene);
+    innMesh.parent = s.innNPC;
     s.innNPC.position.set(hx + 300, 0, hy + 288);
-    s.hometownGroup.add(s.innNPC);
+    s.innNPC.parent = s.hometownGroup;
   }
 
   // ── Living Wandering Villagers (Warga Desa yang Berkeliling) ──
@@ -1453,22 +1357,23 @@ export function initNPCs() {
     },
   ];
 
-  s.villagers.forEach(v => {
+  s.villagers.forEach((v, vIdx) => {
     const raw = loadedModels[v.modelKey] || loadedModels.char_b || loadedModels.char_a;
     if (raw) {
-      const vMesh = SkeletonUtils.clone(raw);
+      const vMesh = raw.clone(`villager_${v.id}`, true, false);
       scaleNPCToHeight(vMesh, NPC_HEIGHT);
-      v.mesh = new THREE.Group();
-      v.mesh.add(vMesh);
+      v.mesh = new BABYLON.TransformNode(`villager_${v.id}_group`, s.scene);
+      vMesh.parent = v.mesh;
       v.mesh.position.set(v.x, 0, v.z);
-      s.hometownGroup.add(v.mesh);
+      v.mesh.parent = s.hometownGroup;
 
       // Cache limb objects for natural human walking animation
-      v.legL = vMesh.getObjectByName('leg-left');
-      v.legR = vMesh.getObjectByName('leg-right');
-      v.armL = vMesh.getObjectByName('arm-left');
-      v.armR = vMesh.getObjectByName('arm-right');
-      v.head = vMesh.getObjectByName('head');
+      const vDesc = vMesh.getDescendants();
+      v.legL = vDesc.find(c => c.name === 'leg-left');
+      v.legR = vDesc.find(c => c.name === 'leg-right');
+      v.armL = vDesc.find(c => c.name === 'arm-left');
+      v.armR = vDesc.find(c => c.name === 'arm-right');
+      v.head = vDesc.find(c => c.name === 'head');
     }
   });
 
@@ -1476,37 +1381,51 @@ export function initNPCs() {
   s.villageAnimals = [];
 
   // Buddy the Dog
-  const dogMesh = new THREE.Group();
-  const dogBodyMat = new THREE.MeshLambertMaterial({ color: 0x8b5a2b });
-  const dogDarkMat = new THREE.MeshLambertMaterial({ color: 0x3d2714 });
-  const dogNoseMat = new THREE.MeshLambertMaterial({ color: 0x111111 });
+  const dogMesh = new BABYLON.TransformNode("dogMesh", s.scene);
+  const dogBodyMat = mat(s.scene, "dogBodyMat", "#8b5a2b");
+  const dogDarkMat = mat(s.scene, "dogDarkMat", "#3d2714");
+  const dogNoseMat = mat(s.scene, "dogNoseMat", "#111111");
 
-  const dBody = new THREE.Mesh(new THREE.BoxGeometry(9, 7, 14), dogBodyMat);
+  const dBody = BABYLON.MeshBuilder.CreateBox("dogBody", { width: 9, height: 7, depth: 14 }, s.scene);
+  dBody.material = dogBodyMat;
   dBody.position.y = 6.5;
-  const dHead = new THREE.Mesh(new THREE.BoxGeometry(6, 6, 6), dogBodyMat);
+  dBody.parent = dogMesh;
+  const dHead = BABYLON.MeshBuilder.CreateBox("dogHead", { width: 6, height: 6, depth: 6 }, s.scene);
+  dHead.material = dogBodyMat;
   dHead.position.set(0, 11, 7);
-  const dSnout = new THREE.Mesh(new THREE.BoxGeometry(4, 3.5, 5), dogDarkMat);
+  dHead.parent = dogMesh;
+  const dSnout = BABYLON.MeshBuilder.CreateBox("dogSnout", { width: 4, height: 3.5, depth: 5 }, s.scene);
+  dSnout.material = dogDarkMat;
   dSnout.position.set(0, 9.5, 10.5);
-  const dNose = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.8, 1.8), dogNoseMat);
+  dSnout.parent = dogMesh;
+  const dNose = BABYLON.MeshBuilder.CreateBox("dogNose", { width: 1.8, height: 1.8, depth: 1.8 }, s.scene);
+  dNose.material = dogNoseMat;
   dNose.position.set(0, 10.8, 13.2);
-  const dEarL = new THREE.Mesh(new THREE.BoxGeometry(1.5, 4, 2.5), dogDarkMat);
+  dNose.parent = dogMesh;
+  const dEarL = BABYLON.MeshBuilder.CreateBox("dogEarL", { width: 1.5, height: 4, depth: 2.5 }, s.scene);
+  dEarL.material = dogDarkMat;
   dEarL.position.set(-3.5, 11, 6.5);
-  const dEarR = new THREE.Mesh(new THREE.BoxGeometry(1.5, 4, 2.5), dogDarkMat);
+  dEarL.parent = dogMesh;
+  const dEarR = BABYLON.MeshBuilder.CreateBox("dogEarR", { width: 1.5, height: 4, depth: 2.5 }, s.scene);
+  dEarR.material = dogDarkMat;
   dEarR.position.set(3.5, 11, 6.5);
-  const dTail = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1.2, 7, 6), dogDarkMat);
+  dEarR.parent = dogMesh;
+  const dTail = BABYLON.MeshBuilder.CreateCylinder("dogTail", { diameterTop: 1.6, diameterBottom: 2.4, height: 7, tessellation: 6 }, s.scene);
+  dTail.material = dogDarkMat;
   dTail.position.set(0, 9, -7.5);
   dTail.rotation.x = -Math.PI / 4;
-  dogMesh.add(dBody, dHead, dSnout, dNose, dEarL, dEarR, dTail);
-  dogMesh.userData.tail = dTail;
+  dTail.parent = dogMesh;
+  dogMesh.tail = dTail;
 
-  [[-3, 3, 4], [3, 3, 4], [-3, 3, -4], [3, 3, -4]].forEach(([lx, ly, lz]) => {
-    const leg = new THREE.Mesh(new THREE.BoxGeometry(2.5, 6, 2.5), dogBodyMat);
+  [[-3, 3, 4], [3, 3, 4], [-3, 3, -4], [3, 3, -4]].forEach(([lx, ly, lz], i) => {
+    const leg = BABYLON.MeshBuilder.CreateBox(`dogLeg_${i}`, { width: 2.5, height: 6, depth: 2.5 }, s.scene);
+    leg.material = dogBodyMat;
     leg.position.set(lx, ly, lz);
-    dogMesh.add(leg);
+    leg.parent = dogMesh;
   });
-  dogMesh.scale.set(1.6, 1.6, 1.6);
+  dogMesh.scaling.set(1.6, 1.6, 1.6);
   dogMesh.position.set(hx + 40, 0, hy - 40);
-  s.hometownGroup.add(dogMesh);
+  dogMesh.parent = s.hometownGroup;
   s.villageAnimals.push({
     type: 'dog',
     name: 'Buddy',
@@ -1522,34 +1441,42 @@ export function initNPCs() {
     { x: hx - 140, z: hy + 160 },
   ];
   chickenPositions.forEach((pos, idx) => {
-    const cMesh = new THREE.Group();
-    const cMatWhite = new THREE.MeshLambertMaterial({ color: idx === 1 ? 0xf5b041 : 0xffffff });
-    const cMatComb = new THREE.MeshLambertMaterial({ color: 0xe74c3c });
-    const cMatBeak = new THREE.MeshLambertMaterial({ color: 0xf39c12 });
+    const cMesh = new BABYLON.TransformNode(`chicken_${idx}`, s.scene);
+    const cMatWhite = mat(s.scene, `chickenMatWhite_${idx}`, idx === 1 ? "#f5b041" : "#ffffff");
+    const cMatComb = mat(s.scene, `chickenMatComb_${idx}`, "#e74c3c");
+    const cMatBeak = mat(s.scene, `chickenMatBeak_${idx}`, "#f39c12");
 
-    const cBody = new THREE.Mesh(new THREE.BoxGeometry(5, 5, 7), cMatWhite);
+    const cBody = BABYLON.MeshBuilder.CreateBox(`chickenBody_${idx}`, { width: 5, height: 5, depth: 7 }, s.scene);
+    cBody.material = cMatWhite;
     cBody.position.y = 4.5;
-    const cHead = new THREE.Group();
+    cBody.parent = cMesh;
+    const cHead = new BABYLON.TransformNode(`chickenHead_${idx}`, s.scene);
     cHead.position.set(0, 7.5, 3.5);
-    const headBlock = new THREE.Mesh(new THREE.BoxGeometry(3.5, 4, 3.5), cMatWhite);
-    const comb = new THREE.Mesh(new THREE.BoxGeometry(1.2, 2.5, 2.5), cMatComb);
+    cHead.parent = cMesh;
+    const headBlock = BABYLON.MeshBuilder.CreateBox(`chickenHeadBlock_${idx}`, { width: 3.5, height: 4, depth: 3.5 }, s.scene);
+    headBlock.material = cMatWhite;
+    headBlock.parent = cHead;
+    const comb = BABYLON.MeshBuilder.CreateBox(`chickenComb_${idx}`, { width: 1.2, height: 2.5, depth: 2.5 }, s.scene);
+    comb.material = cMatComb;
     comb.position.set(0, 3, 0);
-    const beak = new THREE.Mesh(new THREE.ConeGeometry(1, 2.5, 4), cMatBeak);
+    comb.parent = cHead;
+    const beak = BABYLON.MeshBuilder.CreateCylinder(`chickenBeak_${idx}`, { diameterTop: 0, diameterBottom: 2, height: 2.5, tessellation: 4 }, s.scene);
+    beak.material = cMatBeak;
     beak.rotation.x = Math.PI / 2;
     beak.position.set(0, 0, 2.5);
-    cHead.add(headBlock, comb, beak);
-    cMesh.add(cBody, cHead);
-    cMesh.userData.head = cHead;
+    beak.parent = cHead;
+    cMesh.head = cHead;
 
-    [[-1.5, 1.5, 0], [1.5, 1.5, 0]].forEach(([lx, ly, lz]) => {
-      const leg = new THREE.Mesh(new THREE.BoxGeometry(1, 3, 1), cMatBeak);
+    [[-1.5, 1.5, 0], [1.5, 1.5, 0]].forEach(([lx, ly, lz], i) => {
+      const leg = BABYLON.MeshBuilder.CreateBox(`chickenLeg_${idx}_${i}`, { width: 1, height: 3, depth: 1 }, s.scene);
+      leg.material = cMatBeak;
       leg.position.set(lx, ly, lz);
-      cMesh.add(leg);
+      leg.parent = cMesh;
     });
 
-    cMesh.scale.set(1.5, 1.5, 1.5);
+    cMesh.scaling.set(1.5, 1.5, 1.5);
     cMesh.position.set(pos.x, 0, pos.z);
-    s.hometownGroup.add(cMesh);
+    cMesh.parent = s.hometownGroup;
     s.villageAnimals.push({
       type: 'chicken',
       x: pos.x, z: pos.z,
@@ -1582,11 +1509,12 @@ export function updateVillagers(dt) {
 
       // Lazy find limbs if not already cached
       if (!v.legL) {
-        v.legL = v.mesh.getObjectByName('leg-left');
-        v.legR = v.mesh.getObjectByName('leg-right');
-        v.armL = v.mesh.getObjectByName('arm-left');
-        v.armR = v.mesh.getObjectByName('arm-right');
-        v.head = v.mesh.getObjectByName('head');
+        const desc = v.mesh.getDescendants();
+        v.legL = desc.find(c => c.name === 'leg-left');
+        v.legR = desc.find(c => c.name === 'leg-right');
+        v.armL = desc.find(c => c.name === 'arm-left');
+        v.armR = desc.find(c => c.name === 'arm-right');
+        v.head = desc.find(c => c.name === 'head');
       }
 
       const distToPlayer = Math.hypot(s.player.x - v.x, s.player.y - v.z);
@@ -1675,10 +1603,10 @@ export function updateVillagers(dt) {
       if (!a.mesh) return;
       if (a.type === 'dog') {
         const distToPlayer = Math.hypot(s.player.x - a.x, s.player.y - a.z);
-        if (a.mesh.userData.tail) {
+        if (a.mesh.tail) {
           // Rapid tail wagging when player is near
           const wagSpeed = distToPlayer < 65 ? 25 : 8;
-          a.mesh.userData.tail.rotation.y = Math.sin(time * wagSpeed) * 0.7;
+          a.mesh.tail.rotation.y = Math.sin(time * wagSpeed) * 0.7;
         }
         if (distToPlayer < 65) {
           // Turn toward player
@@ -1691,8 +1619,8 @@ export function updateVillagers(dt) {
         }
       } else if (a.type === 'chicken') {
         // Head pecking animation
-        if (a.mesh.userData.head) {
-          a.mesh.userData.head.rotation.x = Math.abs(Math.sin(time * 3 + a.x)) * 0.55;
+        if (a.mesh.head) {
+          a.mesh.head.rotation.x = Math.abs(Math.sin(time * 3 + a.x)) * 0.55;
         }
         a.cluckTimer = (a.cluckTimer || 0) + dt;
         if (a.cluckTimer > 700) {
@@ -1711,13 +1639,13 @@ export function initWildsNPCs() {
   // Wilds return portal (near altar)
   s.wildsPortal = createPortal(0xff00ff);
   s.wildsPortal.group.position.set(mapSize / 2, 30, mapSize / 2 + 60);
-  s.wildsGroup.add(s.wildsPortal.group);
+  s.wildsPortal.group.parent = s.wildsGroup;
 
   // Portal to Scorched Dunes (wilds2) — placed near altar, always created;
   // level gate is enforced in ui.js
   s.desertPortalWilds = createPortal(0xff8800);
   s.desertPortalWilds.group.position.set(mapSize / 2, 30, mapSize / 2 + 400);
-  s.wildsGroup.add(s.desertPortalWilds.group);
+  s.desertPortalWilds.group.parent = s.wildsGroup;
 
   // BOSS (The Golden Golem)
   s.bossActive = true;
@@ -1725,38 +1653,33 @@ export function initWildsNPCs() {
   s.bossY = mapSize - 1000;
   s.bossSpawnX = s.bossX;
   s.bossSpawnY = s.bossY;
-  
-  if (loadedModels.enemy) {
-    const gltfBoss = SkeletonUtils.clone(loadedModels.enemy);
-    gltfBoss.scale.set(100, 100, 100);
-    gltfBoss.position.y = -30;
-    gltfBoss.traverse((child) => {
-      if (child.isMesh) {
-        child.frustumCulled = false;
-        if (child.material) {
-          child.material = child.material.clone();
-          child.material.color.setHex(0xffd700);
-        }
-      }
-    });
-    s.bossMesh = new THREE.Group();
-    s.bossMesh.add(gltfBoss);
-  } else {
-    const bGeo = new THREE.BoxGeometry(60, 60, 60);
-    const bMat = new THREE.MeshLambertMaterial({ color: 0xffd700 });
-    s.bossMesh = new THREE.Mesh(bGeo, bMat);
-  }
-  
-  s.bossMesh.position.set(s.bossX, 30 + getTerrainHeight(s.bossX, s.bossY), s.bossY);
-  s.wildsGroup.add(s.bossMesh);
 
-  s.bossHpGroup = new THREE.Group();
-  const bg = new THREE.Mesh(new THREE.PlaneGeometry(80, 8), new THREE.MeshBasicMaterial({ color: 0x222222 }));
-  s.bossHpFg = new THREE.Mesh(new THREE.PlaneGeometry(80, 8), new THREE.MeshBasicMaterial({ color: 0x880000 }));
+  if (loadedModels.enemy) {
+    const gltfBoss = loadedModels.enemy.clone("bossEnemy", true, false);
+    gltfBoss.scaling.set(100, 100, 100);
+    gltfBoss.position.y = -30;
+    // Phase 1: skip per-mesh material tinting; Babylon material clone/override is a later step.
+    s.bossMesh = new BABYLON.TransformNode("bossMesh", s.scene);
+    gltfBoss.parent = s.bossMesh;
+  } else {
+    s.bossMesh = BABYLON.MeshBuilder.CreateBox("bossMesh_fallback", { width: 60, height: 60, depth: 60 }, s.scene);
+    s.bossMesh.material = mat(s.scene, "bossMeshMat", "#ffd700");
+  }
+
+  s.bossMesh.position.set(s.bossX, 30 + getTerrainHeight(s.bossX, s.bossY), s.bossY);
+  s.bossMesh.parent = s.wildsGroup;
+
+  s.bossHpGroup = new BABYLON.TransformNode("bossHpGroup", s.scene);
+  const bg = BABYLON.MeshBuilder.CreateGround("bossHpBg", { width: 80, depth: 8, updatable: true }, s.scene);
+  bg.material = mat(s.scene, "bossHpBgMat", "#222222", { disableLighting: true });
+  bg.parent = s.bossHpGroup;
+  s.bossHpFg = BABYLON.MeshBuilder.CreateGround("bossHpFg", { width: 80, depth: 8, updatable: true }, s.scene);
+  s.bossHpFg.material = mat(s.scene, "bossHpFgMat", "#880000", { disableLighting: true });
   s.bossHpFg.position.z = 0.2;
-  s.bossHpGroup.add(bg, s.bossHpFg);
+  s.bossHpFg.parent = s.bossHpGroup;
+  s.bossHpGroup.billboardMode = BABYLON.Mesh.BILLBOARDMODE_ALL;
   s.bossHpGroup.position.set(s.bossX, 80 + getTerrainHeight(s.bossX, s.bossY), s.bossY);
-  s.wildsGroup.add(s.bossHpGroup);
+  s.bossHpGroup.parent = s.wildsGroup;
 
   // Spawn Boss Children inside arena
   setTimeout(() => {
@@ -1808,8 +1731,7 @@ export function spawnAtFreePosWilds2() {
 
 export function initWilds2() {
   const s = state;
-  s.wilds2Group = new THREE.Group();
-  s.scene.add(s.wilds2Group);
+  s.wilds2Group = new BABYLON.TransformNode("wilds2Group", s.scene);
 
   const ms = mapSize;
 
@@ -1825,34 +1747,31 @@ export function initWilds2() {
     ctx.globalAlpha = Math.random() * 0.8 + 0.2;
     ctx.fillRect(Math.random() * 512, Math.random() * 512, 2 + Math.random() * 2, 2 + Math.random() * 4);
   }
-  const sandTex = new THREE.CanvasTexture(texCanvas);
-  sandTex.wrapS = THREE.RepeatWrapping;
-  sandTex.wrapT = THREE.RepeatWrapping;
-  sandTex.repeat.set(ms / 150, ms / 150);
+  const sandTex = new BABYLON.DynamicTexture("sandTex", texCanvas, s.scene, false, true);
+  sandTex.wrapMode = BABYLON.Texture.WRAPMODE_WRAP;
+  sandTex.uScale = ms / 150;
+  sandTex.vScale = ms / 150;
 
-  const floorGeo = new THREE.PlaneGeometry(ms, ms, 200, 200);
-  const posAttr = floorGeo.attributes.position;
-  for (let i = 0; i < posAttr.count; i++) {
-    const vx = posAttr.getX(i);
-    const vy = posAttr.getY(i);
+  // Displaced sand floor (same pattern as initSetup's mainFloor)
+  const floor = BABYLON.MeshBuilder.CreateGround("wilds2Floor", { width: ms, depth: ms, subdivisions: 200 }, s.scene);
+  const floorMat = mat(s.scene, "wilds2FloorMat", null, {});
+  floorMat.diffuseTexture = sandTex;
+  floor.material = floorMat;
+  const floorPositions = floor.getVerticesData(BABYLON.VertexBuffer.PositionKind);
+  for (let i = 0; i < floorPositions.length; i += 3) {
+    const vx = floorPositions[i];
+    const vz = floorPositions[i + 2];
     const worldX = vx + (ms / 2);
-    const worldY = (ms / 2) - vy;
-    posAttr.setZ(i, getTerrainHeightWilds2(worldX, worldY));
+    const worldY = (ms / 2) - vz;
+    floorPositions[i + 1] = getTerrainHeightWilds2(worldX, worldY);
   }
-  floorGeo.computeVertexNormals();
-  const floorMat = new THREE.MeshStandardMaterial({
-    map: sandTex,
-    roughness: 0.95,
-    metalness: 0.02,
-  });
-  const floor = new THREE.Mesh(floorGeo, floorMat);
-  floor.rotation.x = -Math.PI / 2;
+  floor.updateVerticesData(BABYLON.VertexBuffer.PositionKind, floorPositions);
+  floor.createNormals(true);
   floor.position.set(ms / 2, 0, ms / 2);
-  floor.receiveShadow = true;
-  s.wilds2Group.add(floor);
+  floor.parent = s.wilds2Group;
 
   // ── Central ancient pyramid: 11 stepped tiers (step-pyramid), sandstone + gold cap ──
-  const pyramidGroup = new THREE.Group();
+  const pyramidGroup = new BABYLON.TransformNode("pyramidGroup", s.scene);
   // Procedural sandstone texture so each block reads as cut stone, not a flat color
   const stoneTex = (() => {
     const c = document.createElement('canvas');
@@ -1868,13 +1787,15 @@ export function initWilds2() {
     // subtle block seams
     g.globalAlpha = 0.25; g.strokeStyle = '#8a7150';
     for (let yy = 0; yy < 256; yy += 16) { g.beginPath(); g.moveTo(0, yy); g.lineTo(256, yy); g.stroke(); }
-    const t = new THREE.CanvasTexture(c);
-    t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    t.repeat.set(3, 3);
+    const t = new BABYLON.DynamicTexture("stoneTex", c, s.scene, false, true);
+    t.wrapMode = BABYLON.Texture.WRAPMODE_WRAP;
+    t.uScale = 3;
+    t.vScale = 3;
     return t;
   })();
-  const sandstoneMat = new THREE.MeshLambertMaterial({ color: 0xd8c08a, map: stoneTex, flatShading: true });
-  const goldMat = new THREE.MeshLambertMaterial({ color: 0xffd700, emissive: 0x886600, emissiveIntensity: 0.6 });
+  const sandstoneMat = mat(s.scene, "sandstoneMat", "#d8c08a");
+  sandstoneMat.diffuseTexture = stoneTex;
+  const goldMat = mat(s.scene, "goldMat", "#ffd700", { emissive: "#886600" });
   const TOWERS = 11;
   // BASE = apothem of the tier-1 base circle: a radial-4 cylinder rotated 45°
   // has its flat face at distance baseRadius * cos(45°) from the center, so
@@ -1883,32 +1804,28 @@ export function initWilds2() {
   const STEP = 28;
   // Buried plinth: a short wide base half-sunk in the sand so the tier corners
   // never punch through the ground.
-  const plinth = new THREE.Mesh(
-    new THREE.CylinderGeometry(BASE + 40, BASE + 80, 30, 4),
-    sandstoneMat
-  );
+  const plinth = BABYLON.MeshBuilder.CreateCylinder("pyramidPlinth", { diameterTop: (BASE + 40) * 2, diameterBottom: (BASE + 80) * 2, height: 30, tessellation: 4 }, s.scene);
+  plinth.material = sandstoneMat;
   plinth.position.y = -8; // mostly below ground, top face at y=22
-  plinth.castShadow = plinth.receiveShadow = true;
-  pyramidGroup.add(plinth);
+  plinth.parent = pyramidGroup;
 
   let curY = 14; // stack tiers on top of the plinth
   for (let i = 0; i < TOWERS; i++) {
     const h = STEP + Math.max(0, (BASE - i * STEP - STEP)) * 0.06; // slight overhang at bottom
-    const geo = new THREE.CylinderGeometry(Math.max(1, BASE - (i + 1) * STEP), BASE - i * STEP, h, 4, 1, false);
-    const tier = new THREE.Mesh(geo, i === TOWERS - 1 ? goldMat : sandstoneMat);
+    const tier = BABYLON.MeshBuilder.CreateCylinder(`pyramidTier_${i}`, { diameterTop: Math.max(2, (BASE - (i + 1) * STEP) * 2), diameterBottom: (BASE - i * STEP) * 2, height: h, tessellation: 4 }, s.scene);
+    tier.material = i === TOWERS - 1 ? goldMat : sandstoneMat;
     tier.position.y = curY + h / 2;
-    tier.castShadow = tier.receiveShadow = true;
-    pyramidGroup.add(tier);
+    tier.parent = pyramidGroup;
     curY += h;
   }
   // Central cap: small cone on top of last tier (like the original but smaller)
-  const cap = new THREE.Mesh(new THREE.ConeGeometry(15, 22, 4), goldMat);
+  const cap = BABYLON.MeshBuilder.CreateCylinder("pyramidCap", { diameterTop: 0, diameterBottom: 30, height: 22, tessellation: 4 }, s.scene);
+  cap.material = goldMat;
   cap.position.y = curY + 11;
-  cap.castShadow = cap.receiveShadow = true;
-  pyramidGroup.add(cap);
+  cap.parent = pyramidGroup;
   pyramidGroup.rotation.y = Math.PI / 4; // Point a face toward map center
   pyramidGroup.position.set(ms / 2, 0, ms / 2);
-  s.wilds2Group.add(pyramidGroup);
+  pyramidGroup.parent = s.wilds2Group;
   s.obstaclesWilds2.push({ x: ms / 2, y: ms / 2, r: 360, h: 200 }); // Collision radius diubah dari 160 ke 360 agar sesuai dengan ukuran dasar piramida
 
 
@@ -1941,23 +1858,21 @@ export function initWilds2() {
           const src = loadedModels[key];
           if (!src) continue;
           const sc = 45 + Math.random() * 20; // Diperbesar (sebelumnya 25-35)
-          const m = SkeletonUtils.clone(src);
-          m.scale.set(sc, sc, sc);
+          const m = src.clone(`${key}_c${c}_i${i}`, true, false);
+          m.scaling.set(sc, sc, sc);
           m.position.set(x, getTerrainHeightWilds2(x, y), y);
           m.rotation.y = Math.random() * Math.PI;
-          s.wilds2Group.add(m);
+          m.parent = s.wilds2Group;
           placed = true;
           break;
         }
         if (!placed) {
           const r = 30 + Math.random() * 30; // Diperbesar
-          const rock = new THREE.Mesh(
-            new THREE.DodecahedronGeometry(r, 0),
-            new THREE.MeshLambertMaterial({ color: 0xb89a6a })
-          );
+          const rock = BABYLON.MeshBuilder.CreateIcosphere(`w2_rock_${c}_${i}`, { diameter: r * 2, segments: 2 }, s.scene);
+          rock.material = mat(s.scene, `w2RockMat_${c}_${i}`, "#b89a6a");
           rock.position.set(x, r + getTerrainHeightWilds2(x, y), y);
           rock.rotation.y = Math.random() * Math.PI;
-          s.wilds2Group.add(rock);
+          rock.parent = s.wilds2Group;
         }
         s.obstaclesWilds2.push({ x, y, r: 25, h: 30 }); // Collision diperbesar
       } else {
@@ -1969,23 +1884,21 @@ export function initWilds2() {
           const src = loadedModels[key];
           if (!src) continue;
           const sc = key === 'arena_tree' ? 25 + Math.random() * 15 : 20 + Math.random() * 10; // Diperbesar
-          const m = SkeletonUtils.clone(src);
-          m.scale.set(sc, sc, sc);
+          const m = src.clone(`${key}_c${c}_i${i}`, true, false);
+          m.scaling.set(sc, sc, sc);
           m.position.set(x, getTerrainHeightWilds2(x, y), y);
           m.rotation.y = Math.random() * Math.PI;
-          s.wilds2Group.add(m);
+          m.parent = s.wilds2Group;
           placed = true;
           break;
         }
         if (!placed) {
           const trunkH = 60 + Math.random() * 40; // Diperbesar
-          const trunk = new THREE.Mesh(
-            new THREE.CylinderGeometry(8, 10, trunkH, 6),
-            new THREE.MeshLambertMaterial({ color: 0x6b5b3e })
-          );
+          const trunk = BABYLON.MeshBuilder.CreateCylinder(`w2_trunk_${c}_${i}`, { diameterTop: 16, diameterBottom: 20, height: trunkH, tessellation: 6 }, s.scene);
+          trunk.material = mat(s.scene, `w2TrunkMat_${c}_${i}`, "#6b5b3e");
           trunk.position.set(x, trunkH / 2 + getTerrainHeightWilds2(x, y), y);
           trunk.rotation.z = (Math.random() - 0.5) * 0.2;
-          s.wilds2Group.add(trunk);
+          trunk.parent = s.wilds2Group;
         }
         s.obstaclesWilds2.push({ x, y, r: 20, h: 60 }); // Collision diperbesar
       }
@@ -2000,13 +1913,11 @@ export function initWilds2() {
     if (Math.hypot(qx - ms / 2, qy - ms / 2) < 1500) continue;
     if (s.obstaclesWilds2.some(o => Math.hypot(o.x - qx, o.y - qy) < o.r + 80)) continue;
 
-    const pool = new THREE.Mesh(
-      new THREE.CircleGeometry(80, 24),
-      new THREE.MeshLambertMaterial({ color: 0x8a7a55, emissive: 0x221a0f, emissiveIntensity: 0.3 })
-    );
+    const pool = BABYLON.MeshBuilder.CreateDisc(`quicksandPool_${q}`, { radius: 80, tessellation: 24 }, s.scene);
+    pool.material = mat(s.scene, `quicksandMat_${q}`, "#8a7a55", { emissive: "#221a0f" });
     pool.rotation.x = -Math.PI / 2;
     pool.position.set(qx, 1 + getTerrainHeightWilds2(qx, qy), qy);
-    s.wilds2Group.add(pool);
+    pool.parent = s.wilds2Group;
     // Ring of floor details + bricks along the pool edge
     const poolRing = ['arena_floor_detail', 'arena_bricks', 'arena_floor_detail', 'arena_bricks'];
     for (let a = 0; a < 12; a++) {
@@ -2016,12 +1927,12 @@ export function initWilds2() {
       const key = poolRing[a % poolRing.length];
       const src = loadedModels[key];
       if (!src) continue;
-      const m = SkeletonUtils.clone(src);
+      const m = src.clone(`${key}_pool${q}_a${a}`, true, false);
       const sc = key === 'arena_bricks' ? 25 : 35; // Diperbesar
-      m.scale.set(sc, sc, sc);
+      m.scaling.set(sc, sc, sc);
       m.position.set(px, getTerrainHeightWilds2(px, py), py);
       m.rotation.y = ang;
-      s.wilds2Group.add(m);
+      m.parent = s.wilds2Group;
     }
     s.obstaclesWilds2.push({ x: qx, y: qy, r: 80, h: 5 });
   }
@@ -2038,19 +1949,17 @@ export function initWilds2() {
     const src = loadedModels[key];
     let m;
     if (src) {
-      m = SkeletonUtils.clone(src);
-      m.scale.set(WALL_SCALE, WALL_SCALE, WALL_SCALE);
+      m = src.clone(`w2_wall_${x}_${y}`, true, false);
+      m.scaling.set(WALL_SCALE, WALL_SCALE, WALL_SCALE);
       m.position.set(x, getTerrainHeightWilds2(x, y), y);
       m.rotation.y = rotY;
     } else {
-      m = new THREE.Mesh(
-        new THREE.BoxGeometry(WALL_SCALE * 1.2, WALL_SCALE, WALL_SCALE * 0.4),
-        new THREE.MeshLambertMaterial({ color: 0xd8c08a })
-      );
+      m = BABYLON.MeshBuilder.CreateBox(`w2_wall_fb_${x}_${y}`, { width: WALL_SCALE * 1.2, height: WALL_SCALE, depth: WALL_SCALE * 0.4 }, s.scene);
+      m.material = mat(s.scene, `w2WallMat_${x}_${y}`, "#d8c08a");
       m.position.set(x, WALL_SCALE / 2 + getTerrainHeightWilds2(x, y), y);
       m.rotation.y = rotY;
     }
-    s.wilds2Group.add(m);
+    m.parent = s.wilds2Group;
     s.obstaclesWilds2.push({ x, y, r: 40, h: WALL_SCALE });
   };
 
@@ -2073,13 +1982,12 @@ export function initWilds2() {
   // Corner columns
   const cornerCol = loadedModels.arena_column;
   for (const [cx, cy] of [[borderIn, borderIn], [ms - borderIn, borderIn], [borderIn, ms - borderIn], [ms - borderIn, ms - borderIn]]) {
-    let m;
     if (cornerCol) {
-      m = SkeletonUtils.clone(cornerCol);
-      m.scale.set(50, 50, 50);
+      const m = cornerCol.clone(`w2_cornercol_${cx}_${cy}`, true, false);
+      m.scaling.set(50, 50, 50);
       m.position.set(cx, getTerrainHeightWilds2(cx, cy), cy);
       m.rotation.y = Math.random() * Math.PI;
-      s.wilds2Group.add(m);
+      m.parent = s.wilds2Group;
     }
     s.obstaclesWilds2.push({ x: cx, y: cy, r: 40, h: 50 });
   }
@@ -2089,19 +1997,19 @@ export function initWilds2() {
   if (borderPiece) {
     for (const z of [borderIn, ms - borderIn]) {
       for (const px of [edgeGap - 30, ms - edgeGap + 30]) {
-        const m = SkeletonUtils.clone(borderPiece);
-        m.scale.set(30, 30, 30);
+        const m = borderPiece.clone(`w2_border_${px}_${z}`, true, false);
+        m.scaling.set(30, 30, 30);
         m.position.set(px, getTerrainHeightWilds2(px, z), z);
         m.rotation.y = Math.PI / 2;
-        s.wilds2Group.add(m);
+        m.parent = s.wilds2Group;
       }
     }
     for (const x of [borderIn, ms - borderIn]) {
       for (const pz of [edgeGap - 30, ms - edgeGap + 30]) {
-        const m = SkeletonUtils.clone(borderPiece);
-        m.scale.set(30, 30, 30);
+        const m = borderPiece.clone(`w2_border_${x}_${pz}`, true, false);
+        m.scaling.set(30, 30, 30);
         m.position.set(x, getTerrainHeightWilds2(x, pz), pz);
-        s.wilds2Group.add(m);
+        m.parent = s.wilds2Group;
       }
     }
   }
@@ -2109,16 +2017,16 @@ export function initWilds2() {
   // ── Portal back to The Wilds (orange glow portal, near pyramid) ──
   s.desertPortalWilds2 = createPortal(0xff8800);
   s.desertPortalWilds2.group.position.set(ms / 2 + 600, 30, ms / 2);
-  s.wilds2Group.add(s.desertPortalWilds2.group);
+  s.desertPortalWilds2.group.parent = s.wilds2Group;
   // Banner poles flanking the portal
   if (loadedModels.arena_banner) {
     for (const off of [-180, 180]) {
-      const b = SkeletonUtils.clone(loadedModels.arena_banner);
-      b.scale.set(25, 25, 25);
+      const b = loadedModels.arena_banner.clone(`w2_banner_${off}`, true, false);
+      b.scaling.set(25, 25, 25);
       const px = ms / 2 + 600 + off;
       b.position.set(px, getTerrainHeightWilds2(px, ms / 2), ms / 2);
       b.rotation.y = Math.PI / 2;
-      s.wilds2Group.add(b);
+      b.parent = s.wilds2Group;
     }
   }
 
@@ -2149,47 +2057,42 @@ export function initWilds2() {
   }
 
   if (loadedModels.arena_soldier) {
-    const bossClone = SkeletonUtils.clone(loadedModels.arena_soldier);
-    bossClone.scale.set(120, 120, 120);
+    const bossClone = loadedModels.arena_soldier.clone("w2_boss_clone", true, false);
+    bossClone.scaling.set(120, 120, 120);
     bossClone.position.y = 0; // feet on terrain (model bottom is at y=0)
-    bossClone.traverse(child => {
-      if (child.isMesh) {
-        child.frustumCulled = false;
-        if (child.material) {
-          if (Array.isArray(child.material)) {
-            child.material = child.material.map(m => m.clone());
-          } else {
-            child.material = child.material.clone();
-          }
-        }
-      }
-    });
-    s.bossMesh = new THREE.Group();
-    s.bossMesh.add(bossClone);
+
+    s.bossMesh = new BABYLON.TransformNode("w2_boss_group_a", s.scene);
+    s.bossMesh.addChild(bossClone);
 
     if (loadedModels.arena_weapon_spear) {
-      const spear = SkeletonUtils.clone(loadedModels.arena_weapon_spear);
-      spear.scale.set(150, 150, 150); 
+      const spear = loadedModels.arena_weapon_spear.clone("w2_spear", true, false);
+      spear.scaling.set(150, 150, 150);
       spear.position.set(50, 50, 40);
-      spear.rotation.x = Math.PI / 2; 
+      spear.rotation.x = Math.PI / 2;
       spear.rotation.y = -Math.PI / 8;
-      s.bossMesh.add(spear);
+      s.bossMesh.addChild(spear);
     }
   } else {
-    const bGeo = new THREE.BoxGeometry(60, 60, 60);
-    const bMat = new THREE.MeshLambertMaterial({ color: 0xc25030 });
-    s.bossMesh = new THREE.Mesh(bGeo, bMat);
+    const bGeo = BABYLON.MeshBuilder.CreateBox("w2_boss_fb", { width: 60, height: 60, depth: 60 }, s.scene);
+    bGeo.material = mat(s.scene, "w2BossMat", "#c25030");
+    s.bossMesh = new BABYLON.TransformNode("w2_boss_group_b", s.scene);
+    s.bossMesh.addChild(bGeo);
   }
   s.bossMesh.position.set(bossCX, -5 + getTerrainHeightWilds2(bossCX, bossCY), bossCY);
-  s.wilds2Group.add(s.bossMesh);
+  s.bossMesh.parent = s.wilds2Group;
 
-  s.bossHpGroup = new THREE.Group();
-  const hbg = new THREE.Mesh(new THREE.PlaneGeometry(120, 10), new THREE.MeshBasicMaterial({ color: 0x222222 }));
-  s.bossHpFg = new THREE.Mesh(new THREE.PlaneGeometry(120, 10), new THREE.MeshBasicMaterial({ color: 0xaa2222 }));
-  s.bossHpFg.position.z = 0.2;
-  s.bossHpGroup.add(hbg, s.bossHpFg);
+  s.bossHpGroup = new BABYLON.TransformNode("w2_boss_hp", s.scene);
+  s.bossHpGroup.billboardMode = BABYLON.Mesh.BILLBOARDMODE_ALL;
+  const hbg = BABYLON.MeshBuilder.CreateGround("w2_boss_hp_bg", { width: 120, depth: 10, updatable: true }, s.scene);
+  hbg.material = mat(s.scene, "w2BossHpBgMat", "#222222", { disableLighting: true });
+  const hfg = BABYLON.MeshBuilder.CreateGround("w2_boss_hp_fg", { width: 120, depth: 10, updatable: true }, s.scene);
+  hfg.material = mat(s.scene, "w2BossHpFgMat", "#aa2222", { disableLighting: true });
+  hfg.position.z = 0.2;
+  s.bossHpGroup.addChild(hbg);
+  s.bossHpGroup.addChild(hfg);
+  s.bossHpFg = hfg;
   s.bossHpGroup.position.set(bossCX, 150 + getTerrainHeightWilds2(bossCX, bossCY), bossCY);
-  s.wilds2Group.add(s.bossHpGroup);
+  s.bossHpGroup.parent = s.wilds2Group;
 
   // Stairs + columns framing the boss arena in front of the pyramid
   const bossArenaProps = [
@@ -2205,13 +2108,13 @@ export function initWilds2() {
   for (const p of bossArenaProps) {
     const src = loadedModels[p.key];
     if (!src) continue;
-    const m = SkeletonUtils.clone(src);
-    m.scale.set(p.sc, p.sc, p.sc);
+    const m = src.clone(`w2_bossprop_${p.key}_${p.dx}_${p.dy}`, true, false);
+    m.scaling.set(p.sc, p.sc, p.sc);
     const px = bossCX + p.dx;
     const py = bossCY + p.dy;
     m.position.set(px, getTerrainHeightWilds2(px, py), py);
     m.rotation.y = p.rot;
-    s.wilds2Group.add(m);
+    m.parent = s.wilds2Group;
   }
   // Weapon racks guarding the boss
   for (const p of [
@@ -2220,13 +2123,13 @@ export function initWilds2() {
   ]) {
     const src = loadedModels[p.key];
     if (!src) continue;
-    const m = SkeletonUtils.clone(src);
-    m.scale.set(20, 20, 20);
+    const m = src.clone(`w2_rack_${p.dx}_${p.dy}`, true, false);
+    m.scaling.set(20, 20, 20);
     const px = bossCX + p.dx;
     const py = bossCY + p.dy;
     m.position.set(px, getTerrainHeightWilds2(px, py), py);
     m.rotation.y = Math.PI / 2;
-    s.wilds2Group.add(m);
+    m.parent = s.wilds2Group;
   }
   // Trophy pedestals beside the pyramid
   if (loadedModels.arena_trophy) {
@@ -2234,11 +2137,11 @@ export function initWilds2() {
       const ang = (i / 4) * Math.PI * 2 + Math.PI / 4;
       const px = ms / 2 + Math.cos(ang) * 500;
       const py = ms / 2 + Math.sin(ang) * 500;
-      const m = SkeletonUtils.clone(loadedModels.arena_trophy);
-      m.scale.set(20, 20, 20);
+      const m = loadedModels.arena_trophy.clone(`w2_trophy_${i}`, true, false);
+      m.scaling.set(20, 20, 20);
       m.position.set(px, getTerrainHeightWilds2(px, py), py);
       m.rotation.y = Math.atan2(ms / 2 - px, ms / 2 - py);
-      s.wilds2Group.add(m);
+      m.parent = s.wilds2Group;
     }
   }
 

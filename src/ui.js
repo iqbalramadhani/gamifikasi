@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as BABYLON from "babylonjs";
 import { state } from './state.js';
 import { mapSize, weaponList, armorList, helmetList, bootList, lootTable, consumableItems, WILDS2_MIN_LEVEL } from './constants.js';
 import { playSound } from './audio.js';
@@ -646,12 +646,13 @@ export function updateSpeechBubbles() {
   }
 
   if (nearest) {
-    const v3 = new THREE.Vector3(nearest.x, 60, nearest.z);
-    v3.project(s.camera);
-    const sx = (v3.x * 0.5 + 0.5) * window.innerWidth;
-    const sy = (-(v3.y * 0.5) + 0.5) * window.innerHeight;
+    const worldPos = new BABYLON.Vector3(nearest.x, 60, nearest.z);
+    const viewMatrix = s.camera.viewportMatrix || s.camera.getViewport().matrix;
+    const projected = BABYLON.Vector3.Project(worldPos, BABYLON.Matrix.Identity(), viewMatrix, s.camera.getProjectionMatrix());
+    const sx = (projected.x * 0.5 + 0.5) * window.innerWidth;
+    const sy = (-(projected.y * 0.5) + 0.5) * window.innerHeight;
 
-    if (v3.z < 1) { // in front of camera
+    if (projected.z < 1) { // in front of camera (Babylon's Project returns z in [0,1] viewport NDC after matrix; z<1 keeps it in-viewport)
       if (currentBubbleNpc !== nearest.id) {
         currentBubbleNpc = nearest.id;
         const quote = nearest.speech[0];
@@ -982,7 +983,7 @@ function makeSparkTexture() {
   g.addColorStop(1,   'rgba(255,255,255,0)');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, 96, 32);
-  return new THREE.CanvasTexture(c);
+  return new BABYLON.DynamicTexture("sparkTex", c, state.scene, false, true);
 }
 
 window.equipWeapon = (idx) => {
@@ -997,37 +998,44 @@ window.equipWeapon = (idx) => {
     const bs = s.swordBaseScale || { x: 100, y: 180, z: 320 };
     const visualTier = Math.min(idx, 3);
     const factor = 1 + visualTier * 0.15;
-    s.playerSwordMesh.scale.set(bs.x * factor, bs.y * factor, bs.z * factor);
+    s.playerSwordMesh.scaling.set(bs.x * factor, bs.y * factor, bs.z * factor);
 
-    if (s.weaponAuraLight) {
-      s.playerSwordMesh.remove(s.weaponAuraLight);
-      s.weaponAuraLight = null;
-    }
-    if (s.weaponAuraGroup) {
-      s.scene.remove(s.weaponAuraGroup);
-      s.weaponAuraGroup = null;
-    }
-    if (s.auraBursts) {
-      s.scene.remove(s.auraBursts);
-      s.auraBursts = null;
+    if (s.playerSwordMesh.getChildren) {
+      // Remove existing aura children from sword
+      const children = s.playerSwordMesh.getDescendants();
+      for (const c of children) {
+        if (c.name?.startsWith("aura_")) { c.dispose(); }
+      }
     }
 
-    s.weaponAuraGroup = new THREE.Group();
-    s.scene.add(s.weaponAuraGroup);
+    if (s.weaponAuraGroup) { s.weaponAuraGroup.dispose(); s.weaponAuraGroup = null; }
+    if (s.auraBursts) { s.auraBursts.dispose(); s.auraBursts = null; }
 
-    const coreGeo = new THREE.CylinderGeometry(0.12, 0.28, 6, 5, 1, true);
-    const sparkGeo = new THREE.PlaneGeometry(0.5, 1.6, 1, 3);
-    const burstGeo = new THREE.SphereGeometry(0.5, 4, 4);
-    const sparkTex = makeSparkTexture();
+    // Create aura group as sibling under sceneMount
+    s.weaponAuraGroup = new BABYLON.TransformNode("aura_group", s.scene);
+    s.weaponAuraGroup.parent = s.sceneMount;
 
-    // Layer 1 — core wisps (40, shared material)
-    const coreMat = new THREE.MeshBasicMaterial({
-      color: wNext.color, transparent: true, opacity: 0.55,
-      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
-    });
+    const wColor = BABYLON.Color3.FromHexString(wNext.color || "#ff0000");
+
+    // Layer 1 — core wisps (40, shared emissive material)
+    const coreMat = new BABYLON.StandardMaterial("aura_core_mat", s.scene);
+    coreMat.diffuseColor = BABYLON.Color3.Black();
+    coreMat.emissiveColor = wColor.clone();
+    coreMat.alpha = 0.55;
+    coreMat.disableLighting = true;
+    coreMat.backFaceCulling = false;
+
     for (let i = 0; i < 40; i++) {
-      const p = new THREE.Mesh(coreGeo, coreMat);
-      p.userData = {
+      const m = BABYLON.MeshBuilder.CreateCylinder("aura_core_" + i, {
+        diameterTop: 0.24, diameterBottom: 0.56, height: 6, tessellation: 5,
+      }, s.scene);
+      m.material = coreMat;
+      m.position.set(
+        (Math.random() - 0.5) * 3,
+        Math.random() * 3,
+        (Math.random() - 0.5) * 3
+      );
+      m.userData = {
         t: Math.random(),
         vt: 0.004 + Math.random() * 0.006,
         r: 1.0 + Math.random() * 1.2,
@@ -1035,21 +1043,39 @@ window.equipWeapon = (idx) => {
         twist: 1.5 + Math.random(),
         animOffset: Math.random() * Math.PI * 2,
       };
-      s.weaponAuraGroup.add(p);
+      m.parent = s.weaponAuraGroup;
     }
 
-    // Layer 2 — sparks (60, individual materials for per-mesh tint/opacity)
+    // Layer 2 — sparks (60, individual material per-mesh for opacity)
+    const sparkTex = makeSparkTexture();
     for (let i = 0; i < 60; i++) {
       const isWhiteTint = i < 15;
       const c = isWhiteTint
-        ? new THREE.Color(wNext.color).lerp(new THREE.Color(0xffffff), 0.3)
-        : wNext.color;
+        ? BABYLON.Color3.Lerp(wColor, BABYLON.Color3.White(), 0.3)
+        : wColor.clone();
       const baseOp = 0.25 + Math.random() * 0.2;
-      const mat = new THREE.MeshBasicMaterial({
-        color: c, map: sparkTex, transparent: true, opacity: baseOp,
-        blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
-      });
-      const p = new THREE.Mesh(sparkGeo, mat);
+      const mat = new BABYLON.StandardMaterial("aura_spark_mat_" + i, s.scene);
+      mat.diffuseColor = BABYLON.Color3.Black();
+      mat.emissiveColor = c;
+      mat.alpha = baseOp;
+      mat.disableLighting = true;
+      mat.backFaceCulling = false;
+      if (sparkTex) {
+        mat.emissiveTexture = sparkTex;
+        mat.emissiveTexture.uOffset = 0;
+        mat.emissiveTexture.vOffset = 0;
+        mat.emissiveTexture.uScale = 0.5;
+        mat.emissiveTexture.vScale = 0.5;
+      }
+
+      const p = BABYLON.MeshBuilder.CreatePlane("aura_spark_" + i, { size: 1.6 }, s.scene);
+      p.scaling.x = 0.5 / 1.6;
+      p.material = mat;
+      p.position.set(
+        (Math.random() - 0.5) * 4,
+        Math.random() * 2,
+        (Math.random() - 0.5) * 4
+      );
       p.userData = {
         t: Math.random(),
         vt: 0.002 + Math.random() * 0.004,
@@ -1059,21 +1085,27 @@ window.equipWeapon = (idx) => {
         animOffset: Math.random() * Math.PI * 2,
         baseOp,
       };
-      s.weaponAuraGroup.add(p);
+      p.parent = s.weaponAuraGroup;
     }
 
-    // Layer 3 — attack burst pool (20, separate group, hidden when idle)
-    s.auraBursts = new THREE.Group();
-    s.scene.add(s.auraBursts);
-    const bMat = new THREE.MeshBasicMaterial({
-      color: wNext.color, transparent: true, opacity: 0,
-      blending: THREE.AdditiveBlending, depthWrite: false,
-    });
+    // Layer 3 — attack burst pool (20)
+    s.auraBursts = new BABYLON.TransformNode("aura_bursts", s.scene);
+    s.auraBursts.parent = s.sceneMount;
+
     for (let i = 0; i < 20; i++) {
-      const b = new THREE.Mesh(burstGeo, bMat);
-      b.visible = false;
-      b.userData = { life: 0, maxLife: 30, spd: 2.2 + Math.random() * 2.0, ang: 0 };
-      s.auraBursts.add(b);
+      const b = BABYLON.MeshBuilder.CreateSphere("aura_burst_" + i, { diameter: 1.0 }, s.scene);
+      const bMat = new BABYLON.StandardMaterial("aura_burst_mat_" + i, s.scene);
+      bMat.diffuseColor = BABYLON.Color3.Black();
+      bMat.emissiveColor = wColor.clone();
+      bMat.alpha = 0;
+      bMat.disableLighting = true;
+      b.material = bMat;
+      b.setEnabled(false);
+      b._burstLife = 0;
+      b._burstBaseScale = 1.0;
+      b._burstSpd = 2.2 + Math.random() * 2.0;
+      b.userData = { life: 0, maxLife: 30, spd: b._burstSpd, ang: 0 };
+      b.parent = s.auraBursts;
     }
   }
   updateInventoryUI();
@@ -1866,17 +1898,16 @@ export function setAutoWalkTarget(x, y) {
     s.autoWalkTarget.y = y;
   } else {
     s.autoWalkTarget = { x, y };
-    s.waypointMesh = new THREE.Mesh(
-      new THREE.RingGeometry(14, 18, 24),
-      new THREE.MeshBasicMaterial({
-        color: 0x00ff88,
-        transparent: true,
-        opacity: 0.85,
-        side: THREE.DoubleSide,
-      })
-    );
+    s.waypointMesh = BABYLON.MeshBuilder.CreateDisc("waypoint_ring", { radius: 18, tessellation: 24 }, s.scene);
+    const wpMat = new BABYLON.StandardMaterial("waypoint_mat", s.scene);
+    wpMat.diffuseColor = BABYLON.Color3.Black();
+    wpMat.emissiveColor = BABYLON.Color3.FromHexString("#00ff88");
+    wpMat.alpha = 0.85;
+    wpMat.disableLighting = true;
+    wpMat.backFaceCulling = false;
+    s.waypointMesh.material = wpMat;
     s.waypointMesh.rotation.x = -Math.PI / 2;
-    s.scene.add(s.waypointMesh);
+    s.waypointMesh.parent = s.sceneMount;
   }
 
   const terrainY = s.currentScene === 'wilds2'
@@ -1892,9 +1923,7 @@ export function setAutoWalkTarget(x, y) {
 export function clearAutoWalkTargetUI() {
   state.autoWalkTarget = null;
   if (state.waypointMesh) {
-    state.scene?.remove(state.waypointMesh);
-    state.waypointMesh.geometry?.dispose?.();
-    state.waypointMesh.material?.dispose?.();
+    state.waypointMesh.dispose();
     state.waypointMesh = null;
   }
   if (typeof drawMinimap === 'function') drawMinimap();

@@ -1,11 +1,39 @@
-import * as THREE from 'three';
-import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+import * as BABYLON from "babylonjs";
 import { state } from './state.js';
 import { mapSize, weaponList, armorList, enemyTemplates, enemyTemplates2, eliteTemplates, WILDS2_MIN_LEVEL, lootTable, consumableItems, statusEffects } from './constants.js';
 import { loadedModels, createEnemyMixer } from './model-loader.js';
 import { blocked, spawnParticles, spawnDamageText } from './helpers.js';
 import { spawnAtFreePos, spawnAtFreePosWilds2, getTerrainHeight, getTerrainHeightWilds2 } from './scenes.js';
 import { playSound } from './audio.js';
+
+function mat(scene, name, hex, opts = {}) {
+  const m = new BABYLON.StandardMaterial(name, scene);
+  if (hex !== undefined) m.diffuseColor = BABYLON.Color3.FromHexString(hex);
+  if (opts.emissive !== undefined) m.emissiveColor = BABYLON.Color3.FromHexString(opts.emissive);
+  if (opts.opacity !== undefined) m.alpha = opts.opacity;
+  if (opts.disableLighting) m.disableLighting = true;
+  return m;
+}
+
+// Convert a numeric hex colour (0xRRGGBB) to the "0xRRGGBB" string form
+// that BABYLON.Color3.FromHexString expects.
+function hexStr(n) {
+  return typeof n === "number"
+    ? "0x" + (n & 0xffffff).toString(16).padStart(6, "0")
+    : n;
+}
+
+// Unlit glowing projectile material (replaces Three's MeshBasicMaterial with
+// AdditiveBlending used for enemy/boss projectile visuals)
+function makeProjectileMat(colorHex, scene) {
+  const m = new BABYLON.StandardMaterial("proj_mat_" + Math.random(), scene);
+  m.diffuseColor = BABYLON.Color3.FromHexString(colorHex);
+  m.emissiveColor = m.diffuseColor.clone();
+  m.disableLighting = true;
+  m.blendingMode = BABYLON.BlendMode.Add;
+  m.backFaceCulling = false;
+  return m;
+}
 
 // ─── Enemy animation helper ───────────────────────────────────────────────────
 
@@ -126,31 +154,31 @@ export function spawnEnemy(ex, ey, scaleFactor = 1.0, isBossChild = false, force
   let animData = null;
 
   if (loadedModels[charKey]) {
-    const gltfEnemy = SkeletonUtils.clone(loadedModels[charKey]);
-    gltfEnemy.scale.set(7 * scaleFactor, 7 * scaleFactor, 7 * scaleFactor);
+    // Deep-clone the GLTF template; .clone(name, true, false) includes sub-meshes
+    const gltfEnemy = loadedModels[charKey].clone(charKey + "_enm_" + Math.random(), true, false);
+    gltfEnemy.scaling.setAll(7 * scaleFactor);
     gltfEnemy.position.y = -12;
-    gltfEnemy.traverse(child => {
-      if (child.isMesh) {
-        child.frustumCulled = false;
-        child.castShadow = true;
-        child.receiveShadow = true;
-        if (child.material) {
-          if (Array.isArray(child.material)) {
-            child.material = child.material.map(m => m.clone());
-          } else {
-            child.material = child.material.clone();
-          }
-        }
+    // Clone each sub-mesh's material to prevent shared-state corruption between enemies
+    const descendants = gltfEnemy.getDescendants ? gltfEnemy.getDescendants() : [];
+    for (const child of descendants) {
+      if (child.material && child.material.clone) {
+        child.material = child.material.clone();
       }
-    });
-    mesh = new THREE.Group();
-    mesh.add(gltfEnemy);
+    }
+    gltfEnemy.setEnabled(true);
+    mesh = new BABYLON.TransformNode("enemy_" + charKey + "_" + Math.random().toString(36).slice(2, 8), s.scene);
+    gltfEnemy.parent = mesh;
     eY = isFlying ? (isElite ? 42 : 35) : 15;
     animData = createEnemyMixer(charKey, gltfEnemy);
   } else {
-    const boxGeo = new THREE.BoxGeometry(20 * scaleFactor, 20 * scaleFactor, 20 * scaleFactor);
-    const boxMat = new THREE.MeshLambertMaterial({ color: isElite ? elite.auraColor : 0xff0000 });
-    mesh = new THREE.Mesh(boxGeo, boxMat);
+    const boxMesh = BABYLON.MeshBuilder.CreateBox(
+      "box_fallback_" + Math.random(),
+      { width: 20 * scaleFactor, height: 20 * scaleFactor, depth: 20 * scaleFactor },
+      s.scene
+    );
+    boxMesh.material = mat(s.scene, "box_fallback_mat_" + Math.random(),
+      isElite ? hexStr(elite.auraColor) : "0xff0000");
+    mesh = boxMesh;
     eY = isFlying ? (isElite ? 38 : 30) : 10;
   }
 
@@ -159,75 +187,110 @@ export function spawnEnemy(ex, ey, scaleFactor = 1.0, isBossChild = false, force
   let eliteLight = null;
 
   if (isElite) {
-    // Glowing ground aura ring
-    const auraGeo = new THREE.RingGeometry(eR * 0.8, eR * 1.45, 32);
-    const auraMat = new THREE.MeshBasicMaterial({
-      color: elite.auraColor,
-      transparent: true,
-      opacity: 0.8,
-      side: THREE.DoubleSide
-    });
-    auraMesh = new THREE.Mesh(auraGeo, auraMat);
+    // Glowing ground aura ring — Torus approximates Three's RingGeometry
+    const aRIn = eR * 0.8, aROut = eR * 1.45;
+    auraMesh = BABYLON.MeshBuilder.CreateTorus(
+      "aura_ring_" + Math.random(),
+      { diameters: 2 * aROut, thickness: 2 * (aROut - aRIn), tessellation: 32 },
+      s.scene
+    );
+    const auraM = mat(s.scene, "aura_mat_" + Math.random(), hexStr(elite.auraColor),
+      { emissive: hexStr(elite.auraColor), opacity: 0.8, disableLighting: true });
+    auraM.backFaceCulling = false;
+    auraMesh.material = auraM;
     auraMesh.rotation.x = -Math.PI / 2;
     auraMesh.position.y = isFlying ? -28 : -11;
-    mesh.add(auraMesh);
+    auraMesh.parent = mesh;
 
-    // Floating Golden Crown / Emblem
-    const crownGeo = new THREE.OctahedronGeometry(4.5 * (scaleFactor / elite.scaleBonus), 0);
-    const crownMat = new THREE.MeshBasicMaterial({ color: 0xffd700 });
-    crownMesh = new THREE.Mesh(crownGeo, crownMat);
+    // Floating Golden Crown / Emblem — Icosphere (segments:2) approximates OctahedronGeometry
+    const crownR = 4.5 * (scaleFactor / elite.scaleBonus);
+    crownMesh = BABYLON.MeshBuilder.CreateIcosphere(
+      "crown_" + Math.random(),
+      { diameter: 2 * crownR, segments: 2 },
+      s.scene
+    );
+    crownMesh.material = mat(s.scene, "crown_mat_" + Math.random(), "0xffd700",
+      { emissive: "0xffd700", disableLighting: true });
     crownMesh.position.y = isFlying ? 42 : 32;
-    mesh.add(crownMesh);
+    crownMesh.parent = mesh;
 
-    // Subtle colored point light
-    eliteLight = new THREE.PointLight(elite.auraColor, 1.8, 80);
+    // Subtle coloured point light.
+    // Babylon PointLight intensity is ~4× smaller than Three's; scale by 0.25 (retune in Phase 2).
+    eliteLight = new BABYLON.PointLight("elite_light_" + Math.random(), new BABYLON.Vector3(0, 0, 0), s.scene);
+    eliteLight.diffuse = BABYLON.Color3.FromHexString(hexStr(elite.auraColor));
+    eliteLight.intensity = Math.min(1.8 * 0.25, 1.0);
+    eliteLight.range = 80;
     eliteLight.position.y = 12;
-    mesh.add(eliteLight);
+    eliteLight.parent = mesh;
   }
 
   const levelMulti = 1 + s.player.level * 0.1;
   hp *= levelMulti;
   mesh.position.set(ex, eY, ey);
-  s.scene.add(mesh);
+  // Hot-path: mount into sceneMount (not s.scene directly); removal uses setEnabled(false), not dispose()
+  mesh.parent = s.sceneMount;
 
   const hpBarWidth = isElite ? 38 : 24;
   const hpBarHeight = isElite ? 5.5 : 4;
-  const hpGeo = new THREE.PlaneGeometry(hpBarWidth, hpBarHeight);
-  const hpBgMat = new THREE.MeshBasicMaterial({ color: isElite ? 0x0a0a0a : 0x222222 });
-  const hpFgMat = new THREE.MeshBasicMaterial({ color: isElite ? 0xff0055 : 0x008800 });
-  const hpGroup = new THREE.Group();
-  const hpBg = new THREE.Mesh(hpGeo, hpBgMat);
-  const hpFg = new THREE.Mesh(hpGeo, hpFgMat);
+  // PlaneGeometry → CreateGround (flat XZ quad); billboardMode replaces per-frame lookAt(camera)
+  const hpGeo = BABYLON.MeshBuilder.CreateGround(
+    "hp_bar_" + Math.random(),
+    { width: hpBarWidth, depth: hpBarHeight, updatable: false },
+    s.scene
+  );
+  const hpBgMat = mat(s.scene, "hp_bg_mat_" + Math.random(),
+    isElite ? "0x0a0a0a" : "0x222222",
+    { emissive: isElite ? "0x0a0a0a" : "0x222222", disableLighting: true });
+  const hpFgMat = mat(s.scene, "hp_fg_mat_" + Math.random(),
+    isElite ? "0xff0055" : "0x008800",
+    { emissive: isElite ? "0xff0055" : "0x008800", disableLighting: true });
+  const hpGroup = new BABYLON.TransformNode("hp_group_" + Math.random(), s.scene);
+  hpGroup.billboardMode = BABYLON.BillboardMode.ALL;
+  const hpBg = hpGeo.clone ? hpGeo.clone("hp_bg_" + Math.random(), true) : hpGeo;
+  hpBg.material = hpBgMat;
+  const hpFg = hpGeo.clone ? hpGeo.clone("hp_fg_" + Math.random(), true) : hpGeo;
+  hpFg.material = hpFgMat;
   hpFg.position.z = 0.1;
-  hpGroup.add(hpBg, hpFg);
+  hpBg.parent = hpGroup;
+  hpFg.parent = hpGroup;
 
   if (isElite) {
     // Golden border frame for Elite HP
-    const frameGeo = new THREE.PlaneGeometry(hpBarWidth + 2.5, hpBarHeight + 2);
-    const frameMat = new THREE.MeshBasicMaterial({ color: 0xffd700 });
-    const frameMesh = new THREE.Mesh(frameGeo, frameMat);
+    const frameGeo = BABYLON.MeshBuilder.CreateGround(
+      "hp_frame_" + Math.random(),
+      { width: hpBarWidth + 2.5, depth: hpBarHeight + 2, updatable: false },
+      s.scene
+    );
+    frameGeo.material = mat(s.scene, "hp_frame_mat_" + Math.random(), "0xffd700",
+      { emissive: "0xffd700", disableLighting: true });
+    const frameMesh = frameGeo;
     frameMesh.position.z = -0.05;
-    hpGroup.add(frameMesh);
+    frameMesh.parent = hpGroup;
 
-    // Star icon marker on left of HP bar
-    const starGeo = new THREE.OctahedronGeometry(2.5, 0);
-    const starMat = new THREE.MeshBasicMaterial({ color: 0xffd700 });
-    const starMesh = new THREE.Mesh(starGeo, starMat);
+    // Star icon marker on left of HP bar — Icosphere approximates OctahedronGeometry
+    const starMesh = BABYLON.MeshBuilder.CreateIcosphere(
+      "star_icon_" + Math.random(),
+      { diameter: 5, segments: 2 },
+      s.scene
+    );
+    starMesh.material = mat(s.scene, "star_mat_" + Math.random(), "0xffd700",
+      { emissive: "0xffd700", disableLighting: true });
     starMesh.position.set(-hpBarWidth / 2 - 4.5, 0, 0.2);
-    hpGroup.add(starMesh);
+    starMesh.parent = hpGroup;
   }
 
-  s.scene.add(hpGroup);
+  // Hot-path: mount HP group into sceneMount; removal later uses setEnabled(false)
+  hpGroup.parent = s.sceneMount;
 
   const dx = (Math.random() - 0.5) * 2;
   const dy = (Math.random() - 0.5) * 2;
-  // Cache limb references to avoid per-frame traverse()
+  // Cache limb references to avoid per-frame traversal
+  // Use getDescendants() instead of Three's traverse()
   const limbs = { 'leg-left': null, 'leg-right': null, 'arm-left': null, 'arm-right': null };
-  mesh.traverse(child => {
-    if (child.name && limbs.hasOwnProperty(child.name)) {
-      limbs[child.name] = child;
-    }
-  });
+  const meshDesc = mesh.getDescendants ? mesh.getDescendants() : [];
+  for (const c of meshDesc) {
+    if (c.name && limbs.hasOwnProperty(c.name)) limbs[c.name] = c;
+  }
 
   s.enemies.push({
     x: ex, y: ey, r: eR, meshY: eY, dx, dy,
@@ -287,35 +350,29 @@ export function spawnEnemy2(ex, ey, scaleFactor = 1.0, isBossChild = false, forc
   let mesh, eY;
   let animData = null;
   if (loadedModels[charKey]) {
-    const gltfEnemy = SkeletonUtils.clone(loadedModels[charKey]);
-    if (charKey === 'arena_soldier') {
-      gltfEnemy.scale.set(25 * scaleFactor, 25 * scaleFactor, 25 * scaleFactor);
-    } else {
-      gltfEnemy.scale.set(7 * scaleFactor, 7 * scaleFactor, 7 * scaleFactor);
-    }
+    const gltfEnemy = loadedModels[charKey].clone(charKey + "_enm2_" + Math.random(), true, false);
+    const sc = charKey === 'arena_soldier' ? 25 * scaleFactor : 7 * scaleFactor;
+    gltfEnemy.scaling.setAll(sc);
     gltfEnemy.position.y = -12;
-    gltfEnemy.traverse(child => {
-      if (child.isMesh) {
-        child.frustumCulled = false;
-        child.castShadow = true;
-        child.receiveShadow = true;
-        if (child.material) {
-          if (Array.isArray(child.material)) {
-            child.material = child.material.map(m => m.clone());
-          } else {
-            child.material = child.material.clone();
-          }
-        }
-      }
-    });
-    mesh = new THREE.Group();
-    mesh.add(gltfEnemy);
+    // Clone sub-mesh materials to prevent shared-state corruption
+    const d2 = gltfEnemy.getDescendants ? gltfEnemy.getDescendants() : [];
+    for (const child of d2) {
+      if (child.material && child.material.clone) child.material = child.material.clone();
+    }
+    gltfEnemy.setEnabled(true);
+    mesh = new BABYLON.TransformNode("enemy2_" + charKey + "_" + Math.random().toString(36).slice(2, 8), s.scene);
+    gltfEnemy.parent = mesh;
     eY = isFlying ? (isElite ? 42 : 35) : 15;
     animData = createEnemyMixer(charKey, gltfEnemy);
   } else {
-    const boxGeo = new THREE.BoxGeometry(20 * scaleFactor, 20 * scaleFactor, 20 * scaleFactor);
-    const boxMat = new THREE.MeshLambertMaterial({ color: isElite ? elite.auraColor : 0xff8800 });
-    mesh = new THREE.Mesh(boxGeo, boxMat);
+    const boxMesh = BABYLON.MeshBuilder.CreateBox(
+      "box_fallback2_" + Math.random(),
+      { width: 20 * scaleFactor, height: 20 * scaleFactor, depth: 20 * scaleFactor },
+      s.scene
+    );
+    boxMesh.material = mat(s.scene, "box_fallback_mat2_" + Math.random(),
+      isElite ? hexStr(elite.auraColor) : "0xff8800");
+    mesh = boxMesh;
     eY = isFlying ? (isElite ? 38 : 30) : 10;
   }
 
@@ -324,75 +381,104 @@ export function spawnEnemy2(ex, ey, scaleFactor = 1.0, isBossChild = false, forc
   let eliteLight = null;
 
   if (isElite) {
-    // Glowing ground aura ring
-    const auraGeo = new THREE.RingGeometry(eR * 0.8, eR * 1.45, 32);
-    const auraMat = new THREE.MeshBasicMaterial({
-      color: elite.auraColor,
-      transparent: true,
-      opacity: 0.8,
-      side: THREE.DoubleSide
-    });
-    auraMesh = new THREE.Mesh(auraGeo, auraMat);
+    // Glowing ground aura ring — Torus approximates Three's RingGeometry
+    const aRIn2 = eR * 0.8, aROut2 = eR * 1.45;
+    auraMesh = BABYLON.MeshBuilder.CreateTorus(
+      "aura_ring2_" + Math.random(),
+      { diameters: 2 * aROut2, thickness: 2 * (aROut2 - aRIn2), tessellation: 32 },
+      s.scene
+    );
+    const auraM2 = mat(s.scene, "aura_mat2_" + Math.random(), hexStr(elite.auraColor),
+      { emissive: hexStr(elite.auraColor), opacity: 0.8, disableLighting: true });
+    auraM2.backFaceCulling = false;
+    auraMesh.material = auraM2;
     auraMesh.rotation.x = -Math.PI / 2;
     auraMesh.position.y = isFlying ? -28 : -11;
-    mesh.add(auraMesh);
+    auraMesh.parent = mesh;
 
     // Floating Golden Crown / Emblem
-    const crownGeo = new THREE.OctahedronGeometry(4.5 * (scaleFactor / elite.scaleBonus), 0);
-    const crownMat = new THREE.MeshBasicMaterial({ color: 0xffd700 });
-    crownMesh = new THREE.Mesh(crownGeo, crownMat);
+    const crownR2 = 4.5 * (scaleFactor / elite.scaleBonus);
+    crownMesh = BABYLON.MeshBuilder.CreateIcosphere(
+      "crown2_" + Math.random(),
+      { diameter: 2 * crownR2, segments: 2 },
+      s.scene
+    );
+    crownMesh.material = mat(s.scene, "crown_mat2_" + Math.random(), "0xffd700",
+      { emissive: "0xffd700", disableLighting: true });
     crownMesh.position.y = isFlying ? 42 : 32;
-    mesh.add(crownMesh);
+    crownMesh.parent = mesh;
 
-    // Subtle colored point light
-    eliteLight = new THREE.PointLight(elite.auraColor, 1.8, 80);
+    // Coloured point light — Babylon intensity is ~4× smaller than Three's
+    eliteLight = new BABYLON.PointLight("elite_light2_" + Math.random(), new BABYLON.Vector3(0, 0, 0), s.scene);
+    eliteLight.diffuse = BABYLON.Color3.FromHexString(hexStr(elite.auraColor));
+    eliteLight.intensity = Math.min(1.8 * 0.25, 1.0);
+    eliteLight.range = 80;
     eliteLight.position.y = 12;
-    mesh.add(eliteLight);
+    eliteLight.parent = mesh;
   }
 
   // Stronger scaling than the base Wilds tier
   const levelMulti = 1 + s.player.level * 0.12;
   hp *= levelMulti;
   mesh.position.set(ex, eY, ey);
-  s.scene.add(mesh);
+  // Hot-path: mount into sceneMount
+  mesh.parent = s.sceneMount;
 
   const hpBarWidth = isElite ? 38 : 24;
   const hpBarHeight = isElite ? 5.5 : 4;
-  const hpGeo = new THREE.PlaneGeometry(hpBarWidth, hpBarHeight);
-  const hpBgMat = new THREE.MeshBasicMaterial({ color: isElite ? 0x0a0a0a : 0x222222 });
-  const hpFgMat = new THREE.MeshBasicMaterial({ color: isElite ? 0xff0055 : 0xaa2200 });
-  const hpGroup = new THREE.Group();
-  const hpBg = new THREE.Mesh(hpGeo, hpBgMat);
-  const hpFg = new THREE.Mesh(hpGeo, hpFgMat);
-  hpFg.position.z = 0.1;
-  hpGroup.add(hpBg, hpFg);
+  const hpGeo2 = BABYLON.MeshBuilder.CreateGround(
+    "hp_bar2_" + Math.random(),
+    { width: hpBarWidth, depth: hpBarHeight, updatable: false },
+    s.scene
+  );
+  const hpBgMat2 = mat(s.scene, "hp_bg_mat2_" + Math.random(),
+    isElite ? "0x0a0a0a" : "0x222222",
+    { emissive: isElite ? "0x0a0a0a" : "0x222222", disableLighting: true });
+  const hpFgMat2 = mat(s.scene, "hp_fg_mat2_" + Math.random(),
+    isElite ? "0xff0055" : "0xaa2200",
+    { emissive: isElite ? "0xff0055" : "0xaa2200", disableLighting: true });
+  const hpGroup = new BABYLON.TransformNode("hp_group2_" + Math.random(), s.scene);
+  hpGroup.billboardMode = BABYLON.BillboardMode.ALL;
+  const hpBg2 = hpGeo2.clone("hp_bg2_" + Math.random(), true);
+  hpBg2.material = hpBgMat2;
+  const hpFg2 = hpGeo2.clone("hp_fg2_" + Math.random(), true);
+  hpFg2.material = hpFgMat2;
+  hpFg2.position.z = 0.1;
+  hpBg2.parent = hpGroup;
+  hpFg2.parent = hpGroup;
 
   if (isElite) {
-    // Golden border frame for Elite HP
-    const frameGeo = new THREE.PlaneGeometry(hpBarWidth + 2.5, hpBarHeight + 2);
-    const frameMat = new THREE.MeshBasicMaterial({ color: 0xffd700 });
-    const frameMesh = new THREE.Mesh(frameGeo, frameMat);
-    frameMesh.position.z = -0.05;
-    hpGroup.add(frameMesh);
+    const frameGeo2 = BABYLON.MeshBuilder.CreateGround(
+      "hp_frame2_" + Math.random(),
+      { width: hpBarWidth + 2.5, depth: hpBarHeight + 2, updatable: false },
+      s.scene
+    );
+    frameGeo2.material = mat(s.scene, "hp_frame_mat2_" + Math.random(), "0xffd700",
+      { emissive: "0xffd700", disableLighting: true });
+    frameGeo2.position.z = -0.05;
+    frameGeo2.parent = hpGroup;
 
-    // Star icon marker on left of HP bar
-    const starGeo = new THREE.OctahedronGeometry(2.5, 0);
-    const starMat = new THREE.MeshBasicMaterial({ color: 0xffd700 });
-    const starMesh = new THREE.Mesh(starGeo, starMat);
-    starMesh.position.set(-hpBarWidth / 2 - 4.5, 0, 0.2);
-    hpGroup.add(starMesh);
+    const starMesh2 = BABYLON.MeshBuilder.CreateIcosphere(
+      "star_icon2_" + Math.random(),
+      { diameter: 5, segments: 2 },
+      s.scene
+    );
+    starMesh2.material = mat(s.scene, "star_mat2_" + Math.random(), "0xffd700",
+      { emissive: "0xffd700", disableLighting: true });
+    starMesh2.position.set(-hpBarWidth / 2 - 4.5, 0, 0.2);
+    starMesh2.parent = hpGroup;
   }
 
-  s.scene.add(hpGroup);
+  // Hot-path: mount HP group into sceneMount
+  hpGroup.parent = s.sceneMount;
 
   const dx = (Math.random() - 0.5) * 2;
   const dy = (Math.random() - 0.5) * 2;
   const limbs = { 'leg-left': null, 'leg-right': null, 'arm-left': null, 'arm-right': null };
-  mesh.traverse(child => {
-    if (child.name && limbs.hasOwnProperty(child.name)) {
-      limbs[child.name] = child;
-    }
-  });
+  const meshDesc2 = mesh.getDescendants ? mesh.getDescendants() : [];
+  for (const c of meshDesc2) {
+    if (c.name && limbs.hasOwnProperty(c.name)) limbs[c.name] = c;
+  }
   s.enemies.push({
     x: ex, y: ey, r: eR, meshY: eY, dx, dy,
     hp, maxHp: hp, baseSpeed, damage: damage || 10,
@@ -600,9 +686,8 @@ export function move(dt) {
 export function clearAutoWalkTarget() {
   state.autoWalkTarget = null;
   if (state.waypointMesh) {
-    state.scene?.remove(state.waypointMesh);
-    state.waypointMesh.geometry?.dispose?.();
-    state.waypointMesh.material?.dispose?.();
+    // Waypoint mesh is a one-shot low-churn resource: fully dispose it
+    state.waypointMesh.dispose();
     state.waypointMesh = null;
   }
 }
@@ -637,10 +722,15 @@ function animatePlayer(walking) {
     s.gltfPlayerRef.position.y = -15; // Set base offset for physics
   } else if (s.gltfPlayerRef) {
     if (!s.playerLegL) {
-      s.playerLegL = s.gltfPlayerRef.getObjectByName('leg-left');
-      s.playerLegR = s.gltfPlayerRef.getObjectByName('leg-right');
-      s.playerArmL = s.gltfPlayerRef.getObjectByName('arm-left');
-      s.playerArmR = s.gltfPlayerRef.getObjectByName('arm-right');
+      // Babylon equivalent of getObjectByName: walk the descendant tree
+      const findNode = (parent, name) => {
+        const ds = parent.getDescendants ? parent.getDescendants() : [];
+        return ds.find(n => n.name === name) || null;
+      };
+      s.playerLegL = findNode(s.gltfPlayerRef, 'leg-left');
+      s.playerLegR = findNode(s.gltfPlayerRef, 'leg-right');
+      s.playerArmL = findNode(s.gltfPlayerRef, 'arm-left');
+      s.playerArmR = findNode(s.gltfPlayerRef, 'arm-right');
     }
     const faceAngle = Math.atan2(s.player.facingX, s.player.facingY) + Math.PI / 2;
     s.gltfPlayerRef.rotation.y = faceAngle;
@@ -702,11 +792,13 @@ export function attack() {
   playSound('dash');
 
   // Trigger aura burst
+  // Three.js .visible → Babylon .setEnabled(true); .userData → direct property
   if (s.auraBursts) {
-    for (const b of s.auraBursts.children) {
-      b.visible = true;
-      b.userData.life = 30;
-      b.userData.ang  = Math.random() * Math.PI * 2;
+    const burstChildren = s.auraBursts.getChildren ? s.auraBursts.getChildren() : [];
+    for (const b of burstChildren) {
+      b.setEnabled(true);
+      b._burstLife = 30;
+      b._burstAng  = Math.random() * Math.PI * 2;
     }
   }
 }
@@ -802,15 +894,19 @@ function doTripleHit(finalHit = false) {
   const angle = Math.atan2(s.player.facingY, s.player.facingX);
   const px = s.player.x + Math.cos(angle) * 40;
   const pz = s.player.y + Math.sin(angle) * 40;
-  const slashGeo = new THREE.BoxGeometry(10 * slashScale, 2 * slashScale, 180 * slashScale);
-  const slashMat = new THREE.MeshBasicMaterial({
-    color: finalHit ? 0xffff44 : 0xffd700, transparent: true,
-    opacity: finalHit ? 0.95 : 0.85
-  });
-  const slashMesh = new THREE.Mesh(slashGeo, slashMat);
+  const slashColor = finalHit ? "0xffff44" : "0xffd700";
+  const slashMesh = BABYLON.MeshBuilder.CreateBox(
+    "slash_triple_" + Math.random(),
+    { width: 10 * slashScale, height: 2 * slashScale, depth: 180 * slashScale },
+    s.scene
+  );
+  const slashMat = mat(s.scene, "slash_triple_mat_" + Math.random(), slashColor,
+    { emissive: slashColor, opacity: finalHit ? 0.95 : 0.85, disableLighting: true });
+  slashMesh.material = slashMat;
   slashMesh.position.set(px, 15, pz);
   slashMesh.rotation.y = -angle;
-  s.scene.add(slashMesh);
+  // Hot-path: mount into sceneMount; particle update() in environment.js calls setEnabled(false) when life <= 0
+  slashMesh.parent = s.sceneMount;
   s.particles.push({
     mesh: slashMesh,
     dx: Math.cos(angle) * 12,
@@ -890,15 +986,19 @@ function doMeleeHit() {
   const px = s.player.x + Math.cos(angle) * 40;
   const pz = s.player.y + Math.sin(angle) * 40;
 
-  const slashGeo = new THREE.BoxGeometry(10, 2, 180);
-  const slashMat = new THREE.MeshBasicMaterial({ color: 0xffd700, transparent: true, opacity: 0.9 });
-  const slashMesh = new THREE.Mesh(slashGeo, slashMat);
-  
+  const slashMesh = BABYLON.MeshBuilder.CreateBox(
+    "slash_melee_" + Math.random(),
+    { width: 10, height: 2, depth: 180 },
+    s.scene
+  );
+  const slashMat = mat(s.scene, "slash_melee_mat_" + Math.random(), "0xffd700",
+    { emissive: "0xffd700", opacity: 0.9, disableLighting: true });
+  slashMesh.material = slashMat;
   slashMesh.position.set(px, 15, pz);
   slashMesh.rotation.y = -angle; // Align with facing direction
-  
-  s.scene.add(slashMesh);
-  
+  // Hot-path: mount into sceneMount; environment.js particle update() calls setEnabled(false) when life <= 0
+  slashMesh.parent = s.sceneMount;
+
   s.particles.push({
     mesh: slashMesh,
     dx: Math.cos(angle) * 12, // Fly forward
@@ -916,40 +1016,51 @@ export function triggerInteractable(it, index) {
   const s = state;
   it.hp -= s.player.attackDamage;
   if (it.hp > 0) return;
-  
+
   if (it.type === 'chest' && !it.looted) {
     it.looted = true;
-    const lid = it.mesh.children[1];
+    // In Babylon the chest's lid is a child of the chest TransformNode;
+    // helpers.js sets it up as it.mesh.getChildMeshes()[1] or via named reference.
+    // Access the first non-container child:
+    const children = it.mesh.getChildMeshes ? it.mesh.getChildMeshes() : [];
+    const lid = children.find(c => c.name && c.name.includes("lid")) || children[1];
     if (lid) lid.rotation.x = -Math.PI / 2.5; // Buka tutup peti
     playSound('coin');
     spawnParticles(it.x, it.y, 0xffff00, 15, 'heal');
     spawnDamageText(it.x, 40, it.y, `Harta Terbuka!`, '#ffff00');
-    
-    // Spawn gold
-    for(let j=0; j<4; j++) {
-      const dropMesh = new THREE.Mesh(
-        new THREE.OctahedronGeometry(4, 0),
-        new THREE.MeshLambertMaterial({ color: 0xffd700 })
+
+    // Spawn gold — Icosphere approximates OctahedronGeometry
+    for (let j = 0; j < 4; j++) {
+      const dropMesh = BABYLON.MeshBuilder.CreateIcosphere(
+        "chest_gold_" + j + "_" + Math.random(),
+        { diameter: 8, segments: 2 },
+        s.scene
       );
-      dropMesh.position.set(it.x + (Math.random()-0.5)*20, 5, it.y + (Math.random()-0.5)*20);
-      s.scene.add(dropMesh);
-      s.lootDrops.push({ x: dropMesh.position.x, y: dropMesh.position.z, taken: false, type: 'gold', item: {id: 'gold', name: 'Gold', value: 10}, mesh: dropMesh });
+      dropMesh.material = mat(s.scene, "chest_gold_mat_" + j, "0xffd700",
+        { emissive: "0xffd700", disableLighting: true });
+      dropMesh.position.set(it.x + (Math.random() - 0.5) * 20, 5, it.y + (Math.random() - 0.5) * 20);
+      // Hot-path: loot drops are in s.lootDrops; helpers.js setEnabled(false) on pickup
+      dropMesh.parent = s.sceneMount;
+      s.lootDrops.push({ x: dropMesh.position.x, y: dropMesh.position.z, taken: false, type: 'gold', item: { id: 'gold', name: 'Gold', value: 10 }, mesh: dropMesh });
     }
     // Spawn potion
-    const potMesh = new THREE.Mesh(
-      new THREE.CylinderGeometry(2, 2, 6, 8),
-      new THREE.MeshLambertMaterial({ color: 0xff0000 })
+    const potMesh = BABYLON.MeshBuilder.CreateCylinder(
+      "chest_pot_" + Math.random(),
+      { diameter: 4, height: 6, tessellation: 8 },
+      s.scene
     );
+    potMesh.material = mat(s.scene, "chest_pot_mat_" + Math.random(), "0xff0000",
+      { emissive: "0xff0000", disableLighting: true });
     potMesh.position.set(it.x, 3, it.y + 10);
-    s.scene.add(potMesh);
+    potMesh.parent = s.sceneMount;
     s.lootDrops.push({ x: it.x, y: it.y + 10, taken: false, type: 'potion', mesh: potMesh });
-    
+
   } else if (it.type === 'barrel' && !it.exploded) {
     it.exploded = true;
     playSound('hit');
     spawnParticles(it.x, it.y, 0xffaa00, 30, 'death'); // Ledakan api
     s.cameraShake = Math.max(s.cameraShake || 0, 20);
-    
+
     // Damage player
     if (Math.hypot(s.player.x - it.x, s.player.y - it.y) < 80) {
       s.player.hp = Math.max(0, s.player.hp - 30);
@@ -963,8 +1074,9 @@ export function triggerInteractable(it, index) {
         spawnDamageText(e.x, e.mesh.position.y + 35, e.y, `-150`, '#ff0000');
       }
     }
-    
-    s.scene.remove(it.mesh);
+
+    // Barrel is a static scene object: hide it (not dispose — could re-spawn)
+    it.mesh.setEnabled(false);
     s.interactables.splice(index, 1);
   }
 }
@@ -1252,7 +1364,8 @@ export function updateProjectiles(dt) {
     p.mesh.position.set(p.x, 15, p.y);
 
     if (blocked(p.x, p.y, 6)) {
-      s.scene.remove(p.mesh);
+      // Projectile removed from scene graph — dispose GPU resources (final removal path)
+      p.mesh.dispose();
       s.projectiles.splice(i, 1);
       continue;
     }
@@ -1309,7 +1422,8 @@ export function updateProjectiles(dt) {
     }
 
     if (hit) {
-      s.scene.remove(p.mesh);
+      // Projectile hit something — dispose GPU resources (final removal path)
+      p.mesh.dispose();
       s.projectiles.splice(i, 1);
     }
   }
@@ -1329,48 +1443,60 @@ function killEnemy(index) {
   playSound('hit');
   spawnParticles(e.x, e.y, 0xff0000, 20, 'death');
 
-  // Spawn Loot
+  // Spawn Loot — all drop meshes are hot-path dynamic entities: parent to sceneMount
   const loot = lootTable[e.type];
   if (loot) {
-    // Drop chance is inversely proportional to item value (more expensive = rarer)
     const dropChance = 1.0 / Math.sqrt(loot.value);
     if (Math.random() < dropChance) {
-      const dropMesh = new THREE.Mesh(
-        new THREE.OctahedronGeometry(4, 0),
-        new THREE.MeshLambertMaterial({ color: loot.color })
+      const dropMesh = BABYLON.MeshBuilder.CreateIcosphere(
+        "loot_" + Math.random(),
+        { diameter: 8, segments: 2 },
+        s.scene
       );
+      dropMesh.material = mat(s.scene, "loot_mat_" + Math.random(),
+        hexStr(loot.color),
+        { emissive: hexStr(loot.color), disableLighting: true });
       dropMesh.position.set(e.x, 5, e.y);
-      dropMesh.castShadow = true;
-      s.scene.add(dropMesh);
+      dropMesh.parent = s.sceneMount;
       s.lootDrops.push({ x: e.x, y: e.y, taken: false, type: 'loot', item: loot, mesh: dropMesh });
     }
   }
   if (Math.random() < 0.15) {
-    const dropMesh = new THREE.Mesh(
-      new THREE.CylinderGeometry(2, 2, 6, 8),
-      new THREE.MeshLambertMaterial({ color: 0xff0000 })
+    const dropMesh = BABYLON.MeshBuilder.CreateCylinder(
+      "potion_drop_" + Math.random(),
+      { diameter: 4, height: 6, tessellation: 8 },
+      s.scene
     );
+    dropMesh.material = mat(s.scene, "potion_drop_mat_" + Math.random(), "0xff0000",
+      { emissive: "0xff0000", disableLighting: true });
     dropMesh.position.set(e.x + 5, 3, e.y + 5);
-    s.scene.add(dropMesh);
+    dropMesh.parent = s.sceneMount;
     s.lootDrops.push({ x: e.x + 5, y: e.y + 5, taken: false, type: 'potion', mesh: dropMesh });
   }
 
   if (Math.random() < 0.05) {
-    const portalMesh = new THREE.Mesh(
-      new THREE.BoxGeometry(3, 1, 3),
-      new THREE.MeshLambertMaterial({ color: 0x00ffff })
+    const portalMesh = BABYLON.MeshBuilder.CreateBox(
+      "portal_drop_" + Math.random(),
+      { width: 3, height: 1, depth: 3 },
+      s.scene
     );
+    portalMesh.material = mat(s.scene, "portal_drop_mat_" + Math.random(), "0x00ffff",
+      { emissive: "0x00ffff", disableLighting: true });
     portalMesh.position.set(e.x - 5, 3, e.y + 5);
-    s.scene.add(portalMesh);
+    portalMesh.parent = s.sceneMount;
     s.lootDrops.push({ x: e.x - 5, y: e.y + 5, taken: false, type: 'consumable', item: { id: 'hometown_portal', name: 'Portal Scroll' }, mesh: portalMesh });
   }
 
-  // EXP orb
-  const expGeo = new THREE.DodecahedronGeometry(5, 0);
-  const expMat = new THREE.MeshBasicMaterial({ color: 0x0088ff });
-  const expMesh = new THREE.Mesh(expGeo, expMat);
+  // EXP orb — DodecahedronGeometry approximated by Icosphere (segments:2)
+  const expMesh = BABYLON.MeshBuilder.CreateIcosphere(
+    "exp_orb_" + Math.random(),
+    { diameter: 10, segments: 2 },
+    s.scene
+  );
+  expMesh.material = mat(s.scene, "exp_orb_mat_" + Math.random(), "0x0088ff",
+    { emissive: "0x0088ff", disableLighting: true });
   expMesh.position.set(e.x, 10, e.y);
-  s.scene.add(expMesh);
+  expMesh.parent = s.sceneMount;
   s.expOrbs.push({ x: e.x, y: e.y, mesh: expMesh, taken: false });
 
   // Elite Monster defeat rewards & fanfare
@@ -1389,34 +1515,42 @@ function killEnemy(index) {
 
     // Burst of Gold coins
     for (let g = 0; g < 6; g++) {
-      const dropMesh = new THREE.Mesh(
-        new THREE.OctahedronGeometry(4, 0),
-        new THREE.MeshLambertMaterial({ color: 0xffd700 })
+      const dropMesh = BABYLON.MeshBuilder.CreateIcosphere(
+        "elite_gold_" + g + "_" + Math.random(),
+        { diameter: 8, segments: 2 },
+        s.scene
       );
+      dropMesh.material = mat(s.scene, "elite_gold_mat_" + g, "0xffd700",
+        { emissive: "0xffd700", disableLighting: true });
       dropMesh.position.set(e.x + (Math.random() - 0.5) * 45, 5, e.y + (Math.random() - 0.5) * 45);
-      dropMesh.castShadow = true;
-      s.scene.add(dropMesh);
+      dropMesh.parent = s.sceneMount;
       s.lootDrops.push({ x: dropMesh.position.x, y: dropMesh.position.z, taken: false, type: 'gold', item: { id: 'gold', name: 'Gold', value: 15 }, mesh: dropMesh });
     }
 
     // Guaranteed 2 Potion drops
     for (let p = 0; p < 2; p++) {
-      const dropMesh = new THREE.Mesh(
-        new THREE.CylinderGeometry(2.5, 2.5, 7, 8),
-        new THREE.MeshLambertMaterial({ color: 0xff0000 })
+      const dropMesh = BABYLON.MeshBuilder.CreateCylinder(
+        "elite_potion_" + p + "_" + Math.random(),
+        { diameter: 5, height: 7, tessellation: 8 },
+        s.scene
       );
+      dropMesh.material = mat(s.scene, "elite_potion_mat_" + p, "0xff0000",
+        { emissive: "0xff0000", disableLighting: true });
       dropMesh.position.set(e.x + (p === 0 ? 14 : -14), 4, e.y + (Math.random() - 0.5) * 20);
-      s.scene.add(dropMesh);
+      dropMesh.parent = s.sceneMount;
       s.lootDrops.push({ x: dropMesh.position.x, y: dropMesh.position.z, taken: false, type: 'potion', mesh: dropMesh });
     }
 
     // Guaranteed 1 Stamina Potion
-    const spMesh = new THREE.Mesh(
-      new THREE.CylinderGeometry(2, 2, 6, 8),
-      new THREE.MeshLambertMaterial({ color: 0xf1c40f })
+    const spMesh = BABYLON.MeshBuilder.CreateCylinder(
+      "elite_sp_" + Math.random(),
+      { diameter: 4, height: 6, tessellation: 8 },
+      s.scene
     );
+    spMesh.material = mat(s.scene, "elite_sp_mat_" + Math.random(), "0xf1c40f",
+      { emissive: "0xf1c40f", disableLighting: true });
     spMesh.position.set(e.x, 3, e.y - 14);
-    s.scene.add(spMesh);
+    spMesh.parent = s.sceneMount;
     s.lootDrops.push({ x: e.x, y: e.y - 14, taken: false, type: 'consumable', item: { id: 'stamina_potion', name: 'Stamina Potion' }, mesh: spMesh });
 
     spawnParticles(e.x, e.y, e.elite.auraColor, 40, 'death');
@@ -1425,17 +1559,21 @@ function killEnemy(index) {
     if (typeof window.updateUI === 'function') window.updateUI(true);
   }
 
-  // Remove HP bar and elite meshes immediately
+  // Remove HP bar and elite visual children immediately (setEnabled, not dispose —
+  // the entity is spliced out of s.enemies but the HP group itself is a scene node)
   if (e.hpGroup) {
-    s.scene.remove(e.hpGroup);
+    e.hpGroup.setEnabled(false);
     e.hpGroup = null;
   }
   if (e.auraMesh) {
-    e.mesh.remove(e.auraMesh);
+    // Unparent + hide the aura ring (keep in scene graph cheaply, no GPU free)
+    e.auraMesh.parent = s.sceneMount;
+    e.auraMesh.setEnabled(false);
     e.auraMesh = null;
   }
   if (e.crownMesh) {
-    e.mesh.remove(e.crownMesh);
+    e.crownMesh.parent = s.sceneMount;
+    e.crownMesh.setEnabled(false);
     e.crownMesh = null;
   }
 
@@ -1454,7 +1592,9 @@ function killEnemy(index) {
       e.mixer.stopAllAction();
       e.mixer.uncacheRoot(e.mesh);
     }
-    s.scene.remove(e.mesh);
+    // Entity is fully removed from s.enemies — dispose GPU resources here
+    // (one-shot final removal, not a hot-path pooled entity)
+    if (e.mesh) e.mesh.dispose();
   }
 }
 
@@ -1575,7 +1715,11 @@ export function updateEnemies(dt) {
       if (e.isElite && e.elite.ability === 'berserk_frenzy' && e.hp < e.maxHp * 0.5) {
         speed *= 1.45;
         if (e.auraMesh && !e._berserkApplied) {
-          e.auraMesh.material.color.setHex(0xff0000);
+          // Three.js material.color.setHex → Babylon StandardMaterial.diffuseColor
+          if (e.auraMesh.material) {
+            e.auraMesh.material.diffuseColor = BABYLON.Color3.FromHexString("0xff0000");
+            e.auraMesh.material.emissiveColor = BABYLON.Color3.FromHexString("0xff0000");
+          }
           e._berserkApplied = true;
           spawnDamageText(e.x, e.mesh.position.y + 35, e.y, `BERSERK!`, '#ff0000');
         }
@@ -1681,46 +1825,52 @@ export function updateEnemies(dt) {
             if (e.isElite && e.elite.ability === 'triple_shot') {
               for (let aOffset of [-0.25, 0, 0.25]) {
                 const spreadAngle = angle + aOffset;
-                const m = new THREE.Mesh(new THREE.SphereGeometry(4, 6, 6), new THREE.MeshBasicMaterial({ color: 0x00e5ff }));
+                const m = BABYLON.MeshBuilder.CreateSphere("proj_" + Math.random(), { diameter: 8 }, s.scene);
+                m.material = makeProjectileMat("#00e5ff", s.scene);
                 m.position.set(e.x, 12, e.y);
-                s.scene.add(m);
+                m.parent = s.sceneMount;
                 s.projectiles.push({ x: e.x, y: e.y, dx: Math.cos(spreadAngle) * 9, dy: Math.sin(spreadAngle) * 9, mesh: m, isEnemy: true, damage: 18, colorHex: '#00e5ff' });
               }
               playSound('shoot');
             } else if (e.isElite && e.elite.ability === 'blinding_volley') {
               for (let aOffset of [-0.3, 0, 0.3]) {
                 const spreadAngle = angle + aOffset;
-                const m = new THREE.Mesh(new THREE.SphereGeometry(4.5, 6, 6), new THREE.MeshBasicMaterial({ color: 0xffab00 }));
+                const m = BABYLON.MeshBuilder.CreateSphere("proj_" + Math.random(), { diameter: 9 }, s.scene);
+                m.material = makeProjectileMat("#ffab00", s.scene);
                 m.position.set(e.x, 12, e.y);
-                s.scene.add(m);
+                m.parent = s.sceneMount;
                 s.projectiles.push({ x: e.x, y: e.y, dx: Math.cos(spreadAngle) * 8.5, dy: Math.sin(spreadAngle) * 8.5, mesh: m, isEnemy: true, damage: 20, colorHex: '#ffab00' });
               }
               playSound('shoot');
             } else if (e.isElite && e.elite.ability === 'meteor_burst') {
-              const m = new THREE.Mesh(new THREE.SphereGeometry(7, 8, 8), new THREE.MeshBasicMaterial({ color: 0xff007f }));
+              const m = BABYLON.MeshBuilder.CreateSphere("proj_" + Math.random(), { diameter: 14 }, s.scene);
+              m.material = makeProjectileMat("#ff007f", s.scene);
               m.position.set(e.x, 15, e.y);
-              s.scene.add(m);
+              m.parent = s.sceneMount;
               s.projectiles.push({ x: e.x, y: e.y, dx: Math.cos(angle) * 7, dy: Math.sin(angle) * 7, mesh: m, isEnemy: true, damage: 26, radius: 14, colorHex: '#ff007f' });
               playSound('shoot');
             } else if (e.isElite && e.elite.ability === 'solar_flare') {
-              const m = new THREE.Mesh(new THREE.SphereGeometry(7.5, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffea00 }));
+              const m = BABYLON.MeshBuilder.CreateSphere("proj_" + Math.random(), { diameter: 15 }, s.scene);
+              m.material = makeProjectileMat("#ffea00", s.scene);
               m.position.set(e.x, 15, e.y);
-              s.scene.add(m);
+              m.parent = s.sceneMount;
               s.projectiles.push({ x: e.x, y: e.y, dx: Math.cos(angle) * 7.5, dy: Math.sin(angle) * 7.5, mesh: m, isEnemy: true, damage: 28, radius: 15, colorHex: '#ffea00' });
               playSound('shoot');
             } else if (e.isElite && e.elite.ability === 'dragon_breath') {
               for (let aOffset of [-0.15, 0.15]) {
                 const spreadAngle = angle + aOffset;
-                const m = new THREE.Mesh(new THREE.SphereGeometry(5.5, 6, 6), new THREE.MeshBasicMaterial({ color: 0xd50000 }));
+                const m = BABYLON.MeshBuilder.CreateSphere("proj_" + Math.random(), { diameter: 11 }, s.scene);
+                m.material = makeProjectileMat("#d50000", s.scene);
                 m.position.set(e.x, 20, e.y);
-                s.scene.add(m);
+                m.parent = s.sceneMount;
                 s.projectiles.push({ x: e.x, y: e.y, dx: Math.cos(spreadAngle) * 8, dy: Math.sin(spreadAngle) * 8, mesh: m, isEnemy: true, damage: 24, colorHex: '#d50000' });
               }
               playSound('shoot');
             } else {
-              const m = new THREE.Mesh(new THREE.SphereGeometry(4, 4, 4), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
+              const m = BABYLON.MeshBuilder.CreateSphere("proj_" + Math.random(), { diameter: 8 }, s.scene);
+              m.material = makeProjectileMat("#ff0000", s.scene);
               m.position.set(e.x, 10, e.y);
-              s.scene.add(m);
+              m.parent = s.sceneMount;
               s.projectiles.push({ x: e.x, y: e.y, dx: Math.cos(angle) * 8, dy: Math.sin(angle) * 8, mesh: m, isEnemy: true, damage: 12 });
               playSound('shoot');
             }
@@ -1870,12 +2020,13 @@ export function updateEnemies(dt) {
       }
     }
     e.mesh.position.y += (meshYTarget - e.mesh.position.y) * Math.min(dt * 8, 1);
+    // HP group uses billboardMode=ALL (set in spawnEnemy), so no per-frame lookAt needed
     e.hpGroup.position.set(e.x, e.mesh.position.y + (e.isElite ? 105 : 90), e.y);
-    e.hpGroup.lookAt(s.camera.position);
 
     const barW = e.hpBarWidth || 24;
     const hpPercent = Math.max(0, e.hp / e.maxHp);
-    e.hpFg.scale.x = Math.max(0.001, hpPercent);
+    // Three .scale → Babylon .scaling
+    e.hpFg.scaling.x = Math.max(0.001, hpPercent);
     e.hpFg.position.x = -(barW - (barW * hpPercent)) / 2;
 
     if (e.isElite) {
@@ -1902,7 +2053,9 @@ export function updateEnemies(dt) {
           e.mixer.stopAllAction();
           e.mixer.uncacheRoot(e.mesh);
         }
-        s.scene.remove(e.mesh); s.scene.remove(e.hpGroup);
+        // Final removal path: entity spliced from s.enemies, free GPU resources
+        e.mesh.dispose();
+        e.hpGroup.dispose();
         s.enemies.splice(idx, 1);
         if (s.player.hp <= 0) teleportToHometown('Ledakan musuh mengakhiri petualanganmu!');
       }
@@ -1916,8 +2069,9 @@ export function updateEnemies(dt) {
         e.mixer.stopAllAction();
         e.mixer.uncacheRoot(e.mesh);
       }
-      s.scene.remove(e.mesh);
-      s.scene.remove(e.hpGroup);
+      // Final removal path: entity spliced from s.enemies, free GPU resources
+      e.mesh.dispose();
+      e.hpGroup.dispose();
       s.enemies.splice(idx, 1);
     }
   }
@@ -1932,19 +2086,21 @@ export function updateEnemies(dt) {
       }
       if (de.deathTimer < 25) {
         de.mesh.position.y -= 0.35 * dt;
-        de.mesh.traverse(child => {
-          if (child.isMesh && child.material) {
-            child.material.transparent = true;
-            child.material.opacity = Math.max(0, de.deathTimer / 25);
+        // Fade all sub-mesh materials — use getDescendants() instead of Three's traverse()
+        const deDesc = de.mesh.getDescendants ? de.mesh.getDescendants() : [];
+        for (const child of deDesc) {
+          if (child.material) {
+            child.material.alpha = Math.max(0, de.deathTimer / 25);
           }
-        });
+        }
       }
       if (de.deathTimer <= 0) {
         if (de.mixer) {
           de.mixer.stopAllAction();
           de.mixer.uncacheRoot(de.mesh);
         }
-        s.scene.remove(de.mesh);
+        // Final removal path: entity spliced from s.dyingEnemies, free GPU resources
+        de.mesh.dispose();
         s.dyingEnemies.splice(i, 1);
       }
     }
@@ -1971,19 +2127,21 @@ export function updateBoss(dt) {
     if (s.bossDyingMixer) s.bossDyingMixer.update(dt * 0.016667);
     if (s.bossDeathTimer < 35) {
       s.bossDyingMesh.position.y -= 0.4 * dt;
-      s.bossDyingMesh.traverse(child => {
-        if (child.isMesh && child.material) {
-          child.material.transparent = true;
-          child.material.opacity = Math.max(0, s.bossDeathTimer / 35);
+      // Fade all sub-meshes — use getDescendants() instead of Three's traverse()
+      const bossDyingDesc = s.bossDyingMesh.getDescendants ? s.bossDyingMesh.getDescendants() : [];
+      for (const child of bossDyingDesc) {
+        if (child.material) {
+          child.material.alpha = Math.max(0, s.bossDeathTimer / 35);
         }
-      });
+      }
     }
     if (s.bossDeathTimer <= 0) {
       if (s.bossDyingMixer) {
         s.bossDyingMixer.stopAllAction();
         s.bossDyingMixer.uncacheRoot(s.bossDyingMesh);
       }
-      s.scene.remove(s.bossDyingMesh);
+      // Final removal path: boss death animation complete, free GPU resources
+      s.bossDyingMesh.dispose();
       s.bossDyingMesh = null;
       s.bossDyingMixer = null;
     }
@@ -2035,8 +2193,12 @@ export function updateBoss(dt) {
   // Phase 2: HP < 50%
   if (s.bossPhase === 1 && s.bossHp <= s.bossMaxHp * 0.5) {
     s.bossPhase = 2;
+    // Three.js material.color.setHex → Babylon StandardMaterial diffuseColor + emissiveColor
     if (s.bossMesh.material) {
-      s.bossMesh.material.color.setHex(0x880000);
+      s.bossMesh.material.diffuseColor = BABYLON.Color3.FromHexString("0x880000");
+      if (s.bossMesh.material.emissiveColor) {
+        s.bossMesh.material.emissiveColor = BABYLON.Color3.FromHexString("0x880000");
+      }
     }
     // Spawn 2 extra minions
     for (let i = 0; i < 2; i++) {
@@ -2145,12 +2307,10 @@ export function updateBoss(dt) {
       } else if (Math.random() < projectileChance) {
         playBossAction('attack', 0.08);
         s.bossAttackAnimTimer = 18;
-        const m = new THREE.Mesh(
-          new THREE.SphereGeometry(10, 8, 8),
-          new THREE.MeshBasicMaterial({ color: 0xff0000 })
-        );
+        const m = BABYLON.MeshBuilder.CreateSphere("boss_proj_" + Math.random(), { diameter: 20 }, s.scene);
+        m.material = makeProjectileMat("#ff0000", s.scene);
         m.position.set(s.bossX, 30, s.bossY);
-        s.scene.add(m);
+        m.parent = s.sceneMount;
         const pAngle = angle + (Math.random() - 0.5);
         s.projectiles.push({
           x: s.bossX, y: s.bossY,
@@ -2201,10 +2361,11 @@ export function updateBoss(dt) {
   s.bossHpGroup.position.x += (s.bossX - s.bossHpGroup.position.x) * Math.min(dt * 6, 1);
   s.bossHpGroup.position.z += (s.bossY - s.bossHpGroup.position.z) * Math.min(dt * 6, 1);
   s.bossHpGroup.position.y += (120 - s.bossHpGroup.position.y) * Math.min(dt * 6, 1);
-  s.bossHpGroup.lookAt(s.camera.position);
+  // bossHpGroup uses billboardMode=ALL (set in helpers.js), so no per-frame lookAt needed
 
   const pct = Math.max(0, s.bossHp / s.bossMaxHp);
-  s.bossHpFg.scale.x = Math.max(0.001, pct);
+  // Three .scale → Babylon .scaling
+  s.bossHpFg.scaling.x = Math.max(0.001, pct);
   s.bossHpFg.position.x = -(80 - (80 * pct)) / 2;
 
   // Contact damage
@@ -2224,7 +2385,8 @@ export function updateBoss(dt) {
     s.bossDefeated = true;
     s.bossActive = false;
     if (s.bossHpGroup) {
-      s.scene.remove(s.bossHpGroup);
+      // Boss defeated — final removal path: free GPU resources
+      s.bossHpGroup.dispose();
       s.bossHpGroup = null;
     }
 
@@ -2246,7 +2408,8 @@ export function updateBoss(dt) {
         s.bossCurrentAction = null;
       }
       if (s.bossMesh) {
-        s.scene.remove(s.bossMesh);
+        // No death animation — final removal path: free GPU resources immediately
+        s.bossMesh.dispose();
         s.bossMesh = null;
       }
     }

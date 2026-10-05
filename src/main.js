@@ -3,7 +3,7 @@
 // All game logic lives in src/*.js; this file only bootstraps and exposes
 // the handful of globals the HTML markup (onclick attributes) still calls.
 
-import * as THREE from 'three';
+import * as BABYLON from 'babylonjs';
 
 // Subsystem modules
 import { state } from './state.js';
@@ -39,10 +39,8 @@ let _fpsFrames = 0;
 let _fpsTime = 0;
 window._fpsDisplay = document.getElementById('fps');
 
-// Re-export loadedModels and THREE on window so inline handlers / fallback code
-// can still reference them (backward-compat with the old monolithic file).
+// Re-export loadedModels on window so inline handlers / fallback code can reference them.
 window.loadedModels = loadedModels;
-window.THREE = THREE;
 window.keys = state.keys;
 
 // Camera preset getters/setters for the settings UI
@@ -116,24 +114,24 @@ window.startGame = async () => {
       initWildsNPCs();
       state.wildsLoaded = true;
     }
-    if (state.hometownGroup) state.hometownGroup.visible = false;
-    if (state.wilds2Group) state.wilds2Group.visible = false;
-    if (state.wildsGroup) state.wildsGroup.visible = true;
-    if (state.mainFloor) state.mainFloor.visible = true;
+    if (state.hometownGroup) state.hometownGroup.setEnabled(false);
+    if (state.wilds2Group) state.wilds2Group.setEnabled(false);
+    if (state.wildsGroup) state.wildsGroup.setEnabled(true);
+    if (state.mainFloor) state.mainFloor.setEnabled(true);
   } else if (state.currentScene === 'wilds2') {
     if (!state.wilds2Loaded) {
       initWilds2();
       state.wilds2Loaded = true;
     }
-    if (state.hometownGroup) state.hometownGroup.visible = false;
-    if (state.wildsGroup) state.wildsGroup.visible = false;
-    if (state.wilds2Group) state.wilds2Group.visible = true;
-    if (state.mainFloor) state.mainFloor.visible = false; // desert: hide grass floor
+    if (state.hometownGroup) state.hometownGroup.setEnabled(false);
+    if (state.wildsGroup) state.wildsGroup.setEnabled(false);
+    if (state.wilds2Group) state.wilds2Group.setEnabled(true);
+    if (state.mainFloor) state.mainFloor.setEnabled(false); // desert: hide grass floor
   } else {
-    if (state.wildsGroup) state.wildsGroup.visible = false;
-    if (state.wilds2Group) state.wilds2Group.visible = false;
-    if (state.hometownGroup) state.hometownGroup.visible = true;
-    if (state.mainFloor) state.mainFloor.visible = true;
+    if (state.wildsGroup) state.wildsGroup.setEnabled(false);
+    if (state.wilds2Group) state.wilds2Group.setEnabled(false);
+    if (state.hometownGroup) state.hometownGroup.setEnabled(true);
+    if (state.mainFloor) state.mainFloor.setEnabled(true);
   }
 
   // Setelah semua model siap, aktifkan aura senjata jika ada pending dari loadGame
@@ -159,7 +157,11 @@ window.startGame = async () => {
   }
   if (typeof updateUI === 'function') updateUI(true);
 
-  gameLoop();
+  // Start Babylon render loop (engine calls gameLoop each frame via scene.render())
+  state.renderer.runRenderLoop(() => {
+    if (state.isGameStarted) gameLoop();
+  });
+
 };
 
 window.togglePause = () => {
@@ -233,11 +235,13 @@ window.loadGame = loadGame;
 
 // ─── Main loop ─────────────────────────────────────────────────────────────────
 
-function gameLoop(timestamp) {
+function gameLoop() {
+  // dt is computed from real frame time; Babylon's runRenderLoop fires ~60 fps.
+  const now = performance.now();
   const dt = state.lastTimestamp
-    ? Math.min((timestamp - state.lastTimestamp) / 16.667, 3)
+    ? Math.min((now - state.lastTimestamp) / 16.667, 3)
     : 1;
-  state.lastTimestamp = timestamp;
+  state.lastTimestamp = now;
 
   // FPS counter
   _fpsFrames++;
@@ -253,9 +257,7 @@ function gameLoop(timestamp) {
 
   if (!state.gameOver) {
     if (state.isPaused) {
-      if (state.composer) state.composer.render();
-      else state.renderer.render(state.scene, state.camera);
-      requestAnimationFrame(gameLoop);
+      state.renderer.render(state.scene);
       return;
     }
 
@@ -263,9 +265,7 @@ function gameLoop(timestamp) {
     if (state.player.defending) {
       state.player.stamina = Math.max(0, state.player.stamina - 0.5 * dt);
     }
-    // Catatan: Auto-regenerasi SP dimatikan sesuai permintaan user.
-    // Pemain harus membeli dan menggunakan Stamina Potion (SP Pot) dari shop atau drop.
-    if (state.shieldMesh) state.shieldMesh.visible = state.player.defending;
+    if (state.shieldMesh) state.shieldMesh.setEnabled(state.player.defending);
 
     if (state.keys['q']) state.cameraAngle += 0.04 * dt;
     if (state.keys['e']) state.cameraAngle -= 0.04 * dt;
@@ -411,30 +411,27 @@ function gameLoop(timestamp) {
     state.playerMesh.position.x += (state.player.x - state.playerMesh.position.x) * Math.min(dt * 10, 1);
     state.playerMesh.position.z += (state.player.y - state.playerMesh.position.z) * Math.min(dt * 10, 1);
   }
+  state.playerMesh.rotation.y = -Math.PI / 2 + state.player.spinAngle;
   state.playerIdleBreath += 0.03 * dt;
 
-  // Character always faces forward, plus any accumulated spin
-  state.playerMesh.rotation.y = -Math.PI / 2 + state.player.spinAngle;
-
   if (state.playerHpGroup) {
-    state.playerHpGroup.position.set(state.playerMesh.position.x, state.playerMesh.position.y + 40, state.playerMesh.position.z);
-    state.playerHpGroup.lookAt(state.camera.position);
+    state.playerHpGroup.position.x = state.playerMesh.position.x;
+    state.playerHpGroup.position.y = state.playerMesh.position.y + 40;
+    state.playerHpGroup.position.z = state.playerMesh.position.z;
+    state.playerHpGroup.billboardMode = BABYLON.Mesh.BILLBOARDMODE_Y;
     const hpPercent = Math.max(0, state.player.hp / state.player.maxHp);
     if (state.playerHpFg) {
-      state.playerHpFg.scale.x = Math.max(0.001, hpPercent);
+      state.playerHpFg.scaling.x = Math.max(0.001, hpPercent);
       state.playerHpFg.position.x = -(30 - (30 * hpPercent)) / 2;
     }
   }
 
   if (state.playerMixer) {
-    // Model 3D sungguhan, jangan dimirror (flip scale Z), cukup rotate Y
-    state.playerMesh.scale.z = 1;
+    state.playerMesh.scaling.z = 1;
   } else {
-    // Legacy 2.5D untuk model balok
     if (state.player.facingX < 0) {
-      state.playerMesh.scale.z = -1; // facing left
+      state.playerMesh.scaling.z = -1;
     }
-    // facing right atau diam = default scale.z = 1
   }
 
   // Keep last facing when still
@@ -449,13 +446,13 @@ function gameLoop(timestamp) {
 // ── Chase camera — simple follow behind player ───────────────────────
 // Camera stays behind the player (negative Z direction) and looks at the player.
 const idealX = state.player.x - Math.sin(state.cameraAngle) * state.cameraOffsetZ;
-const idealZ = state.player.y - Math.cos(state.cameraAngle) * state.cameraOffsetZ; // offset behind
+const idealZ = state.player.y - Math.cos(state.cameraAngle) * state.cameraOffsetZ;
 const idealY = state.cameraOffsetY;
 const smooth = Math.min(dt * 6, 1);
 state.camera.position.x += (idealX - state.camera.position.x) * smooth;
 state.camera.position.y += (idealY - state.camera.position.y) * smooth;
 state.camera.position.z += (idealZ - state.camera.position.z) * smooth;
-state.camera.lookAt(state.player.x, state.cameraLookAtY, state.player.y);
+state.camera.setTarget(new BABYLON.Vector3(state.player.x, state.cameraLookAtY, state.player.y));
 
 if (state.cameraShake > 0) {
   state.camera.position.x += (Math.random() - 0.5) * state.cameraShake;
@@ -466,10 +463,9 @@ if (state.cameraShake > 0) {
 }
 
 if (state.dirLight) {
-  state.dirLight.position.x = state.player.x + 300;
-  state.dirLight.position.z = state.player.y - 200;
-  state.dirLight.target.position.set(state.player.x, 0, state.player.y);
-  state.dirLight.target.updateMatrixWorld();
+  // Babylon DirectionalLight: direction is a fixed vector; position is where light "comes from"
+  // We keep position relative to player so the light follows the camera, but direction stays constant.
+  state.dirLight.position.set(state.player.x + 300, 800, state.player.y - 200);
 }
 
 
@@ -485,11 +481,7 @@ if (state.dirLight) {
   state.expOrbs.forEach(item => { if (!item.taken) item.mesh.rotation.y += 0.05 * dt; });
   state.potionItems.forEach(item => { if (!item.taken) item.mesh.rotation.y += 0.05 * dt; });
 
-  // Render
-  if (state.composer) state.composer.render();
-  else state.renderer.render(state.scene, state.camera);
-
-  requestAnimationFrame(gameLoop);
+  // Render is handled by Babylon's runRenderLoop — no explicit renderer.render() call here.
 }
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
