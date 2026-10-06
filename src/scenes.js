@@ -9,8 +9,8 @@ import { playSound } from './audio.js';
 
 function mat(scene, name, hex, opts = {}) {
   const m = new BABYLON.StandardMaterial(name, scene);
-  if (hex !== undefined) m.diffuseColor = BABYLON.Color3.FromHexString(hex);
-  if (opts.emissive !== undefined) m.emissiveColor = BABYLON.Color3.FromHexString(opts.emissive);
+  if (hex) m.diffuseColor = BABYLON.Color3.FromHexString(hex);
+  if (opts.emissive) m.emissiveColor = BABYLON.Color3.FromHexString(opts.emissive);
   if (opts.opacity !== undefined) m.alpha = opts.opacity;
   if (opts.disableLighting) m.disableLighting = true;
   return m;
@@ -126,12 +126,10 @@ export function initSetup() {
   // Rain (Particle system, starts disabled)
   s.rainParticles = new BABYLON.ParticleSystem("rain", 5000, s.scene);
   s.rainParticles.emitter = new BABYLON.Vector3(0, 300, 0);
-  s.rainParticles.createSphereSpriteMaterial(
-    new BABYLON.Color3(0.67, 0.67, 0.67),
-    new BABYLON.Color3(0.67, 0.67, 0.67),
-    new BABYLON.Color3(0, 0, 0),
-    1.0
-  );
+  s.rainParticles.particleTexture = new BABYLON.Texture("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAABCAYAAAA2ARhUAAAAFUlEQVR4nGNkYPjPAAAGXAD8+K8BtwAAAABJRU5ErkJggg==", s.scene);
+  s.rainParticles.blendMode = BABYLON.ParticleSystem.BLENDMODE_ONEONE;
+  s.rainParticles.minSize = 0.02;
+  s.rainParticles.maxSize = 0.04;
   s.rainParticles.particleMinimumLifeTime = 1.0;
   s.rainParticles.particleMaximumLifeTime = 1.5;
   s.rainParticles.emitRate = 0;
@@ -186,7 +184,7 @@ export function initMap() {
       rockGroup.rotation.y = Math.random() * Math.PI;
       rockGroup.parent = s.wildsGroup;
     } else {
-      const rock = BABYLON.MeshBuilder.CreateIcosphere(`rock_${i}`, { diameter: rr * 2, segments: 2 }, s.scene);
+      const rock = BABYLON.MeshBuilder.CreateSphere(`rock_${i}`, { diameter: rr * 2, tessellation: 2 }, s.scene);
       rock.material = mat(s.scene, `rockMat_${i}`, "#777777");
       rock.position.set(rx, rr + getTerrainHeight(rx, ry), ry);
       rock.rotation.y = Math.random() * Math.PI;
@@ -236,7 +234,7 @@ export function initMap() {
             rockGroup.rotation.y = Math.random() * Math.PI;
             rockGroup.parent = s.wildsGroup;
           } else {
-            const rock = BABYLON.MeshBuilder.CreateIcosphere(`rock_${c}_${i}`, { diameter: r * 2, segments: 2 }, s.scene);
+            const rock = BABYLON.MeshBuilder.CreateSphere(`rock_${c}_${i}`, { diameter: r * 2, tessellation: 2 }, s.scene);
             rock.material = mat(s.scene, `rockMat_${c}_${i}`, "#777777");
             rock.position.set(x, r + getTerrainHeight(x, y), y);
             rock.rotation.y = Math.random() * Math.PI;
@@ -465,7 +463,7 @@ export function initHometown() {
       plant.parent = s.hometownGroup;
     } else {
       const rockR = (r || 16);
-      const rock = BABYLON.MeshBuilder.CreateIcosphere(`deco_rock_${Math.random().toString(36).slice(2, 7)}`, { diameter: rockR * 2, segments: 2 }, s.scene);
+      const rock = BABYLON.MeshBuilder.CreateSphere(`deco_rock_${Math.random().toString(36).slice(2, 7)}`, { diameter: rockR * 2, tessellation: 2 }, s.scene);
       rock.material = mat(s.scene, "decoRockMat", "#888888");
       rock.position.set(x, rockR + getTerrainHeight(x, z), z);
       rock.parent = s.hometownGroup;
@@ -901,7 +899,7 @@ export function initEntities() {
   }
 
   s.playerMesh.position.set(s.player.x, 15, s.player.y);
-  s.playerMesh.parent = s.scene;
+  s.playerMesh.parent = s.sceneMount;
 
   // Player HP Bar
   const pHpBg = BABYLON.MeshBuilder.CreateGround("playerHpBg", { width: 30, depth: 4, updatable: true }, s.scene);
@@ -913,7 +911,7 @@ export function initEntities() {
   pHpBg.parent = s.playerHpGroup;
   s.playerHpFg.parent = s.playerHpGroup;
   s.playerHpGroup.billboardMode = BABYLON.Mesh.BILLBOARDMODE_ALL;
-  s.playerHpGroup.parent = s.scene;
+  s.playerHpGroup.parent = s.sceneMount;
 
 
   // Shield visual
@@ -930,7 +928,7 @@ export function initEntities() {
   const petMat = mat(s.scene, "petMat", "#ffffaa");
   petMat.wireframe = true;
   s.petMesh.material = petMat;
-  s.petMesh.parent = s.scene;
+  s.petMesh.parent = s.sceneMount;
 }
 
 function createFallbackPlayer() {
@@ -1040,7 +1038,7 @@ function createPortal(color) {
   const discMat = mat(s.scene, `portalDiscMat_${color}`, "#ffffff", { opacity: 0.8, disableLighting: true });
   discMat.emissiveColor = BABYLON.Color3.FromHexString("#ffffff");
   discMat.backFaceCulling = false;
-  discMat.blendingMode = BABYLON.BlendMode.Add;
+  discMat.blendMode = BABYLON.Engine.BLENDMODEONEONE;
   const disc = BABYLON.MeshBuilder.CreateDisc(`portalDisc_${color}`, { radius: 18, tessellation: 32 }, s.scene);
   disc.material = discMat;
   disc.rotation.x = -Math.PI / 2;
@@ -1052,7 +1050,7 @@ function createPortal(color) {
   beamMat.diffuseColor = BABYLON.Color3.FromHexString("#" + color.toString(16).padStart(6, "0"));
   beamMat.emissiveColor = beamMat.diffuseColor;
   beamMat.backFaceCulling = false;
-  beamMat.blendingMode = BABYLON.BlendMode.Add;
+  beamMat.blendMode = BABYLON.Engine.BLENDMODEONEONE;
   const beam = BABYLON.MeshBuilder.CreateCylinder(`portalBeam_${color}`, { diameterTop: 32, diameterBottom: 40, height: 200, tessellation: 32 }, s.scene);
   beam.material = beamMat;
   beam.position.y = baseOffset + 100; // Tengah dari silinder tinggi 200
@@ -1062,7 +1060,7 @@ function createPortal(color) {
   const coreMat = mat(s.scene, `portalCoreMat_${color}`, "#ffffff", { opacity: 0.6, disableLighting: true });
   coreMat.emissiveColor = BABYLON.Color3.FromHexString("#ffffff");
   coreMat.backFaceCulling = false;
-  coreMat.blendingMode = BABYLON.BlendMode.Add;
+  coreMat.blendMode = BABYLON.Engine.BLENDMODEONEONE;
   const core = BABYLON.MeshBuilder.CreateCylinder(`portalCore_${color}`, { diameter: 12, height: 200, tessellation: 16 }, s.scene);
   core.material = coreMat;
   core.position.y = baseOffset + 100;
@@ -1074,7 +1072,7 @@ function createPortal(color) {
     const ribbonMat = mat(s.scene, `portalRibbonMat_${color}_${i}`, "#ffffff", { opacity: 0.8, disableLighting: true });
     ribbonMat.emissiveColor = BABYLON.Color3.FromHexString("#ffffff");
     ribbonMat.backFaceCulling = false;
-    ribbonMat.blendingMode = BABYLON.BlendMode.Add;
+    ribbonMat.blendMode = BABYLON.Engine.BLENDMODEONEONE;
     const ribbon = BABYLON.MeshBuilder.CreateTorus(`portalRibbon_${color}_${i}`, { diameter: (22 - i * 1.5) * 2, thickness: 1.6, tessellation: 32 }, s.scene);
     ribbon.material = ribbonMat;
     ribbon.rotation.x = -Math.PI / 2;
@@ -1868,7 +1866,7 @@ export function initWilds2() {
         }
         if (!placed) {
           const r = 30 + Math.random() * 30; // Diperbesar
-          const rock = BABYLON.MeshBuilder.CreateIcosphere(`w2_rock_${c}_${i}`, { diameter: r * 2, segments: 2 }, s.scene);
+          const rock = BABYLON.MeshBuilder.CreateSphere(`w2_rock_${c}_${i}`, { diameter: r * 2, tessellation: 2 }, s.scene);
           rock.material = mat(s.scene, `w2RockMat_${c}_${i}`, "#b89a6a");
           rock.position.set(x, r + getTerrainHeightWilds2(x, y), y);
           rock.rotation.y = Math.random() * Math.PI;

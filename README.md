@@ -1,6 +1,6 @@
 # Game Project
 
-This is a game project that uses Vite and Three.js for the frontend, and Express and SQLite3 for the backend.
+This is a game project that uses Vite and Babylon.js for the frontend, and Express and SQLite3 for the backend.
 
 ## Prerequisites
 
@@ -59,5 +59,5 @@ This will create a `dist` directory with the optimized production files.
 
 ## Technologies Used
 
-- **Frontend:** HTML, CSS, JavaScript, [Three.js](https://threejs.org/), [Vite](https://vitejs.dev/)
+- **Frontend:** HTML, CSS, JavaScript, [Babylon.js](https://www.babylonjs.com/), [Vite](https://vitejs.dev/)
 - **Backend:** [Node.js](https://nodejs.org/), [Express](https://expressjs.com/), [SQLite3](https://www.sqlite.org/)

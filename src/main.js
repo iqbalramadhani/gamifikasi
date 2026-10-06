@@ -98,12 +98,12 @@ window.playerBladeMat = null;
 // ─── Game lifecycle ────────────────────────────────────────────────────────────
 
 window.startGame = async () => {
-  await loadAllModels();
   if (state.isGameStarted) return;
   state.isGameStarted = true;
   document.getElementById('main-menu').style.display = 'none';
 
   initSetup();
+  await loadAllModels();
   initHometown();
   initEntities();
   initNPCs();

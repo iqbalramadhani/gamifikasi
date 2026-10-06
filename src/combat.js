@@ -30,7 +30,7 @@ function makeProjectileMat(colorHex, scene) {
   m.diffuseColor = BABYLON.Color3.FromHexString(colorHex);
   m.emissiveColor = m.diffuseColor.clone();
   m.disableLighting = true;
-  m.blendingMode = BABYLON.BlendMode.Add;
+  m.blendMode = BABYLON.Engine.BLENDMODEONEONE;
   m.backFaceCulling = false;
   return m;
 }
@@ -204,9 +204,9 @@ export function spawnEnemy(ex, ey, scaleFactor = 1.0, isBossChild = false, force
 
     // Floating Golden Crown / Emblem — Icosphere (segments:2) approximates OctahedronGeometry
     const crownR = 4.5 * (scaleFactor / elite.scaleBonus);
-    crownMesh = BABYLON.MeshBuilder.CreateIcosphere(
+    crownMesh = BABYLON.MeshBuilder.CreateSphere(
       "crown_" + Math.random(),
-      { diameter: 2 * crownR, segments: 2 },
+      { diameter: 2 * crownR, tessellation: 2 },
       s.scene
     );
     crownMesh.material = mat(s.scene, "crown_mat_" + Math.random(), "0xffd700",
@@ -268,9 +268,9 @@ export function spawnEnemy(ex, ey, scaleFactor = 1.0, isBossChild = false, force
     frameMesh.parent = hpGroup;
 
     // Star icon marker on left of HP bar — Icosphere approximates OctahedronGeometry
-    const starMesh = BABYLON.MeshBuilder.CreateIcosphere(
+    const starMesh = BABYLON.MeshBuilder.CreateSphere(
       "star_icon_" + Math.random(),
-      { diameter: 5, segments: 2 },
+      { diameter: 5, tessellation: 2 },
       s.scene
     );
     starMesh.material = mat(s.scene, "star_mat_" + Math.random(), "0xffd700",
@@ -398,9 +398,9 @@ export function spawnEnemy2(ex, ey, scaleFactor = 1.0, isBossChild = false, forc
 
     // Floating Golden Crown / Emblem
     const crownR2 = 4.5 * (scaleFactor / elite.scaleBonus);
-    crownMesh = BABYLON.MeshBuilder.CreateIcosphere(
+    crownMesh = BABYLON.MeshBuilder.CreateSphere(
       "crown2_" + Math.random(),
-      { diameter: 2 * crownR2, segments: 2 },
+      { diameter: 2 * crownR2, tessellation: 2 },
       s.scene
     );
     crownMesh.material = mat(s.scene, "crown_mat2_" + Math.random(), "0xffd700",
@@ -458,9 +458,9 @@ export function spawnEnemy2(ex, ey, scaleFactor = 1.0, isBossChild = false, forc
     frameGeo2.position.z = -0.05;
     frameGeo2.parent = hpGroup;
 
-    const starMesh2 = BABYLON.MeshBuilder.CreateIcosphere(
+    const starMesh2 = BABYLON.MeshBuilder.CreateSphere(
       "star_icon2_" + Math.random(),
-      { diameter: 5, segments: 2 },
+      { diameter: 5, tessellation: 2 },
       s.scene
     );
     starMesh2.material = mat(s.scene, "star_mat2_" + Math.random(), "0xffd700",
@@ -1031,9 +1031,9 @@ export function triggerInteractable(it, index) {
 
     // Spawn gold — Icosphere approximates OctahedronGeometry
     for (let j = 0; j < 4; j++) {
-      const dropMesh = BABYLON.MeshBuilder.CreateIcosphere(
+      const dropMesh = BABYLON.MeshBuilder.CreateSphere(
         "chest_gold_" + j + "_" + Math.random(),
-        { diameter: 8, segments: 2 },
+        { diameter: 8, tessellation: 2 },
         s.scene
       );
       dropMesh.material = mat(s.scene, "chest_gold_mat_" + j, "0xffd700",
@@ -1448,9 +1448,9 @@ function killEnemy(index) {
   if (loot) {
     const dropChance = 1.0 / Math.sqrt(loot.value);
     if (Math.random() < dropChance) {
-      const dropMesh = BABYLON.MeshBuilder.CreateIcosphere(
+      const dropMesh = BABYLON.MeshBuilder.CreateSphere(
         "loot_" + Math.random(),
-        { diameter: 8, segments: 2 },
+        { diameter: 8, tessellation: 2 },
         s.scene
       );
       dropMesh.material = mat(s.scene, "loot_mat_" + Math.random(),
@@ -1488,9 +1488,9 @@ function killEnemy(index) {
   }
 
   // EXP orb — DodecahedronGeometry approximated by Icosphere (segments:2)
-  const expMesh = BABYLON.MeshBuilder.CreateIcosphere(
+  const expMesh = BABYLON.MeshBuilder.CreateSphere(
     "exp_orb_" + Math.random(),
-    { diameter: 10, segments: 2 },
+    { diameter: 10, tessellation: 2 },
     s.scene
   );
   expMesh.material = mat(s.scene, "exp_orb_mat_" + Math.random(), "0x0088ff",
@@ -1515,9 +1515,9 @@ function killEnemy(index) {
 
     // Burst of Gold coins
     for (let g = 0; g < 6; g++) {
-      const dropMesh = BABYLON.MeshBuilder.CreateIcosphere(
+      const dropMesh = BABYLON.MeshBuilder.CreateSphere(
         "elite_gold_" + g + "_" + Math.random(),
-        { diameter: 8, segments: 2 },
+        { diameter: 8, tessellation: 2 },
         s.scene
       );
       dropMesh.material = mat(s.scene, "elite_gold_mat_" + g, "0xffd700",

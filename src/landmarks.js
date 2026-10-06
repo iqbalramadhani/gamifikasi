@@ -80,7 +80,7 @@ export function spawnMysticRuin(cx, cy, group, obstaclesArr, heightFunc, sceneTy
   const s = state;
   const ruinGroup = new BABYLON.TransformNode("ruin_" + cx + "_" + cy, s.scene);
 
-  const core = BABYLON.MeshBuilder.CreateIcosphere("ruin_core_" + cx, { diameter: 30 }, s.scene);
+  const core = BABYLON.MeshBuilder.CreateSphere("ruin_core_" + cx, { diameter: 30, tessellation: 2 }, s.scene);
   const coreMat = mat("ruin_core_mat_" + cx, "#00ffff", { emissive: "#00ffff", opacity: 0.8, emissiveIntensity: 2.0 });
   core.material = coreMat;
   core.position.y = 30;

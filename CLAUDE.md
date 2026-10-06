@@ -17,7 +17,7 @@ There is no test runner. `test.js`, `test-blocked.js`, `test_glb.js` are ad-hoc 
 
 - `index.html` → `src/main.js` (entry point, game loop, camera sync, input handling, save/load orchestration)
 - `src/state.js` — single mutable `state` object: player (HP/stamina/cooldowns/inventory), enemies, projectiles, meshes, current scene, upgrades, equipment, and auto-use thresholds (`autoHealThreshold`, `autoSPThreshold`)
-- `src/scenes.js` — Three.js setup: model loading, map/terrain/lighting per scene, NPC/portal placement, `initEntities()` (player mesh + animation mixer)
+- `src/scenes.js` — Babylon.js setup: model loading, map/terrain/lighting per scene, NPC/portal placement, `initEntities()` (player mesh + animation)
 - `src/combat.js` — all combat logic: `move()` (player movement, dash/spin skills), `attack()`, `doMeleeHit()`, `updateEnemies()`, `updateBoss()`, `animatePlayer()`
 - `src/environment.js` — dynamic ambient effects (particles, day/night cycle, weather, pets)
 - `src/persistence.js` + `server.js` — save/load player progress via `/api/save` and `/api/load` (Express + SQLite)
@@ -26,8 +26,8 @@ There is no test runner. `test.js`, `test-blocked.js`, `test_glb.js` are ad-hoc 
 - `src/constants.js` — weapon/armor tiers and stat definitions
 - `src/helpers.js` — `blocked(x, y, r)` collision check (scene-aware obstacle set)
 
-### Three.js model/animation pipeline
-`model-loader.js` loads assets in parallel via `Promise.all`. FBX assets use `FBXLoader`; animations come from the clip array THREE auto-populates on the root `fbx` object (i.e. `fbx.animations[0]`). `scenes.js → initEntities()` builds the player `AnimationMixer` and `playerActions` (idle/run/attack) from these clips, with fallbacks to `idle_anim`/`run_anim`/`attack_anim` GLTF clips if FBX load fails.
+### Babylon.js model/animation pipeline
+`model-loader.js` loads GLTF assets via `@babylonjs/loaders` (`GLTFLoader.Register()`), cloning the root `TransformNode` with `node.clone(name, true, false)` for each enemy/player instance. **Phase 1 limitation**: skeleton animation is not yet ported — `createEnemyMixer()` returns no-op stubs, and walk/idle/attack actions are cosmetic only. Full `AnimationMixer`-equivalent layer is planned for Phase 2.
 
 ### HUD navbar & settings menu
 The HUD navbar (`#hud`) in `index.html` shows only status badges on the left (HP, SP, level, gold) and a single `⚙️ Menu` button on the right. The `#settings-menu` overlay (opened via `openSettings()`) contains:
@@ -39,7 +39,7 @@ The HUD navbar (`#hud`) in `index.html` shows only status badges on the left (HP
 All modals (inventory, stats, quest board, full map) are triggered via keyboard shortcuts (`I`, `J`, `M`) or the quick-action buttons in the settings menu. The full map has **no dedicated navbar button** — it is opened by clicking the minimap overlay or pressing `M`.
 
 ### World layout
-Three scenes: `hometown` (safe zone, no enemies), `wilds` (main hunting area, has a boss), `wilds2` (Scorched Dunes — level-gated at 10+). Each scene has its own `THREE.Group`; only the active one is visible. Terrain height differs per scene — use `getTerrainHeightWilds2()` for `wilds2`, `getTerrainHeight()` for `wilds`/`hometown`.
+Three scenes: `hometown` (safe zone, no enemies), `wilds` (main hunting area, has a boss), `wilds2` (Scorched Dunes — level-gated at 10+). Each scene has its own `TransformNode` (Babylon); only the active one is enabled via `setEnabled(true/false)`. Terrain height differs per scene — use `getTerrainHeightWilds2()` for `wilds2`, `getTerrainHeight()` for `wilds`/`hometown`.
 
 ### Combat timing
 All combat timers (`attackCooldown`, `attackHitDelay`, `dashCooldown`, `spinCooldown`, etc.) are frame counters (60fps reference), decremented with `dt` each tick in `main.js`'s game loop — not real-time milliseconds.
