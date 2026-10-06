@@ -1,7 +1,7 @@
 import * as BABYLON from "babylonjs";
 import { state } from "./state.js";
 import { mapSize, enemyTemplates } from "./constants.js";
-import { loadedModels, createEnemyMixer } from "./model-loader.js";
+import { loadedModels, createEnemyMixer, ESMTransformNode } from "./model-loader.js";
 import { playSound } from "./audio.js";
 
 // ─── Collision / spawner helpers ──────────────────────────────────────────────
@@ -225,7 +225,7 @@ export function spawnBoss() {
       const bModel = loadedModels.arena_soldier.clone("boss_arena_soldier", true, false);
       bModel.scaling.setAll(120);
 
-      s.bossMesh = new BABYLON.TransformNode("boss_arena_group", s.scene);
+      s.bossMesh = new ESMTransformNode("boss_arena_group", s.scene);
       s.bossMesh.parent = s.sceneMount;
       bModel.parent = s.bossMesh;
 
@@ -261,7 +261,7 @@ export function spawnBoss() {
       bModel.scaling.setAll(40);
       bModel.position.y = -12;
 
-      s.bossMesh = new BABYLON.TransformNode("boss_golem_group", s.scene);
+      s.bossMesh = new ESMTransformNode("boss_golem_group", s.scene);
       s.bossMesh.parent = s.sceneMount;
       bModel.parent = s.bossMesh;
       s.bossMesh.position.set(s.bossX, 0, s.bossY);
@@ -279,7 +279,7 @@ export function spawnBoss() {
     }
   }
 
-  s.bossHpGroup = new BABYLON.TransformNode("boss_hp_group", s.scene);
+  s.bossHpGroup = new ESMTransformNode("boss_hp_group", s.scene);
   s.bossHpGroup.parent = s.sceneMount;
 
   const bg = BABYLON.MeshBuilder.CreateGround("boss_hp_bg", { width: 80, depth: 8 }, s.scene);

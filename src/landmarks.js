@@ -1,5 +1,5 @@
 import * as BABYLON from "babylonjs";
-import { loadedModels } from "./model-loader.js";
+import { loadedModels, ESMTransformNode } from "./model-loader.js";
 import { state } from "./state.js";
 
 function mat(name, hex, opts = {}) {
@@ -13,7 +13,7 @@ function mat(name, hex, opts = {}) {
 
 export function spawnTreasureChest(x, y, group, obstaclesArr, heightFunc, sceneType) {
   const s = state;
-  const chestGroup = new BABYLON.TransformNode("chest_" + x + "_" + y, s.scene);
+  const chestGroup = new ESMTransformNode("chest_" + x + "_" + y, s.scene);
 
   const base = BABYLON.MeshBuilder.CreateBox("chest_base", { width: 15, height: 10, depth: 10 }, s.scene);
   base.material = mat("chest_base_mat", "#8b5a2b");
@@ -78,7 +78,7 @@ export function spawnExplosiveBarrel(x, y, group, obstaclesArr, heightFunc, scen
 
 export function spawnMysticRuin(cx, cy, group, obstaclesArr, heightFunc, sceneType) {
   const s = state;
-  const ruinGroup = new BABYLON.TransformNode("ruin_" + cx + "_" + cy, s.scene);
+  const ruinGroup = new ESMTransformNode("ruin_" + cx + "_" + cy, s.scene);
 
   const core = BABYLON.MeshBuilder.CreateSphere("ruin_core_" + cx, { diameter: 30, tessellation: 2 }, s.scene);
   const coreMat = mat("ruin_core_mat_" + cx, "#00ffff", { emissive: "#00ffff", opacity: 0.8, emissiveIntensity: 2.0 });
@@ -121,7 +121,7 @@ export function spawnMysticRuin(cx, cy, group, obstaclesArr, heightFunc, sceneTy
 
 export function spawnArenaRuin(cx, cy, group, obstaclesArr, heightFunc, sceneType) {
   const s = state;
-  const ruinGroup = new BABYLON.TransformNode("arena_ruin_" + cx + "_" + cy, s.scene);
+  const ruinGroup = new ESMTransformNode("arena_ruin_" + cx + "_" + cy, s.scene);
 
   // Center Statue
   if (loadedModels.arena_statue) {

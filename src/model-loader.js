@@ -1,6 +1,20 @@
-// @babylonjs/loaders registers GLTF + FBX (and others) as SceneLoader plugins on import.
-import "@babylonjs/loaders";
-import * as BABYLON from "babylonjs";
+// "babylonjs" is the monolithic UMD bundle (window.BABYLON).
+// All scene/node creation in scenes.js / combat.js uses `new BABYLON.TransformNode()`
+// etc. from the UMD bundle. @babylonjs/loaders (ESM) loads GLTF/FBX via
+// @babylonjs/core ESM classes. The two class hierarchies are incompatible —
+// re-parenting an ESM Mesh to a UMD TransformNode corrupts internal child arrays.
+//
+// containerToNode() therefore builds an ESM TransformNode root, and the caller
+// (scenes.js cloneModel) uses that ESM node. All node clones produced by
+// .clone() are ESM instances, and when added to the UMD Scene they're
+// registered into the UMD scene's node arrays via duck-typing (no instanceof
+// gate in addMesh/addTransformNode), so they render correctly.
+import "babylonjs";
+import { registerBuiltInLoaders } from "@babylonjs/loaders";
+registerBuiltInLoaders(); // v9: no longer auto-registered on import — explicit call required
+import { LoadAssetContainerAsync } from "@babylonjs/core/Loading/sceneLoader.js";
+import { TransformNode as ESMTransformNode } from "@babylonjs/core/Meshes/transformNode.js";
+export { ESMTransformNode }; // re-export so other modules can create ESM nodes
 import { state } from "./state.js";
 
 // Phase 1 note: animation skeleton layer is not ported yet (that's Phase 2).
@@ -123,8 +137,10 @@ const fbxModelsToLoad = [
  * clip array shape the rest of the codebase expects.
  */
 function containerToNode(container, scene) {
-  if (!container) return null;
-  const root = new BABYLON.TransformNode("modelRoot", scene);
+  if (!container || !container.meshes || container.meshes.length === 0) return null;
+  // Use ESM TransformNode so the entire subtree stays in the @babylonjs/core
+  // class hierarchy (consistent with the ESM meshes that LoadAssetContainerAsync produces).
+  const root = new ESMTransformNode("modelRoot", scene);
   const allMeshes = [...(container.meshes || []), ...(container.transformNodes || [])];
   for (const m of allMeshes) {
     m.parent = root;
@@ -141,41 +157,44 @@ export async function loadAllModels() {
   const s = state;
   if (!s.scene) return; // scene may not be created yet depending on call order
 
-  const loadGLTF = (url) =>
-    BABYLON.SceneLoader.LoadAssetContainerAsync("", url, s.scene)
+  const loadGLTF = (item) =>
+    LoadAssetContainerAsync("", item.url, s.scene)
       .then(container => container)
-      .catch(() => null);
+      .catch(err => { console.warn("[model-loader] GLTF failed:", item.key, item.url, err); return null; });
 
-  const loadFBX = (url) =>
-    BABYLON.SceneLoader.LoadAssetContainerAsync("", url, s.scene, "fbx")
+  const loadFBX = (item) =>
+    LoadAssetContainerAsync("", item.url, s.scene, "fbx")
       .then(container => container)
-      .catch(() => null);
+      .catch(err => { console.warn("[model-loader] FBX failed:", item.key, item.url, err); return null; });
 
   const promises = modelsToLoad.map(item =>
-    loadGLTF(item.url).then(container => {
+    loadGLTF(item).then(container => {
       const node = containerToNode(container, s.scene);
       if (node) {
         node.setEnabled(false); // keep memory but don't render the "template" instance
         loadedModels[item.key] = node;
-        return true;
       }
-      return false;
     })
   );
 
   const fbxPromises = fbxModelsToLoad.map(item =>
-    loadFBX(item.url).then(container => {
+    loadFBX(item).then(container => {
       const node = containerToNode(container, s.scene);
       if (node) {
         node.setEnabled(false);
         loadedModels[item.key] = node;
-        return true;
       }
-      return false;
     })
   );
 
   await Promise.all([...promises, ...fbxPromises]);
+
+  // Log how many models actually loaded vs. how many failed
+  const loaded = Object.values(loadedModels).filter(Boolean).length;
+  const total = modelsToLoad.length + fbxModelsToLoad.length;
+  if (loaded < total) {
+    console.warn(`[model-loader] ${total - loaded}/${total} models failed to load`);
+  }
 }
 
 /**

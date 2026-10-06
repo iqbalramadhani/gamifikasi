@@ -1,7 +1,7 @@
 import * as BABYLON from "babylonjs";
 import { state } from './state.js';
 import { mapSize, weaponList, armorList, enemyTemplates, enemyTemplates2, eliteTemplates, WILDS2_MIN_LEVEL, lootTable, consumableItems, statusEffects } from './constants.js';
-import { loadedModels, createEnemyMixer } from './model-loader.js';
+import { loadedModels, createEnemyMixer, ESMTransformNode } from './model-loader.js';
 import { blocked, spawnParticles, spawnDamageText } from './helpers.js';
 import { spawnAtFreePos, spawnAtFreePosWilds2, getTerrainHeight, getTerrainHeightWilds2 } from './scenes.js';
 import { playSound } from './audio.js';
@@ -166,7 +166,7 @@ export function spawnEnemy(ex, ey, scaleFactor = 1.0, isBossChild = false, force
       }
     }
     gltfEnemy.setEnabled(true);
-    mesh = new BABYLON.TransformNode("enemy_" + charKey + "_" + Math.random().toString(36).slice(2, 8), s.scene);
+    mesh = new ESMTransformNode("enemy_" + charKey + "_" + Math.random().toString(36).slice(2, 8), s.scene);
     gltfEnemy.parent = mesh;
     eY = isFlying ? (isElite ? 42 : 35) : 15;
     animData = createEnemyMixer(charKey, gltfEnemy);
@@ -244,8 +244,8 @@ export function spawnEnemy(ex, ey, scaleFactor = 1.0, isBossChild = false, force
   const hpFgMat = mat(s.scene, "hp_fg_mat_" + Math.random(),
     isElite ? "0xff0055" : "0x008800",
     { emissive: isElite ? "0xff0055" : "0x008800", disableLighting: true });
-  const hpGroup = new BABYLON.TransformNode("hp_group_" + Math.random(), s.scene);
-  hpGroup.billboardMode = BABYLON.BillboardMode.ALL;
+  const hpGroup = new ESMTransformNode("hp_group_" + Math.random(), s.scene);
+  hpGroup.billboardMode = BABYLON.Mesh.BILLBOARDMODE_ALL;
   const hpBg = hpGeo.clone ? hpGeo.clone("hp_bg_" + Math.random(), true) : hpGeo;
   hpBg.material = hpBgMat;
   const hpFg = hpGeo.clone ? hpGeo.clone("hp_fg_" + Math.random(), true) : hpGeo;
@@ -360,7 +360,7 @@ export function spawnEnemy2(ex, ey, scaleFactor = 1.0, isBossChild = false, forc
       if (child.material && child.material.clone) child.material = child.material.clone();
     }
     gltfEnemy.setEnabled(true);
-    mesh = new BABYLON.TransformNode("enemy2_" + charKey + "_" + Math.random().toString(36).slice(2, 8), s.scene);
+    mesh = new ESMTransformNode("enemy2_" + charKey + "_" + Math.random().toString(36).slice(2, 8), s.scene);
     gltfEnemy.parent = mesh;
     eY = isFlying ? (isElite ? 42 : 35) : 15;
     animData = createEnemyMixer(charKey, gltfEnemy);
@@ -437,8 +437,8 @@ export function spawnEnemy2(ex, ey, scaleFactor = 1.0, isBossChild = false, forc
   const hpFgMat2 = mat(s.scene, "hp_fg_mat2_" + Math.random(),
     isElite ? "0xff0055" : "0xaa2200",
     { emissive: isElite ? "0xff0055" : "0xaa2200", disableLighting: true });
-  const hpGroup = new BABYLON.TransformNode("hp_group2_" + Math.random(), s.scene);
-  hpGroup.billboardMode = BABYLON.BillboardMode.ALL;
+  const hpGroup = new ESMTransformNode("hp_group2_" + Math.random(), s.scene);
+  hpGroup.billboardMode = BABYLON.Mesh.BILLBOARDMODE_ALL;
   const hpBg2 = hpGeo2.clone("hp_bg2_" + Math.random(), true);
   hpBg2.material = hpBgMat2;
   const hpFg2 = hpGeo2.clone("hp_fg2_" + Math.random(), true);
