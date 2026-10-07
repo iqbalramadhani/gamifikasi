@@ -1,23 +1,74 @@
-// "babylonjs" is the monolithic UMD bundle (window.BABYLON).
-// All scene/node creation in scenes.js / combat.js uses `new BABYLON.TransformNode()`
-// etc. from the UMD bundle. @babylonjs/loaders (ESM) loads GLTF/FBX via
-// @babylonjs/core ESM classes. The two class hierarchies are incompatible —
-// re-parenting an ESM Mesh to a UMD TransformNode corrupts internal child arrays.
+// ─── Babylon.js v9: UMD/ESM cross-hierarchy node bridge ────────────────────
 //
-// containerToNode() therefore builds an ESM TransformNode root, and the caller
-// (scenes.js cloneModel) uses that ESM node. All node clones produced by
-// .clone() are ESM instances, and when added to the UMD Scene they're
-// registered into the UMD scene's node arrays via duck-typing (no instanceof
-// gate in addMesh/addTransformNode), so they render correctly.
-import "babylonjs";
+// "babylonjs" (UMD, window.BABYLON) and "@babylonjs/core"/"@babylonjs/loaders"
+// (ESM) ship two completely separate class hierarchies for Node/TransformNode/Mesh.
+//
+// Crash: `Cannot create property '_children' on boolean 'true'`
+//   • UMD `TransformNode` initialises `_children = true` (boolean sentinel).
+//   • ESM `set parent(newParent)` — the `parent` setter inherited from the ESM
+//     `Node` prototype — writes to `newParent._children` directly:
+//       if (newParent._children === undefined || newParent._children === null)
+//         newParent._children = new Array();
+//       newParent._children.push(this);
+//     When `newParent` is a UMD node, `_children` is `true`, so the
+//     `undefined/null` check passes, the assignment `newParent._children = new Array()`
+//     throws because `true` is a primitive.
+//
+// Fix: `containerToNode()` now creates the root as a plain UMD `BABYLON.TransformNode`
+// and initialises its `_children` to a real array before attaching ESM meshes.
+// All ESM model children (loaded by the ESM GLTF/FBX loaders) are then attached
+// to this UMD root via `.parent = umdRoot`. The ESM `parent` setter pushes the
+// ESM mesh into `umdRoot._children` (an array) — no crash.
+//
+// The ESM internal sub-tree of each loaded model is preserved by ESM `clone()`
+// which copies the original model's internal ESM `_children` arrays.
+//
+// `UMDTransformNode` and `UMDMesh` are exported for use as `.parent` targets
+// of ESM model clones anywhere in the codebase.
+
+import * as BABYLON from "babylonjs";
 import { registerBuiltInLoaders } from "@babylonjs/loaders";
 registerBuiltInLoaders(); // v9: no longer auto-registered on import — explicit call required
 import { LoadAssetContainerAsync } from "@babylonjs/core/Loading/sceneLoader.js";
-import { TransformNode as ESMTransformNode } from "@babylonjs/core/Meshes/transformNode.js";
-export { ESMTransformNode }; // re-export so other modules can create ESM nodes
 import { state } from "./state.js";
 
-// Phase 1 note: animation skeleton layer is not ported yet (that's Phase 2).
+// ─── UMD node classes safe for ESM children ─────────────────────────────────
+// UMD TransformNode initialises `_children = true`. The `children` getter
+// iterates `_children` with `for...of` → crashes on `true`. ESM `setParent`
+// writes to `_children` directly.
+//
+// These subclasses normalise `_children` to an array in the constructor, and
+// override the `children` getter to always return an array.
+
+function _normaliseChildren(node) {
+  if (!Array.isArray(node._children)) node._children = [];
+}
+
+class UMDTransformNode extends BABYLON.TransformNode {
+  constructor(name, scene) {
+    super(name, scene);
+    _normaliseChildren(this);
+  }
+  get children() {
+    _normaliseChildren(this);
+    return this._children;
+  }
+}
+
+class UMDMesh extends BABYLON.Mesh {
+  constructor(name, scene, parent, source, doNotCloneChildren) {
+    super(name, scene, parent, source, doNotCloneChildren);
+    _normaliseChildren(this);
+  }
+  get children() {
+    _normaliseChildren(this);
+    return this._children;
+  }
+}
+
+export { UMDTransformNode, UMDMesh };
+
+// ─── Phase 1: animation skeleton layer not yet ported ──────────────────────
 // `createEnemyMixer` below returns a null-safe, no-op shape matching the
 // original Three.js AnimationMixer/Action API surface so that all existing
 // call sites (`e.mixer.update`, `actions.walk.fadeIn(...)`, etc.) keep
@@ -87,13 +138,13 @@ const modelsToLoad = [
   { key: "char_r", url: "/kenney_blocky-characters_20/Models/GLB format/character-r.glb" },
   { key: "tent",     url: "/models/tent.glb" },
   { key: "blob_alien", url: "/monsterl1_10/Blob/glTF/Alien.gltf" },
-  { key: "blob_birb", url: "/monsterl1_10/Blob/glTF/Birb.gltf" },
+  { key: "blob_birb",  url: "/monsterl1_10/Blob/glTF/Birb.gltf" },
   { key: "blob_cactoro", url: "/monsterl1_10/Blob/glTF/Cactoro.gltf" },
   { key: "blob_green", url: "/monsterl1_10/Blob/glTF/GreenBlob.gltf" },
   { key: "blob_green_spiky", url: "/monsterl1_10/Blob/glTF/GreenSpikyBlob.gltf" },
   { key: "blob_mushnub", url: "/monsterl1_10/Blob/glTF/Mushnub.gltf" },
-  { key: "blob_pink", url: "/monsterl1_10/Blob/glTF/PinkBlob.gltf" },
-  { key: "blob_yeti", url: "/monsterl1_10/Blob/glTF/Yeti.gltf" },
+  { key: "blob_pink",  url: "/monsterl1_10/Blob/glTF/PinkBlob.gltf" },
+  { key: "blob_yeti",  url: "/monsterl1_10/Blob/glTF/Yeti.gltf" },
   { key: "fly_dragon",  url: "/monsterl1_10/Flying/glTF/Dragon.gltf" },
   { key: "fly_ghost",   url: "/monsterl1_10/Flying/glTF/Ghost.gltf" },
   { key: "fly_squidle", url: "/monsterl1_10/Flying/glTF/Squidle.gltf" },
@@ -122,28 +173,33 @@ const modelsToLoad = [
 
 const fbxModelsToLoad = [
   { key: "sword_idle", url: "/animations/sword_idle.fbx" },
-  { key: "sword_run", url: "/animations/sword_run.fbx" },
+  { key: "sword_run",  url: "/animations/sword_run.fbx" },
   { key: "sword_slash", url: "/animations/sword_slash.fbx" },
   { key: "sword_slash_3", url: "/animations/sword_slash_3.fbx" },
   { key: "player_model", url: "/models/player_model.fbx" },
-  { key: "idle_anim", url: "/models/idle.fbx" },
-  { key: "run_anim", url: "/models/run.fbx" },
-  { key: "attack_anim", url: "/models/attack.fbx" },
+  { key: "idle_anim",  url: "/models/idle.fbx" },
+  { key: "run_anim",   url: "/models/run.fbx" },
+  { key: "attack_anim",url: "/models/attack.fbx" },
 ];
 
 /**
- * Flatten an AssetContainer into a single root TransformNode that owns all
- * loaded meshes, mimicking the Three.js `gltf.scene` root + `gltf.animations`
- * clip array shape the rest of the codebase expects.
+ * Flatten an AssetContainer into a single root UMDTransformNode that owns all
+ * loaded meshes.
+ *
+ * Using a UMD root avoids the cross-hierarchy crash: ESM `set parent` writes
+ * to `newParent._children` directly. A plain UMD TransformNode has
+ * `_children = true` → `true.push()` crashes. UMDTransformNode normalises
+ * `_children` to `[]` in its constructor, so the ESM write succeeds.
+ *
+ * The ESM mesh sub-tree (skeleton bones, sub-meshes) is preserved via ESM
+ * `clone()` which copies the original model's internal ESM `_children` arrays.
  */
 function containerToNode(container, scene) {
   if (!container || !container.meshes || container.meshes.length === 0) return null;
-  // Use ESM TransformNode so the entire subtree stays in the @babylonjs/core
-  // class hierarchy (consistent with the ESM meshes that LoadAssetContainerAsync produces).
-  const root = new ESMTransformNode("modelRoot", scene);
-  const allMeshes = [...(container.meshes || []), ...(container.transformNodes || [])];
-  for (const m of allMeshes) {
-    m.parent = root;
+  const root = new UMDTransformNode("modelRoot", scene);
+  const allNodes = [...(container.meshes || []), ...(container.transformNodes || [])];
+  for (const m of allNodes) {
+    m.parent = root; // ESM `set parent` pushes m into root._children (array)
   }
   root.animations = container.animationGroups ? container.animationGroups.map(g => g.name) : [];
   return root;
@@ -158,12 +214,12 @@ export async function loadAllModels() {
   if (!s.scene) return; // scene may not be created yet depending on call order
 
   const loadGLTF = (item) =>
-    LoadAssetContainerAsync("", item.url, s.scene)
+    LoadAssetContainerAsync(item.url, s.scene, { rootUrl: "" })
       .then(container => container)
       .catch(err => { console.warn("[model-loader] GLTF failed:", item.key, item.url, err); return null; });
 
   const loadFBX = (item) =>
-    LoadAssetContainerAsync("", item.url, s.scene, "fbx")
+    LoadAssetContainerAsync(item.url, s.scene, { rootUrl: "", pluginExtension: "fbx" })
       .then(container => container)
       .catch(err => { console.warn("[model-loader] FBX failed:", item.key, item.url, err); return null; });
 

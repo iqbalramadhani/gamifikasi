@@ -4,6 +4,7 @@ import { mapSize, weaponList, armorList, helmetList, bootList, lootTable, consum
 import { playSound } from './audio.js';
 import { blocked, spawnParticles, checkItems } from './helpers.js';
 import { updatePortalAnimations, getTerrainHeight, getTerrainHeightWilds2 } from './scenes.js';
+import { UMDMesh, UMDTransformNode } from './model-loader.js';
 
 
 // ─── UI throttled update ──────────────────────────────────────────────────────
@@ -1012,7 +1013,7 @@ window.equipWeapon = (idx) => {
     if (s.auraBursts) { s.auraBursts.dispose(); s.auraBursts = null; }
 
     // Create aura group as sibling under sceneMount
-    s.weaponAuraGroup = new BABYLON.TransformNode("aura_group", s.scene);
+    s.weaponAuraGroup = new UMDTransformNode("aura_group", s.scene);
     s.weaponAuraGroup.parent = s.sceneMount;
 
     const wColor = BABYLON.Color3.FromHexString(wNext.color || "#ff0000");
@@ -1089,7 +1090,7 @@ window.equipWeapon = (idx) => {
     }
 
     // Layer 3 — attack burst pool (20)
-    s.auraBursts = new BABYLON.TransformNode("aura_bursts", s.scene);
+    s.auraBursts = new UMDTransformNode("aura_bursts", s.scene);
     s.auraBursts.parent = s.sceneMount;
 
     for (let i = 0; i < 20; i++) {

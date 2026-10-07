@@ -2,7 +2,7 @@ import * as BABYLON from "babylonjs";
 import "@babylonjs/loaders"; // registers GLTF + FBX sceneLoader plugins
 import { state } from './state.js';
 import { mapSize } from './constants.js';
-import { loadedModels, ESMTransformNode } from './model-loader.js';
+import { loadedModels, UMDTransformNode } from './model-loader.js';
 import { spawnEnemy, spawnEnemy2 } from './combat.js';
 import { scatterInteractables } from './landmarks.js';
 import { playSound } from './audio.js';
@@ -46,7 +46,7 @@ export function initSetup() {
   s.scene.clearColor = new BABYLON.Color4(0.53, 0.81, 0.92, 1); // Langit biru
 
   // Dynamic entity mount (hot-path add/remove target)
-  s.sceneMount = new ESMTransformNode("sceneMount", s.scene);
+  s.sceneMount = new UMDTransformNode("sceneMount", s.scene);
 
   s.camera = new BABYLON.UniversalCamera("chaseCam", new BABYLON.Vector3(0, s.cameraOffsetY, 0), s.scene);
   s.camera.minZ = 0.1;
@@ -145,12 +145,12 @@ export function initSetup() {
 
 export function initMap() {
   const s = state;
-  s.wildsGroup = new ESMTransformNode("wildsGroup", s.scene);
+  s.wildsGroup = new UMDTransformNode("wildsGroup", s.scene);
 
   const ms = mapSize;
 
   // Altar in the center
-  const altarGroup = new ESMTransformNode("altarGroup", s.scene);
+  const altarGroup = new UMDTransformNode("altarGroup", s.scene);
   const altarBase = BABYLON.MeshBuilder.CreateCylinder("altarBase", { diameter: 80, height: 10, tessellation: 8 }, s.scene);
   altarBase.material = mat(s.scene, "altarBaseMat", "#555555");
   altarBase.position.y = 5;
@@ -262,7 +262,7 @@ export function initMap() {
           if (treeGroup) {
             treeGroup.scaling.set(50, 50, 50);
           } else {
-            treeGroup = new ESMTransformNode(`tree_${c}_${i}`, s.scene);
+            treeGroup = new UMDTransformNode(`tree_${c}_${i}`, s.scene);
             const trunk = BABYLON.MeshBuilder.CreateCylinder(`trunk_${c}_${i}`, { diameter: 12, height: 30, tessellation: 8 }, s.scene);
             trunk.material = mat(s.scene, `trunkMat_${c}_${i}`, "#5c4033");
             trunk.position.y = 15;
@@ -351,7 +351,7 @@ export function initMap() {
 
 export function initHometown() {
   const s = state;
-  s.hometownGroup = new ESMTransformNode("hometownGroup", s.scene);
+  s.hometownGroup = new UMDTransformNode("hometownGroup", s.scene);
 
   const hx = 500, hy = 500;
 
@@ -509,7 +509,7 @@ export function initHometown() {
   function makeBuilding(modelKey) {
     // --- struct + roof ---
     if (modelKey === 'struct_roof' && loadedModels.building_struct && loadedModels.building_roof) {
-      const grp = new ESMTransformNode(`building_struct_roof_${modelKey}`, s.scene);
+      const grp = new UMDTransformNode(`building_struct_roof_${modelKey}`, s.scene);
       const bs = loadedModels.building_struct.clone(`building_struct_${Math.random().toString(36).slice(2, 7)}`, true, false);
       const br = loadedModels.building_roof.clone(`building_roof_${Math.random().toString(36).slice(2, 7)}`, true, false);
       bs.parent = grp;
@@ -531,7 +531,7 @@ export function initHometown() {
     }
     // --- last resort: struct alone ---
     if (loadedModels.building_struct) {
-      const grp = new ESMTransformNode(`building_struct_only`, s.scene);
+      const grp = new UMDTransformNode(`building_struct_only`, s.scene);
       const bs = loadedModels.building_struct.clone(`building_struct_alone_${Math.random().toString(36).slice(2, 7)}`, true, false);
       if (loadedModels.building_roof) {
         const br = loadedModels.building_roof.clone(`building_roof_alone_${Math.random().toString(36).slice(2, 7)}`, true, false);
@@ -543,7 +543,7 @@ export function initHometown() {
     }
     // --- prosedural geometry jika SEMUA model gagal ---
     console.warn('[makeBuilding] Semua model gagal dimuat, pakai prosedural geometry');
-    const grp = new ESMTransformNode(`building_procedural`, s.scene);
+    const grp = new UMDTransformNode(`building_procedural`, s.scene);
     const base = BABYLON.MeshBuilder.CreateBox(`building_base_${Math.random().toString(36).slice(2, 7)}`, { width: 110, height: 75, depth: 110 }, s.scene);
     base.material = mat(s.scene, "buildingBaseMat", "#ddd3c6");
     base.position.y = 37.5;
@@ -643,7 +643,7 @@ export function initHometown() {
     stallGroup = loadedModels.tent.clone(`stall_tent`, true, false);
     stallGroup.scaling.set(60, 60, 60);
   } else {
-    stallGroup = new ESMTransformNode("stallGroup", s.scene);
+    stallGroup = new UMDTransformNode("stallGroup", s.scene);
     const poleMat = mat(s.scene, "poleMat", "#5c4033");
     [[-32, 32.5, -32], [32, 32.5, -32], [-32, 32.5, 32], [32, 32.5, 32]].forEach(([px, py, pz], i) => {
       const p = BABYLON.MeshBuilder.CreateCylinder(`stallPole_${i}`, { diameter: 6, height: 65, tessellation: 4 }, s.scene);
@@ -671,7 +671,7 @@ export function initHometown() {
     shrineGroup = loadedModels.building_platform.clone(`shrine_platform`, true, false);
     shrineGroup.scaling.set(65, 65, 65);
   } else {
-    shrineGroup = new ESMTransformNode("shrineGroup", s.scene);
+    shrineGroup = new UMDTransformNode("shrineGroup", s.scene);
     const sBaseMat = mat(s.scene, "shrineBaseMat", "#ffffff");
     const sBase = BABYLON.MeshBuilder.CreateCylinder("shrineBase", { diameter: 80, height: 8, tessellation: 8 }, s.scene);
     sBase.material = sBaseMat;
@@ -696,14 +696,14 @@ export function initHometown() {
   // Blacksmith
   let bsGroup;
   if (loadedModels.building_struct && loadedModels.building_roof) {
-    bsGroup = new ESMTransformNode("blacksmithGroup", s.scene);
+    bsGroup = new UMDTransformNode("blacksmithGroup", s.scene);
     const bsStruct = loadedModels.building_struct.clone(`blacksmith_struct`, true, false);
     const bsRoof = loadedModels.building_roof.clone(`blacksmith_roof`, true, false);
     bsStruct.parent = bsGroup;
     bsRoof.parent = bsGroup;
     bsGroup.scaling.set(80, 80, 80);
   } else {
-    bsGroup = new ESMTransformNode("blacksmithProcedural", s.scene);
+    bsGroup = new UMDTransformNode("blacksmithProcedural", s.scene);
     const anvil = BABYLON.MeshBuilder.CreateBox("blacksmithAnvil", { width: 24, height: 16, depth: 16 }, s.scene);
     anvil.material = mat(s.scene, "anvilMat", "#222222");
     anvil.position.set(0, 8, 16);
@@ -721,7 +721,7 @@ export function initHometown() {
   bsGroup.parent = s.hometownGroup;
 
   // Quest Board
-  const qbGroup = new ESMTransformNode("questBoardGroup", s.scene);
+  const qbGroup = new UMDTransformNode("questBoardGroup", s.scene);
   const board = BABYLON.MeshBuilder.CreateBox("questBoard", { width: 22, height: 16, depth: 2 }, s.scene);
   board.material = mat(s.scene, "questBoardMat", "#8b5a2b");
   board.position.y = 11;
@@ -776,7 +776,7 @@ export function initEntities() {
   s.playerBladeMat = mat(s.scene, "playerBladeMat", "#eeeeee");
   window.playerBodyMat = s.playerBodyMat;
   window.playerBladeMat = s.playerBladeMat;
-  s.playerMesh = new ESMTransformNode("playerMesh", s.scene);
+  s.playerMesh = new UMDTransformNode("playerMesh", s.scene);
 
   if (loadedModels.player_model) {
     const fbxModel = loadedModels.player_model.clone("player_model_instance", true, false);
@@ -862,7 +862,7 @@ export function initEntities() {
       }
     } else {
       // Create programmatic sword as fallback
-      s.playerSwordMesh = new ESMTransformNode("playerSwordFallback", s.scene);
+      s.playerSwordMesh = new UMDTransformNode("playerSwordFallback", s.scene);
 
       const blade = BABYLON.MeshBuilder.CreateBox("swordBlade", { width: 0.1, height: 1.2, depth: 0.2 }, s.scene);
       s.playerBladeMat = mat(s.scene, "playerBladeMat", "#cccccc");
@@ -907,7 +907,7 @@ export function initEntities() {
   s.playerHpFg = BABYLON.MeshBuilder.CreateGround("playerHpFg", { width: 30, depth: 4, updatable: true }, s.scene);
   s.playerHpFg.material = mat(s.scene, "playerHpFgMat", "#008800", { disableLighting: true });
   s.playerHpFg.position.z = 0.2;
-  s.playerHpGroup = new ESMTransformNode("playerHpGroup", s.scene);
+  s.playerHpGroup = new UMDTransformNode("playerHpGroup", s.scene);
   pHpBg.parent = s.playerHpGroup;
   s.playerHpFg.parent = s.playerHpGroup;
   s.playerHpGroup.billboardMode = BABYLON.Mesh.BILLBOARDMODE_ALL;
@@ -933,10 +933,10 @@ export function initEntities() {
 
 function createFallbackPlayer() {
   const s = state;
-  const g = new ESMTransformNode("fallbackPlayer", s.scene);
+  const g = new UMDTransformNode("fallbackPlayer", s.scene);
   const legMat = mat(s.scene, "legMat", "#555555");
 
-  g.leftHip = new ESMTransformNode("fallbackLeftHip", s.scene);
+  g.leftHip = new UMDTransformNode("fallbackLeftHip", s.scene);
   g.leftHip.position.set(0, -3, -3.5);
   const leftHipBox = BABYLON.MeshBuilder.CreateBox("leftHipBox", { width: 6, height: 12, depth: 6 }, s.scene);
   leftHipBox.material = legMat;
@@ -944,7 +944,7 @@ function createFallbackPlayer() {
   leftHipBox.parent = g.leftHip;
   g.leftHip.parent = g;
 
-  g.rightHip = new ESMTransformNode("fallbackRightHip", s.scene);
+  g.rightHip = new UMDTransformNode("fallbackRightHip", s.scene);
   g.rightHip.position.set(0, -3, 3.5);
   const rightHipBox = BABYLON.MeshBuilder.CreateBox("rightHipBox", { width: 6, height: 12, depth: 6 }, s.scene);
   rightHipBox.material = legMat;
@@ -969,7 +969,7 @@ function createFallbackPlayer() {
   helm.position.y = 21;
   helm.parent = g;
 
-  const swordGroup = new ESMTransformNode("fallbackSwordGroup", s.scene);
+  const swordGroup = new UMDTransformNode("fallbackSwordGroup", s.scene);
   const hilt = BABYLON.MeshBuilder.CreateBox("fallbackHilt", { width: 2, height: 6, depth: 2 }, s.scene);
   hilt.material = mat(s.scene, "fallbackHiltMat", "#5c4033");
   hilt.parent = swordGroup;
@@ -1020,7 +1020,7 @@ function scaleNPCToHeight(mesh, targetHeight) {
 
 function createPortal(color) {
   const s = state;
-  const group = new ESMTransformNode(`portal_group_${color}`, s.scene);
+  const group = new UMDTransformNode(`portal_group_${color}`, s.scene);
   const baseOffset = -30; // Mengimbangi posisi Y=30 dari map generator agar portal menyentuh tanah
 
   // 1. Cincin Rune Dasar (Di Tanah)
@@ -1162,7 +1162,7 @@ export function initNPCs() {
   if (loadedModels.char_b) {
     const shopMesh = loadedModels.char_b.clone("shopNPC_mesh", true, false);
     scaleNPCToHeight(shopMesh, NPC_HEIGHT);
-    s.shopNPC = new ESMTransformNode("shopNPC", s.scene);
+    s.shopNPC = new UMDTransformNode("shopNPC", s.scene);
     shopMesh.parent = s.shopNPC;
   } else {
     s.shopNPC = BABYLON.MeshBuilder.CreateCylinder("shopNPC_fallback", { diameter: 22, height: 48, tessellation: 8 }, s.scene);
@@ -1176,7 +1176,7 @@ export function initNPCs() {
   if (loadedModels.char_c) {
     const healerMesh = loadedModels.char_c.clone("healerNPC_mesh", true, false);
     scaleNPCToHeight(healerMesh, NPC_HEIGHT);
-    s.healerNPC = new ESMTransformNode("healerNPC", s.scene);
+    s.healerNPC = new UMDTransformNode("healerNPC", s.scene);
     healerMesh.parent = s.healerNPC;
   } else {
     s.healerNPC = BABYLON.MeshBuilder.CreateCylinder("healerNPC_fallback", { diameter: 22, height: 48, tessellation: 8 }, s.scene);
@@ -1190,7 +1190,7 @@ export function initNPCs() {
   if (loadedModels.char_d) {
     const bsMesh = loadedModels.char_d.clone("blacksmithNPC_mesh", true, false);
     scaleNPCToHeight(bsMesh, NPC_HEIGHT);
-    s.blacksmithNPC = new ESMTransformNode("blacksmithNPC", s.scene);
+    s.blacksmithNPC = new UMDTransformNode("blacksmithNPC", s.scene);
     bsMesh.parent = s.blacksmithNPC;
   } else {
     s.blacksmithNPC = BABYLON.MeshBuilder.CreateCylinder("blacksmithNPC_fallback", { diameter: 24, height: 48, tessellation: 8 }, s.scene);
@@ -1201,7 +1201,7 @@ export function initNPCs() {
   s.blacksmithNPC.parent = s.hometownGroup;
 
   // ── Village Inn / Tavern (Penginapan Desa) ──
-  const innGroup = new ESMTransformNode("innGroup", s.scene);
+  const innGroup = new UMDTransformNode("innGroup", s.scene);
   const counterMat = mat(s.scene, "innCounterMat", "#5c4033");
   const counter = BABYLON.MeshBuilder.CreateBox("innCounter", { width: 60, height: 20, depth: 24 }, s.scene);
   counter.material = counterMat;
@@ -1236,7 +1236,7 @@ export function initNPCs() {
   lanternLight.parent = innGroup;
 
   // Signpost: Penginapan Desa
-  const signGroup = new ESMTransformNode("innSignGroup", s.scene);
+  const signGroup = new UMDTransformNode("innSignGroup", s.scene);
   const signBoard = BABYLON.MeshBuilder.CreateBox("innSignBoard", { width: 34, height: 14, depth: 3 }, s.scene);
   signBoard.material = mat(s.scene, "innSignMat", "#7f4f24");
   signBoard.position.set(0, 26, 0);
@@ -1259,7 +1259,7 @@ export function initNPCs() {
     const innSrc = loadedModels.char_h || loadedModels.char_a;
     const innMesh = innSrc.clone("innNPC_mesh", true, false);
     scaleNPCToHeight(innMesh, NPC_HEIGHT);
-    s.innNPC = new ESMTransformNode("innNPC", s.scene);
+    s.innNPC = new UMDTransformNode("innNPC", s.scene);
     innMesh.parent = s.innNPC;
     s.innNPC.position.set(hx + 300, 0, hy + 288);
     s.innNPC.parent = s.hometownGroup;
@@ -1360,7 +1360,7 @@ export function initNPCs() {
     if (raw) {
       const vMesh = raw.clone(`villager_${v.id}`, true, false);
       scaleNPCToHeight(vMesh, NPC_HEIGHT);
-      v.mesh = new ESMTransformNode(`villager_${v.id}_group`, s.scene);
+      v.mesh = new UMDTransformNode(`villager_${v.id}_group`, s.scene);
       vMesh.parent = v.mesh;
       v.mesh.position.set(v.x, 0, v.z);
       v.mesh.parent = s.hometownGroup;
@@ -1379,7 +1379,7 @@ export function initNPCs() {
   s.villageAnimals = [];
 
   // Buddy the Dog
-  const dogMesh = new ESMTransformNode("dogMesh", s.scene);
+  const dogMesh = new UMDTransformNode("dogMesh", s.scene);
   const dogBodyMat = mat(s.scene, "dogBodyMat", "#8b5a2b");
   const dogDarkMat = mat(s.scene, "dogDarkMat", "#3d2714");
   const dogNoseMat = mat(s.scene, "dogNoseMat", "#111111");
@@ -1439,7 +1439,7 @@ export function initNPCs() {
     { x: hx - 140, z: hy + 160 },
   ];
   chickenPositions.forEach((pos, idx) => {
-    const cMesh = new ESMTransformNode(`chicken_${idx}`, s.scene);
+    const cMesh = new UMDTransformNode(`chicken_${idx}`, s.scene);
     const cMatWhite = mat(s.scene, `chickenMatWhite_${idx}`, idx === 1 ? "#f5b041" : "#ffffff");
     const cMatComb = mat(s.scene, `chickenMatComb_${idx}`, "#e74c3c");
     const cMatBeak = mat(s.scene, `chickenMatBeak_${idx}`, "#f39c12");
@@ -1448,7 +1448,7 @@ export function initNPCs() {
     cBody.material = cMatWhite;
     cBody.position.y = 4.5;
     cBody.parent = cMesh;
-    const cHead = new ESMTransformNode(`chickenHead_${idx}`, s.scene);
+    const cHead = new UMDTransformNode(`chickenHead_${idx}`, s.scene);
     cHead.position.set(0, 7.5, 3.5);
     cHead.parent = cMesh;
     const headBlock = BABYLON.MeshBuilder.CreateBox(`chickenHeadBlock_${idx}`, { width: 3.5, height: 4, depth: 3.5 }, s.scene);
@@ -1657,7 +1657,7 @@ export function initWildsNPCs() {
     gltfBoss.scaling.set(100, 100, 100);
     gltfBoss.position.y = -30;
     // Phase 1: skip per-mesh material tinting; Babylon material clone/override is a later step.
-    s.bossMesh = new ESMTransformNode("bossMesh", s.scene);
+    s.bossMesh = new UMDTransformNode("bossMesh", s.scene);
     gltfBoss.parent = s.bossMesh;
   } else {
     s.bossMesh = BABYLON.MeshBuilder.CreateBox("bossMesh_fallback", { width: 60, height: 60, depth: 60 }, s.scene);
@@ -1667,7 +1667,7 @@ export function initWildsNPCs() {
   s.bossMesh.position.set(s.bossX, 30 + getTerrainHeight(s.bossX, s.bossY), s.bossY);
   s.bossMesh.parent = s.wildsGroup;
 
-  s.bossHpGroup = new ESMTransformNode("bossHpGroup", s.scene);
+  s.bossHpGroup = new UMDTransformNode("bossHpGroup", s.scene);
   const bg = BABYLON.MeshBuilder.CreateGround("bossHpBg", { width: 80, depth: 8, updatable: true }, s.scene);
   bg.material = mat(s.scene, "bossHpBgMat", "#222222", { disableLighting: true });
   bg.parent = s.bossHpGroup;
@@ -1729,7 +1729,7 @@ export function spawnAtFreePosWilds2() {
 
 export function initWilds2() {
   const s = state;
-  s.wilds2Group = new ESMTransformNode("wilds2Group", s.scene);
+  s.wilds2Group = new UMDTransformNode("wilds2Group", s.scene);
 
   const ms = mapSize;
 
@@ -1769,7 +1769,7 @@ export function initWilds2() {
   floor.parent = s.wilds2Group;
 
   // ── Central ancient pyramid: 11 stepped tiers (step-pyramid), sandstone + gold cap ──
-  const pyramidGroup = new ESMTransformNode("pyramidGroup", s.scene);
+  const pyramidGroup = new UMDTransformNode("pyramidGroup", s.scene);
   // Procedural sandstone texture so each block reads as cut stone, not a flat color
   const stoneTex = (() => {
     const c = document.createElement('canvas');
@@ -2059,7 +2059,7 @@ export function initWilds2() {
     bossClone.scaling.set(120, 120, 120);
     bossClone.position.y = 0; // feet on terrain (model bottom is at y=0)
 
-    s.bossMesh = new ESMTransformNode("w2_boss_group_a", s.scene);
+    s.bossMesh = new UMDTransformNode("w2_boss_group_a", s.scene);
     s.bossMesh.addChild(bossClone);
 
     if (loadedModels.arena_weapon_spear) {
@@ -2073,13 +2073,13 @@ export function initWilds2() {
   } else {
     const bGeo = BABYLON.MeshBuilder.CreateBox("w2_boss_fb", { width: 60, height: 60, depth: 60 }, s.scene);
     bGeo.material = mat(s.scene, "w2BossMat", "#c25030");
-    s.bossMesh = new ESMTransformNode("w2_boss_group_b", s.scene);
+    s.bossMesh = new UMDTransformNode("w2_boss_group_b", s.scene);
     s.bossMesh.addChild(bGeo);
   }
   s.bossMesh.position.set(bossCX, -5 + getTerrainHeightWilds2(bossCX, bossCY), bossCY);
   s.bossMesh.parent = s.wilds2Group;
 
-  s.bossHpGroup = new ESMTransformNode("w2_boss_hp", s.scene);
+  s.bossHpGroup = new UMDTransformNode("w2_boss_hp", s.scene);
   s.bossHpGroup.billboardMode = BABYLON.Mesh.BILLBOARDMODE_ALL;
   const hbg = BABYLON.MeshBuilder.CreateGround("w2_boss_hp_bg", { width: 120, depth: 10, updatable: true }, s.scene);
   hbg.material = mat(s.scene, "w2BossHpBgMat", "#222222", { disableLighting: true });
