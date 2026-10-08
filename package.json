@@ -1,20 +1,27 @@
 {
+  "name": "the-lost-kingdom-3d",
+  "private": true,
   "dependencies": {
+    "@babylonjs/core": "^9.30.0",
     "@babylonjs/loaders": "^9.29.0",
-    "babylonjs": "^9.29.0",
-    "ci": "^2.3.0",
     "cors": "^2.8.6",
     "express": "^5.2.1",
-    "jsdom": "^29.1.1",
     "sqlite3": "^6.0.1"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.4",
+    "concurrently": "^9.2.5",
+    "typescript": "^5.9.3",
     "vite": "^8.3.0"
   },
   "scripts": {
     "dev": "vite",
     "server": "node --watch server.js",
-    "build": "vite build",
+    "dev:all": "concurrently -n vite,api -c blue,green \"vite\" \"node --watch server.js\"",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit && vite build",
     "preview": "vite preview"
   }
 }

@@ -1,0 +1,509 @@
+// ─── The Lost Kingdom 3D — main entry point (TypeScript) ─────────────────────
+// Thin orchestrator that wires together the modular subsystems.
+// All game logic lives in src/*.ts; this file only bootstraps and exposes
+// the handful of globals the HTML markup (onclick attributes) still calls.
+
+import {
+  Mesh,
+  Vector3,
+} from '@babylonjs/core';
+
+import { state } from './state';
+import { loadAllModels, loadedModels } from './model-loader';
+import {
+  initSetup, initMap, initHometown, initEntities, initNPCs,
+  initWildsNPCs, initWilds2,
+  getTerrainHeight, getTerrainHeightWilds2,
+  updateVillagers,
+} from './scenes';
+import { spawnBoss, spawnParticles, checkItems, blocked, spawnDamageText } from './helpers';
+import {
+  spawnEnemy, spawnEnemy2,
+  usePotion, useStaminaPotion,
+  move, attack, triggerSpinAttack,
+  updateAutoCombat, updateProjectiles, updateEnemies, updateBoss,
+} from './combat';
+import {
+  updateUI, checkInteractions,
+  openShop, closeShop, buyPotion, buyStaminaPotion,
+  buyInventoryItem, buyMysteryBox,
+  openBlacksmith, closeBlacksmith, updateBlacksmithUI,
+  buyWeapon, buyArmor, buyHelmet, buyBoots,
+  levelUp, openStats, closeStats, addStat,
+  openQuestBoard, acceptQuest, claimQuest, closeQuestBoard, updateQuestUI,
+  openInventory, closeInventory, updateInventoryUI, sellAllLoot,
+  openTutorial, closeTutorial, useConsumable,
+  autoUsePotions, updateAutoUseSettings,
+  toggleAutoAttack, updateAutoAttackSettings, syncAutoAttackUI,
+  openFullMap, closeFullMap, drawFullMap,
+  zoomMinimapIn, zoomMinimapOut, clearAutoWalkTargetUI,
+} from './ui';
+import { updateWeather, updateParticles, updatePet, teleportTo } from './environment';
+import { saveGame, loadGame } from './persistence';
+
+window.teleportTo = teleportTo;
+
+let autoSaveTimer = 0;
+const AUTO_SAVE_INTERVAL = 1800;
+
+// FPS counter
+let _fpsFrames = 0;
+let _fpsTime = 0;
+(window as any)._fpsDisplay = document.getElementById('fps');
+
+// Re-export loadedModels on window so inline handlers / fallback code can reference them.
+(window as any).loadedModels = loadedModels;
+(window as any).keys = state.keys;
+
+// Camera preset getters/setters for the settings UI
+(Object.assign(window as any, {
+  cameraOffsetY: state.cameraOffsetY,
+  cameraOffsetZ: state.cameraOffsetZ,
+  cameraLookAtY: state.cameraLookAtY,
+}));
+
+// Make a few helpers available on window for backward compat with onclicks
+window.spawnEnemy = spawnEnemy;
+window.spawnEnemy2 = spawnEnemy2;
+window.spawnParticles = spawnParticles;
+window.spawnBoss = spawnBoss;
+window.usePotion = usePotion;
+window.useStaminaPotion = useStaminaPotion;
+window.levelUp = levelUp;
+window.openShop = openShop;
+window.closeShop = closeShop;
+window.buyPotion = buyPotion;
+window.buyStaminaPotion = buyStaminaPotion;
+window.buyInventoryItem = buyInventoryItem;
+window.buyMysteryBox = buyMysteryBox;
+window.openBlacksmith = openBlacksmith;
+window.closeBlacksmith = closeBlacksmith;
+window.buyWeapon = buyWeapon;
+window.buyArmor = buyArmor;
+window.buyHelmet = buyHelmet;
+window.buyBoots = buyBoots;
+window.openStats = openStats;
+window.closeStats = closeStats;
+window.addStat = addStat;
+window.openQuestBoard = openQuestBoard;
+window.acceptQuest = acceptQuest;
+window.claimQuest = claimQuest;
+window.closeQuestBoard = closeQuestBoard;
+window.updateQuestUI = updateQuestUI;
+window.openInventory = openInventory;
+window.closeInventory = closeInventory;
+window.updateInventoryUI = updateInventoryUI;
+window.sellAllLoot = sellAllLoot;
+window.updateUI = updateUI;
+window.openTutorial = openTutorial;
+window.closeTutorial = closeTutorial;
+window.useConsumable = useConsumable;
+window.openFullMap = openFullMap;
+window.closeFullMap = closeFullMap;
+window.drawFullMap = drawFullMap;
+window.zoomMinimapIn = zoomMinimapIn;
+window.zoomMinimapOut = zoomMinimapOut;
+window.clearAutoWalkTargetUI = clearAutoWalkTargetUI;
+window.clearWaypoint = clearAutoWalkTargetUI;
+window.playerBodyMat = null;
+window.playerBladeMat = null;
+
+// ─── Game lifecycle ────────────────────────────────────────────────────────────
+
+window.startGame = async () => {
+  if (state.isGameStarted) return;
+  state.isGameStarted = true;
+  document.getElementById('main-menu')!.style.display = 'none';
+
+  initSetup();
+  await loadAllModels();
+  initHometown();
+  initEntities();
+  initNPCs();
+
+  if (state.currentScene === 'wilds') {
+    if (!state.wildsLoaded) {
+      initMap();
+      initWildsNPCs();
+      state.wildsLoaded = true;
+    }
+    if (state.hometownGroup) state.hometownGroup.setEnabled(false);
+    if (state.wilds2Group) state.wilds2Group.setEnabled(false);
+    if (state.wildsGroup) state.wildsGroup.setEnabled(true);
+    if (state.mainFloor) state.mainFloor.setEnabled(true);
+  } else if (state.currentScene === 'wilds2') {
+    if (!state.wilds2Loaded) {
+      initWilds2();
+      state.wilds2Loaded = true;
+    }
+    if (state.hometownGroup) state.hometownGroup.setEnabled(false);
+    if (state.wildsGroup) state.wildsGroup.setEnabled(false);
+    if (state.wilds2Group) state.wilds2Group.setEnabled(true);
+    if (state.mainFloor) state.mainFloor.setEnabled(false); // desert: hide grass floor
+  } else {
+    if (state.wildsGroup) state.wildsGroup.setEnabled(false);
+    if (state.wilds2Group) state.wilds2Group.setEnabled(false);
+    if (state.hometownGroup) state.hometownGroup.setEnabled(true);
+    if (state.mainFloor) state.mainFloor.setEnabled(true);
+  }
+
+  // Setelah semua model siap, aktifkan aura senjata jika ada pending dari loadGame
+  const sAny = state as any;
+  if (sAny._pendingEquipWeapon !== undefined && state.playerSwordMesh) {
+    const idx = sAny._pendingEquipWeapon;
+    sAny._pendingEquipWeapon = undefined;
+    if (typeof (window as any).equipWeapon === 'function') (window as any).equipWeapon(idx);
+  }
+
+  // Sinkronkan UI awal (termasuk tombol heal / potion / sp pot)
+  const navPotionsEl = document.getElementById('nav-potions');
+  if (navPotionsEl) navPotionsEl.textContent = String(state.potions);
+  const btnPotion = document.getElementById('btn-potion');
+  if (btnPotion) {
+    btnPotion.textContent = `🧪 Heal (C) [${state.potions}]`;
+    btnPotion.style.opacity = state.potions > 0 ? '1.0' : '0.5';
+  }
+  const spCount = state.inventory?.['stamina_potion'] || 0;
+  const btnSpPotion = document.getElementById('btn-sp-potion');
+  if (btnSpPotion) {
+    btnSpPotion.textContent = `⚡ SP (B) [${spCount}]`;
+    btnSpPotion.style.opacity = spCount > 0 ? '1.0' : '0.5';
+  }
+  updateUI(true);
+
+  // Start Babylon render loop (engine calls gameLoop each frame via scene.render())
+  state.renderer.runRenderLoop(() => {
+    if (state.isGameStarted) gameLoop();
+  });
+};
+
+window.togglePause = () => {
+  if (!state.isGameStarted || state.gameOver) return;
+  state.isPaused = !state.isPaused;
+  document.getElementById('pause-menu')!.style.display = state.isPaused ? 'flex' : 'none';
+};
+
+window.openSettings = () => {
+  syncAutoUseSliders();
+  syncAutoAttackSettings();
+  document.getElementById('settings-menu')!.style.display = 'flex';
+};
+window.closeSettings = () => { document.getElementById('settings-menu')!.style.display = 'none'; };
+window.updateAutoUseSettings = updateAutoUseSettings;
+window.toggleAutoAttack = toggleAutoAttack;
+window.updateAutoAttackSettings = updateAutoAttackSettings;
+window.triggerSpinAttack = triggerSpinAttack;
+
+// Sync slider + label ke nilai state terakhir (mis. setelah load save)
+function syncAutoUseSliders(): void {
+  const hEl = document.getElementById('set-auto-health') as HTMLInputElement | null;
+  const sEl = document.getElementById('set-auto-sp') as HTMLInputElement | null;
+  if (hEl) {
+    hEl.value = String(state.autoHealThreshold);
+    const hVal = document.getElementById('val-auto-health');
+    if (hVal) hVal.innerText = String(state.autoHealThreshold);
+  }
+  if (sEl) {
+    sEl.value = String(state.autoSPThreshold);
+    const sVal = document.getElementById('val-auto-sp');
+    if (sVal) sVal.innerText = String(state.autoSPThreshold);
+  }
+}
+
+function syncAutoAttackSettings(): void {
+  const btn = document.getElementById('set-auto-attack-btn');
+  const spinCb = document.getElementById('set-auto-spin') as HTMLInputElement | null;
+  const rangeSlider = document.getElementById('set-auto-range') as HTMLInputElement | null;
+  const rangeVal = document.getElementById('val-auto-range');
+
+  if (btn) {
+    btn.textContent = state.autoAttack ? 'ON' : 'OFF';
+    btn.style.background = state.autoAttack ? '#27ae60' : '#555';
+  }
+  if (spinCb) {
+    spinCb.checked = !!state.autoAttackSpin;
+  }
+  if (rangeSlider) {
+    rangeSlider.value = String(state.autoAttackRange || 140);
+    if (rangeVal) rangeVal.textContent = String(state.autoAttackRange || 140);
+  }
+  syncAutoAttackUI();
+}
+window.syncAutoAttackSettings = syncAutoAttackSettings;
+window.updateCameraSettings = () => {
+  const camY = parseInt(document.getElementById('cam-y')!.value);
+  const camZ = parseInt(document.getElementById('cam-z')!.value);
+  const camLook = parseInt(document.getElementById('cam-look')!.value);
+  state.cameraOffsetY = camY;
+  state.cameraOffsetZ = camZ;
+  state.cameraLookAtY = camLook;
+  (window as any).cameraOffsetY = state.cameraOffsetY;
+  (window as any).cameraOffsetZ = state.cameraOffsetZ;
+  (window as any).cameraLookAtY = state.cameraLookAtY;
+  document.getElementById('val-cam-y')!.innerText = String(state.cameraOffsetY);
+  document.getElementById('val-cam-z')!.innerText = String(state.cameraOffsetZ);
+  document.getElementById('val-cam-look')!.innerText = String(state.cameraLookAtY);
+};
+
+// Wire save/load to buttons in the HUD
+window.saveGame = saveGame;
+window.loadGame = loadGame;
+
+// ─── Main loop ─────────────────────────────────────────────────────────────────
+
+function gameLoop(): void {
+  // dt is computed from real frame time; Babylon's runRenderLoop fires ~60 fps.
+  const now = performance.now();
+  const dt = state.lastTimestamp
+    ? Math.min((now - state.lastTimestamp) / 16.667, 3)
+    : 1;
+  state.lastTimestamp = now;
+
+  // FPS counter
+  _fpsFrames++;
+  _fpsTime += dt;
+  if (_fpsTime >= 60) {
+    const fps = Math.round(_fpsFrames / (_fpsTime / 60));
+    if ((window as any)._fpsDisplay) (window as any)._fpsDisplay.textContent = String(fps);
+    _fpsFrames = 0;
+    _fpsTime = 0;
+  }
+
+  if (!state.isGameStarted) return;
+
+  if (!state.gameOver) {
+    if (state.isPaused) {
+      state.renderer.render(state.scene);
+      return;
+    }
+
+    state.player.defending = !!state.keys['shift'] && state.player.stamina > 0;
+    if (state.player.defending) {
+      state.player.stamina = Math.max(0, state.player.stamina - 0.5 * dt);
+    }
+    if (state.shieldMesh) state.shieldMesh.setEnabled(state.player.defending);
+
+    if (state.keys['q']) state.cameraAngle += 0.04 * dt;
+    if (state.keys['e']) state.cameraAngle -= 0.04 * dt;
+
+    if (state.tabCooldown > 0) state.tabCooldown -= dt;
+    if (state.keys['tab'] && state.tabCooldown <= 0) {
+      state.tabCooldown = 30;
+      if (state.lockedEnemy) {
+        state.lockedEnemy = null;
+      } else {
+        let closest: any = null;
+        let minDist = 1500;
+        for (const e of state.enemies) {
+          const d = Math.hypot(e.x - state.player.x, e.y - state.player.y);
+          if (d < minDist) { minDist = d; closest = e; }
+        }
+        if (state.bossActive) {
+          const d = Math.hypot(state.bossX - state.player.x, state.bossY - state.player.y);
+          if (d < minDist) { closest = { isBoss: true, x: state.bossX, y: state.bossY }; }
+        }
+        state.lockedEnemy = closest as any;
+      }
+    }
+
+    if (state.lockedEnemy) {
+      const le = state.lockedEnemy as any;
+      if (!le.isBoss && !state.enemies.includes(state.lockedEnemy)) {
+        state.lockedEnemy = null;
+      } else if (le.isBoss && !state.bossActive) {
+        state.lockedEnemy = null;
+      } else {
+        if (le.isBoss) {
+          le.x = state.bossX;
+          le.y = state.bossY;
+        }
+        state.cameraAngle = Math.atan2(le.x - state.player.x, le.y - state.player.y);
+      }
+    }
+
+    if (state.keys['v'] && state.player.height === 0 && state.player.stamina >= 15) {
+      state.player.stamina -= 15;
+      state.player.heightVelocity = 9;
+    }
+    if (state.player.height > 0 || state.player.heightVelocity !== 0) {
+      state.player.height += state.player.heightVelocity * dt;
+      state.player.heightVelocity -= 1.2 * dt;
+      if (state.player.height <= 0) {
+        state.player.height = 0;
+        if (state.player.heightVelocity < -5) state.cameraShake = Math.max(state.cameraShake, 6);
+        state.player.heightVelocity = 0;
+      }
+    }
+    // Anti-stuck: Jika pemain terjebak dalam obstacle, dorong perlahan
+    if (blocked(state.player.x, state.player.y, state.player.r)) {
+      state.player.y += 10 * dt;
+    }
+
+    move(dt);
+    if (state.keys[' ']) attack();
+    updateAutoCombat(dt);
+
+    state.player.attackCooldown = Math.max(0, state.player.attackCooldown - dt);
+    state.player.dashCooldown = Math.max(0, state.player.dashCooldown - dt);
+    state.player.spinCooldown = Math.max(0, state.player.spinCooldown - dt);
+    state.player.tripleCooldown = Math.max(0, state.player.tripleCooldown - dt);
+
+    if (state.player.isSpinning > 0) {
+      state.player.isSpinning -= dt;
+      state.player.spinAngle += 0.5 * dt;
+    } else {
+      state.player.spinAngle = 0;
+    }
+
+    if (state.player.isTripling > 0) {
+      state.player.isTripling -= dt;
+    }
+
+    updateProjectiles(dt);
+    updateEnemies(dt);
+    if (state.bossActive) {
+      updateBoss(dt);
+    } else {
+      // Auto-spawn boss jika pemain mendekati lokasinya
+      if (state.currentScene === 'wilds') {
+        if (Math.hypot(state.player.x - 19000, state.player.y - 19000) < 800) spawnBoss();
+      } else if (state.currentScene === 'wilds2') {
+        if (Math.hypot(state.player.x - 10000, state.player.y - 10000) < 1200) spawnBoss();
+      }
+    }
+
+    // Player status effects
+    if (state.player.statusEffect && state.player.statusEffect.duration > 0) {
+      state.player.statusEffect.duration -= dt;
+      state.player.statusEffect.tickTimer -= dt;
+      if (state.player.statusEffect.tickTimer <= 0) {
+        state.player.hp -= state.player.statusEffect.damage;
+        spawnDamageText(state.player.x, 30, state.player.y, `-${state.player.statusEffect.damage}`,
+          state.player.statusEffect.type === 'poison' ? '#00ff00' : '#ff4400');
+        state.player.statusEffect.tickTimer = state.player.statusEffect.duration > 0 ?
+          (state.player.statusEffect.type === 'poison' ? 60 : 60) : 0;
+        spawnParticles(state.player.x, state.player.y,
+          state.player.statusEffect.type === 'poison' ? 0x00ff00 : 0xff4400, 2, 'hit');
+        if (state.player.hp <= 0) {
+          // Mirror of combat.ts's internal teleportToHometown (player faints)
+          state.player.hp = state.player.maxHp;
+          state.player.exp = Math.max(0, Math.floor(state.player.exp / 2));
+          teleportTo('hometown');
+          saveGame(true);
+          const msgEl = document.getElementById('message');
+          if (msgEl) msgEl.textContent = '💀 Anda pingsan! Terlempar kembali ke Kota.';
+        }
+      }
+      if (state.player.statusEffect.duration <= 0) {
+        state.player.statusEffect = null;
+      }
+    }
+
+    checkInteractions();
+    updateWeather(dt);
+    updateParticles(dt);
+    updatePet(dt);
+    updateVillagers(dt);
+    checkItems();
+    autoUsePotions();
+    updateUI();
+    autoSaveTimer += dt;
+    if (autoSaveTimer >= AUTO_SAVE_INTERVAL) {
+      autoSaveTimer = 0;
+      saveGame(true);
+    }
+  }
+
+  if (state.playerMixer) {
+    state.playerMixer.update(dt * 0.016667);
+  }
+
+  // ── Smooth player mesh follow ──────────────────────────────────────────────
+  const isTripling = state.player.isTripling > 0;
+  const breathOffset = state.playerMixer ? 0 : Math.sin(state.playerIdleBreath) * 0.8;
+  const isMoving = !isTripling && (state.player.facingX !== 0 || state.player.facingY !== 0);
+  const terrainY = state.currentScene === 'wilds2'
+    ? getTerrainHeightWilds2(state.player.x, state.player.y)
+    : getTerrainHeight(state.player.x, state.player.y);
+  const basePlayerY = 15 + state.player.height + terrainY;
+  const targetPlayerY = (isMoving && !state.playerMixer)
+    ? basePlayerY + Math.abs(Math.sin(state.player.walkCycle * 2)) * 1.5
+    : basePlayerY + breathOffset;
+  if (!isTripling) {
+    state.playerMesh.position.y += (targetPlayerY - state.playerMesh.position.y) * Math.min(dt * 12, 1);
+    state.playerMesh.position.x += (state.player.x - state.playerMesh.position.x) * Math.min(dt * 10, 1);
+    state.playerMesh.position.z += (state.player.y - state.playerMesh.position.z) * Math.min(dt * 10, 1);
+  }
+  state.playerMesh.rotation.y = -Math.PI / 2 + state.player.spinAngle;
+  state.playerIdleBreath += 0.03 * dt;
+
+  if (state.playerHpGroup) {
+    state.playerHpGroup.position.x = state.playerMesh.position.x;
+    state.playerHpGroup.position.y = state.playerMesh.position.y + 40;
+    state.playerHpGroup.position.z = state.playerMesh.position.z;
+    state.playerHpGroup.billboardMode = Mesh.BILLBOARDMODE_Y;
+    const hpPercent = Math.max(0, state.player.hp / state.player.maxHp);
+    if (state.playerHpFg) {
+      state.playerHpFg.scaling.x = Math.max(0.001, hpPercent);
+      state.playerHpFg.position.x = -(30 - (30 * hpPercent)) / 2;
+    }
+  }
+
+  if (state.playerMixer) {
+    state.playerMesh.scaling.z = 1;
+  } else {
+    if (state.player.facingX < 0) {
+      state.playerMesh.scaling.z = -1;
+    }
+  }
+
+  // Keep last facing when still
+  if (state.player.facingX === 0 && state.player.facingY === 0) {
+    state.player.facingX = state.lastFacingX;
+    state.player.facingY = state.lastFacingY;
+  } else {
+    state.lastFacingX = state.player.facingX;
+    state.lastFacingY = state.player.facingY;
+  }
+
+  // ── Chase camera — simple follow behind player ─────────────────────────────
+  const idealX = state.player.x - Math.sin(state.cameraAngle) * state.cameraOffsetZ;
+  const idealZ = state.player.y - Math.cos(state.cameraAngle) * state.cameraOffsetZ;
+  const idealY = state.cameraOffsetY;
+  const smooth = Math.min(dt * 6, 1);
+  state.camera.position.x += (idealX - state.camera.position.x) * smooth;
+  state.camera.position.y += (idealY - state.camera.position.y) * smooth;
+  state.camera.position.z += (idealZ - state.camera.position.z) * smooth;
+  state.camera.setTarget(new Vector3(state.player.x, state.cameraLookAtY, state.player.y));
+
+  if (state.cameraShake > 0) {
+    state.camera.position.x += (Math.random() - 0.5) * state.cameraShake;
+    state.camera.position.y += (Math.random() - 0.5) * state.cameraShake;
+    state.camera.position.z += (Math.random() - 0.5) * state.cameraShake;
+    state.cameraShake -= dt * 1.5;
+    if (state.cameraShake < 0) state.cameraShake = 0;
+  }
+
+  if (state.dirLight) {
+    state.dirLight.position.set(state.player.x + 300, 800, state.player.y - 200);
+  }
+
+  // Shield spin when defending
+  if (state.player.defending && state.shieldMesh) {
+    state.shieldMesh.rotation.y += 0.05;
+    state.shieldMesh.rotation.x += 0.02;
+  }
+
+  // Animate collectible items
+  state.coinItems.forEach(item => { if (!item.taken) item.mesh.rotation.z += 0.05 * dt; });
+  state.expOrbs.forEach(item => { if (!item.taken) item.mesh.rotation.y += 0.05 * dt; });
+  state.potionItems.forEach(item => { if (!item.taken) item.mesh.rotation.y += 0.05 * dt; });
+}
+
+// ─── Boot ─────────────────────────────────────────────────────────────────────
+
+window.onload = () => {
+  document.getElementById('main-menu')!.style.display = 'flex';
+  loadGame(); // Attempt to restore previous session
+};
+
