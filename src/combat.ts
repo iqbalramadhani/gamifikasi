@@ -1059,3 +1059,322 @@ export function triggerInteractable(it: any, index: number): void {
     s.interactables.splice(index, 1);
   }
 }
+
+// ─── Spin Attack (X key) ───────────────────────────────────────────────────────
+
+export function triggerSpinAttack(): boolean {
+  const s = state;
+  if (s.player.spinCooldown > 0 || s.player.stamina < 50 || s.gameOver || s.isPaused || !s.isGameStarted) return false;
+  s.player.stamina -= 50;
+  s.player.spinCooldown = 300;
+  s.player.isSpinning = 30;
+  s.cameraShake = Math.max(s.cameraShake || 0, 8);
+  playSound('spin');
+
+  for (let i = s.enemies.length - 1; i >= 0; i--) {
+    const e = s.enemies[i];
+    if (Math.hypot(e.x - s.player.x, e.y - s.player.y) < s.player.r + e.r + 100) {
+      const spinCrit = calcCritDamage(s.player.attackDamage * 3);
+      const dealtDmg = applyEliteOnHit(e, spinCrit.value);
+      e.hp -= dealtDmg;
+      e.slowTimer = 90;
+      e.stunTimer = 20;
+      const spinColor = spinCrit.isCrit ? '#ffff00' : '#ff4444';
+      const spinLabel = spinCrit.isCrit ? `CRIT! -${dealtDmg}` : `-${dealtDmg}`;
+      spawnDamageText(e.x, e.mesh.position.y + 35, e.y, spinLabel, spinColor);
+      if (e.hp <= 0) killEnemy(i);
+      else {
+        if (spinCrit.isCrit) spawnParticles(e.x, e.y, 0xffff00, 8, 'hit');
+        else spawnParticles(e.x, e.y, 0xffaa00, 5, 'hit');
+      }
+    }
+  }
+
+  if (s.interactables) {
+    for (let i = s.interactables.length - 1; i >= 0; i--) {
+      const it = s.interactables[i];
+      if (it.scene !== s.currentScene || it.isVFX) continue;
+      if (Math.hypot(it.x - s.player.x, it.y - s.player.y) < s.player.r + 40) {
+        triggerInteractable(it, i);
+      }
+    }
+  }
+  if (s.bossActive && Math.hypot(s.bossX - s.player.x, s.bossY - s.player.y) < s.player.r + 150) {
+    const bossSpinCrit = calcCritDamage(s.player.attackDamage * 3);
+    s.bossHp -= bossSpinCrit.value;
+    playSound('hit');
+    const bsColor = bossSpinCrit.isCrit ? '#ffff00' : '#ff4444';
+    const bsLabel = bossSpinCrit.isCrit ? `CRIT! -${bossSpinCrit.value}` : `-${bossSpinCrit.value}`;
+    spawnDamageText(s.bossX, 50, s.bossY, bsLabel, bsColor);
+  }
+  return true;
+}
+
+// ─── Auto-Combat Mode ───────────────────────────────────────────────────────────
+
+export function updateAutoCombat(dt: number): void {
+  const s = state;
+  if (!s.autoAttack || s.gameOver || s.isPaused || !s.isGameStarted) return;
+  if (s.player.defending || s.player.isTripling > 0) return;
+  if (s.currentScene === 'hometown') return;
+
+  const range = s.autoAttackRange || 140;
+  const nearbyEnemies: { entity: Enemy; dist: number; isBoss: boolean }[] = [];
+
+  const RANGED_CHASE_RANGE = 400;
+  const RANGED_TYPES = new Set(['archer', 'sc_archer']);
+  const RANGED_ELITE_ABILITIES = ['mage', 'sc_mage', 'sc_dragon'];
+  if (s.enemies && s.enemies.length > 0) {
+    for (let i = 0; i < s.enemies.length; i++) {
+      const e = s.enemies[i];
+      if (!e || e.hp <= 0) continue;
+      const dist = Math.hypot(e.x - s.player.x, e.y - s.player.y);
+      const isRanged = RANGED_TYPES.has(e.type) ||
+        (e.isElite && RANGED_ELITE_ABILITIES.includes(e.type));
+      const scanRadius = isRanged ? RANGED_CHASE_RANGE : range + (e.r || 16);
+      if (dist <= scanRadius) {
+        nearbyEnemies.push({ entity: e, dist, isBoss: false });
+      }
+    }
+  }
+
+  if (s.bossActive && s.bossHp > 0) {
+    const bossDist = Math.hypot(s.bossX - s.player.x, s.bossY - s.player.y);
+    if (bossDist <= range + 40) {
+      nearbyEnemies.push({
+        entity: { x: s.bossX, y: s.bossY, r: 40, hp: s.bossHp } as unknown as Enemy,
+        dist: bossDist,
+        isBoss: true,
+      });
+    }
+  }
+
+  if (nearbyEnemies.length === 0) {
+    if (s.lootDrops && s.lootDrops.length > 0) {
+      const isMovingManual = hasAnyKey(s.keys, ['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd']);
+      if (!isMovingManual) {
+        const AUTO_LOOT_RANGE = 350;
+        let nearestLoot: { x: number; y: number } | null = null;
+        let nearestDist = Infinity;
+
+        for (const drop of s.lootDrops) {
+          if ((drop as any).taken) continue;
+          const d = Math.hypot(drop.x - s.player.x, drop.y - s.player.y);
+          if (d < AUTO_LOOT_RANGE && d < nearestDist) {
+            nearestDist = d;
+            nearestLoot = drop as any;
+          }
+        }
+
+        if (nearestLoot) {
+          if (nearestDist > 38) {
+            s.autoWalkTarget = { x: nearestLoot.x, y: nearestLoot.y };
+          } else {
+            s.autoWalkTarget = null;
+          }
+          return;
+        }
+      }
+    }
+    if (s.autoWalkTarget) s.autoWalkTarget = null;
+    return;
+  }
+
+  nearbyEnemies.sort((a, b) => a.dist - b.dist);
+  const closest = nearbyEnemies[0];
+
+  const closestEntity: any = closest.entity;
+  const isRangedEnemy = !closest.isBoss && (
+    closestEntity.type === 'archer' ||
+    closestEntity.type === 'sc_archer' ||
+    (closestEntity.isElite && ['mage', 'sc_mage', 'sc_dragon'].includes(closestEntity.type))
+  );
+
+  const toDx = closestEntity.x - s.player.x;
+  const toDy = closestEntity.y - s.player.y;
+  const normLen = Math.hypot(toDx, toDy) || 1;
+  const normX = toDx / normLen;
+  const normY = toDy / normLen;
+
+  const isMovingManual = hasAnyKey(s.keys, ['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd']);
+
+  if (!isMovingManual) {
+    s.player.facingX = normX;
+    s.player.facingY = normY;
+    s.player.lastFacingX = normX;
+    s.player.lastFacingY = normY;
+  }
+
+  const meleeStrikeRange = s.player.r + (closestEntity.r || 16) + 20;
+
+  if (isRangedEnemy && closest.dist > meleeStrikeRange && !isMovingManual) {
+    const stopDist = meleeStrikeRange - 5;
+    s.autoWalkTarget = {
+      x: closestEntity.x - normX * stopDist,
+      y: closestEntity.y - normY * stopDist,
+    };
+    return;
+  }
+
+  if (s.autoWalkTarget) s.autoWalkTarget = null;
+
+  if (s.player.spinCooldown <= 0 && s.player.stamina >= 50) {
+    triggerSpinAttack();
+    return;
+  }
+
+  const tripleSlashReady = (s.player.tripleCooldown || 0) <= 0;
+  if (tripleSlashReady && s.player.stamina >= 60 && s.player.isTripling <= 0 && closest.dist <= meleeStrikeRange) {
+    s.player.stamina -= 60;
+    s.player.tripleCooldown = 300;
+    s.player.isTripling = 283;
+    s.player.tripleHitDelay = [94, 94, 94];
+    playSound('spin');
+    return;
+  }
+
+  if (s.player.attackCooldown <= 0) {
+    attack();
+  }
+}
+
+// ─── Potions ───────────────────────────────────────────────────────────────────
+
+export function usePotion(): void {
+  const s = state;
+  if (s.potions <= 0) {
+    const msgEl = document.getElementById('message');
+    if (msgEl) msgEl.textContent = '❌ Tidak ada Health Potion!';
+    return;
+  }
+  if (s.player.hp >= s.player.maxHp) {
+    const msgEl = document.getElementById('message');
+    if (msgEl) msgEl.textContent = 'HP sudah penuh!';
+    return;
+  }
+  s.potions--;
+  if (!s.inventory) s.inventory = {};
+  if (s.potions > 0) {
+    s.inventory['health_potion'] = s.potions;
+  } else {
+    delete s.inventory['health_potion'];
+  }
+  s.player.hp = Math.min(s.player.maxHp, s.player.hp + 40);
+  playSound('coin');
+  spawnParticles(s.player.x, s.player.y, 0x00ff00, 10, 'heal');
+  const btn = document.getElementById('btn-potion') as HTMLButtonElement | null;
+  if (btn) {
+    btn.textContent = `🧪 Heal (C) [${s.potions}]`;
+    btn.style.opacity = s.potions > 0 ? '1.0' : '0.5';
+  }
+  const navPotionsEl = document.getElementById('nav-potions');
+  if (navPotionsEl) navPotionsEl.textContent = String(s.potions);
+  const msgEl = document.getElementById('message');
+  if (msgEl) msgEl.textContent = `🧪 Health Potion digunakan! (+40 HP)`;
+  if (typeof window.updateUI === 'function') window.updateUI(true);
+  if (typeof window.updateInventoryUI === 'function') window.updateInventoryUI();
+}
+
+export function useStaminaPotion(): void {
+  const s = state;
+  const count = s.inventory?.['stamina_potion'] || 0;
+  if (count <= 0) {
+    const msgEl = document.getElementById('message');
+    if (msgEl) msgEl.textContent = '❌ Tidak ada Stamina Potion! Beli di Altar Shop.';
+    return;
+  }
+  if (s.player.stamina >= s.player.maxStamina) {
+    const msgEl = document.getElementById('message');
+    if (msgEl) msgEl.textContent = '⚡ SP sudah penuh!';
+    return;
+  }
+  s.inventory['stamina_potion']--;
+  if (s.inventory['stamina_potion'] <= 0) {
+    delete s.inventory['stamina_potion'];
+  }
+  s.player.stamina = s.player.maxStamina;
+  playSound('coin');
+  spawnParticles(s.player.x, s.player.y, 0x00ffff, 10, 'heal');
+  const btn = document.getElementById('btn-sp-potion') as HTMLButtonElement | null;
+  const rem = s.inventory?.['stamina_potion'] || 0;
+  if (btn) {
+    btn.textContent = `⚡ SP (B) [${rem}]`;
+    btn.style.opacity = rem > 0 ? '1.0' : '0.5';
+  }
+  const msgEl = document.getElementById('message');
+  if (msgEl) msgEl.textContent = `⚡ Stamina Potion digunakan! (SP Pulih Penuh)`;
+  if (typeof window.updateUI === 'function') window.updateUI(true);
+  if (typeof window.updateInventoryUI === 'function') window.updateInventoryUI();
+}
+
+// ─── Projectile update ─────────────────────────────────────────────────────────
+
+export function updateProjectiles(dt: number): void {
+  const s = state;
+  for (let i = s.projectiles.length - 1; i >= 0; i--) {
+    const p = s.projectiles[i];
+    p.x += p.dx * dt;
+    p.y += p.dy * dt;
+    p.mesh.position.set(p.x, 15, p.y);
+
+    if (blocked(p.x, p.y, 6)) {
+      p.mesh.dispose();
+      s.projectiles.splice(i, 1);
+      continue;
+    }
+
+    let hit = false;
+    if (p.isEnemy) {
+      if (Math.hypot(p.x - s.player.x, p.y - s.player.y) < s.player.r + 10) {
+        hit = true;
+        if (!s.player.defending) {
+          s.player.hp -= 15;
+          s.cameraShake = Math.max(s.cameraShake || 0, 15);
+          playSound('hit');
+          spawnDamageText(s.player.x, 30, s.player.y, `-15`, '#ff00ff');
+          if (s.player.hp <= 0) triggerGameOver('Tembakan Bos mengakhiri petualanganmu!');
+        }
+      }
+    } else {
+      for (let j = s.enemies.length - 1; j >= 0; j--) {
+        const e = s.enemies[j];
+        if (Math.hypot(p.x - e.x, p.y - e.y) < e.r + 6) {
+          let baseDmg = p.isPet ? s.player.attackDamage * 0.1 : s.player.attackDamage;
+          const projCrit = calcCritDamage(baseDmg);
+          e.hp -= projCrit.value;
+          e.slowTimer = 90;
+          e.stunTimer = 15;
+          hit = true;
+          playSound('hit');
+          const pColor = projCrit.isCrit ? '#ffff00' : '#ff4444';
+          const pLabel = projCrit.isCrit ? `CRIT! -${projCrit.value}` : `-${projCrit.value}`;
+          spawnDamageText(e.x, e.mesh.position.y + 35, e.y, pLabel, pColor);
+          if (!e.statusEffect && Math.random() < 0.15) {
+            if (['slime', 'mage', 'necro'].includes(e.type)) applyStatusEffect(e, 'poison');
+            else if (['dragon', 'archdemon'].includes(e.type)) applyStatusEffect(e, 'burn');
+          }
+          if (e.hp <= 0) killEnemy(j);
+          else spawnParticles(e.x, e.y, 0xffaa00, 5, 'hit');
+          break;
+        }
+      }
+      if (!hit && s.bossActive) {
+        if (Math.hypot(p.x - s.bossX, p.y - s.bossY) < 30 + 6) {
+          let baseDmg = p.isPet ? s.player.attackDamage * 0.1 : s.player.attackDamage;
+          const bossProjCrit = calcCritDamage(baseDmg);
+          s.bossHp -= bossProjCrit.value;
+          hit = true;
+          playSound('hit');
+          const bpColor = bossProjCrit.isCrit ? '#ffff00' : '#ff4444';
+          const bpLabel = bossProjCrit.isCrit ? `CRIT! -${bossProjCrit.value}` : `-${bossProjCrit.value}`;
+          spawnDamageText(s.bossX, 50, s.bossY, bpLabel, bpColor);
+        }
+      }
+    }
+
+    if (hit) {
+      p.mesh.dispose();
+      s.projectiles.splice(i, 1);
+    }
+  }
+}
